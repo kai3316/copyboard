@@ -181,11 +181,15 @@ class TransportManager:
         except Exception:
             pass
 
-    def _build_ssl_context(self, verify_peer_id: str | None = None) -> ssl.SSLContext:
+    def _build_ssl_context(self, server_side: bool = True,
+                           verify_peer_id: str | None = None) -> ssl.SSLContext:
         """Build an SSL context from in-memory identity and optional peer cert.
 
         Writes key material to a secure per-user scratch directory (NOT system /tmp).
         Files are cleaned up immediately after loading into the SSL context.
+
+        server_side: True for accept(), False for connect().  Must not be derived from
+                     verify_peer_id — an unpaired client still needs a CLIENT context.
         verify_peer_id: if set, require and pin this peer's certificate.
         """
         identity = self._pairing_mgr.get_identity()
@@ -200,10 +204,10 @@ class TransportManager:
             key_path.write_text(identity.private_key_pem, encoding="ascii")
             cert_path.write_text(identity.certificate_pem, encoding="ascii")
 
-            if verify_peer_id:
-                ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            else:
+            if server_side:
                 ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            else:
+                ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
 
             ssl_context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
             ssl_context.check_hostname = False
@@ -230,7 +234,7 @@ class TransportManager:
 
     def start_server(self):
         self._cleanup_stale_scratch()
-        ssl_context = self._build_ssl_context()
+        ssl_context = self._build_ssl_context(server_side=True)
 
         self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -281,7 +285,8 @@ class TransportManager:
                 sock = socket.create_connection((address, port), timeout=10)
 
                 verify_id = peer_id if self._pairing_mgr.is_peer_paired(peer_id) else None
-                ssl_context = self._build_ssl_context(verify_peer_id=verify_id)
+                ssl_context = self._build_ssl_context(
+                    server_side=False, verify_peer_id=verify_id)
 
                 ssl_sock = ssl_context.wrap_socket(sock, server_hostname=peer_id)
 
