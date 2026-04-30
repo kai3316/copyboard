@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -14,12 +15,15 @@ jobs:
           - os: windows-latest
             artifact: copyboard-windows
             pyinstaller_args: --onefile --noconsole --name copyboard
+            binary: copyboard.exe
           - os: macos-latest
             artifact: copyboard-macos
             pyinstaller_args: --onefile --windowed --name copyboard
+            binary: copyboard.app
           - os: ubuntu-latest
             artifact: copyboard-linux
             pyinstaller_args: --onefile --name copyboard
+            binary: copyboard
 
     runs-on: ${{ matrix.os }}
 
@@ -53,3 +57,46 @@ jobs:
           name: ${{ matrix.artifact }}
           path: dist/
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: copyboard-windows
+          path: dist/windows
+
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: copyboard-macos
+          path: dist/macos
+
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: copyboard-linux
+          path: dist/linux
+
+      - name: Zip platform builds
+        run: |
+          cd dist/windows && zip -r ../../copyboard-windows.zip . && cd ../..
+          cd dist/macos    && zip -r ../../copyboard-macos.zip .    && cd ../..
+          cd dist/linux    && tar -czf ../../copyboard-linux.tar.gz . && cd ../..
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "CopyBoard ${{ github.ref_name }}" \
+            --notes "Automated build for ${{ github.ref_name }}.
+            - \`copyboard-windows.zip\` — Windows executable
+            - \`copyboard-macos.zip\` — macOS app bundle
+            - \`copyboard-linux.tar.gz\` — Linux binary" \
+            copyboard-windows.zip \
+            copyboard-macos.zip \
+            copyboard-linux.tar.gz
