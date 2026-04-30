@@ -16,16 +16,10 @@ jobs:
         include:
           - os: windows-latest
             artifact: copyboard-windows
-            pyinstaller_args: --onefile --noconsole --name copyboard
-            binary: copyboard.exe
           - os: macos-latest
             artifact: copyboard-macos
-            pyinstaller_args: --onefile --windowed --name copyboard
-            binary: copyboard.app
           - os: ubuntu-latest
             artifact: copyboard-linux
-            pyinstaller_args: --onefile --name copyboard
-            binary: copyboard
 
     runs-on: ${{ matrix.os }}
 
@@ -51,7 +45,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller ${{ matrix.pyinstaller_args }} cmd/main.py
+          pyinstaller copyboard.spec
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -89,9 +83,9 @@ jobs:
 
       - name: Zip platform builds
         run: |
-          cd dist/windows && zip -r ../../copyboard-windows.zip . && cd ../..
-          cd dist/macos    && zip -r ../../copyboard-macos.zip .    && cd ../..
-          cd dist/linux    && tar -czf ../../copyboard-linux.tar.gz . && cd ../..
+          cd dist/windows && zip ../../copyboard-windows.zip * && cd ../..
+          cd dist/macos    && zip ../../copyboard-macos.zip *   && cd ../..
+          cd dist/linux    && tar -czf ../../copyboard-linux.tar.gz * && cd ../..
 
       - name: Create Release
         env:

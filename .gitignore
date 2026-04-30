@@ -22,7 +22,6 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
-*.spec
 
 # Logs
 *.log

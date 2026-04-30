@@ -63,6 +63,20 @@ python cmd/main.py
 
 **Linux users:** install `xclip` (X11) or `wl-clipboard` (Wayland) first.
 
+## Build a Standalone Executable
+
+To bundle CopyBoard into a single executable file:
+
+```bash
+pip install pyinstaller
+pyinstaller copyboard.spec
+```
+
+Find the output in `dist/`:
+- Windows: `dist/copyboard.exe`
+- macOS: `dist/copyboard`
+- Linux: `dist/copyboard`
+
 ## How It Works
 
 1. **Discover** — CopyBoard finds other devices on your LAN automatically (mDNS)

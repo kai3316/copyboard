@@ -63,6 +63,20 @@ python cmd/main.py
 
 **Linux 用户：** 请先安装 `xclip`（X11）或 `wl-clipboard`（Wayland）。
 
+## 构建独立可执行文件
+
+将 CopyBoard 打包为单个可执行文件：
+
+```bash
+pip install pyinstaller
+pyinstaller copyboard.spec
+```
+
+构建结果在 `dist/` 目录：
+- Windows: `dist/copyboard.exe`
+- macOS: `dist/copyboard`
+- Linux: `dist/copyboard`
+
 ## 工作原理
 
 1. **发现** — CopyBoard 通过 mDNS 自动发现局域网内的其他设备
