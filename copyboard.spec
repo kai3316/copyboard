@@ -13,7 +13,7 @@ from PyInstaller.utils.hooks import collect_submodules
 block_cipher = None
 
 # Project root — needed so PyInstaller finds the 'internal' package
-_PROJ_ROOT = os.path.dirname(os.path.abspath(SPECPATH))
+_PROJ_ROOT = os.path.abspath(SPECPATH)
 
 hiddenimports = collect_submodules("internal")
 hiddenimports += [
@@ -29,10 +29,12 @@ hiddenimports += [
 ]
 # Fallback: explicit internal modules in case collect_submodules misses them
 hiddenimports += [
+    "internal.clipboard.clipboard",
     "internal.clipboard.clipboard_windows",
     "internal.clipboard.clipboard_darwin",
     "internal.clipboard.clipboard_linux",
     "internal.clipboard.format",
+    "internal.clipboard.platform",
     "internal.config.config",
     "internal.protocol.codec",
     "internal.security.pairing",

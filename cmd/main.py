@@ -15,7 +15,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 # Add project root to Python path so 'internal' package can be found
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# (not needed in a PyInstaller-frozen bundle)
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from internal.config.config import Config, PeerInfo, load, save
 from internal.protocol.codec import encode_message
