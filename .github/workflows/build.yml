@@ -83,8 +83,8 @@ jobs:
 
       - name: Zip platform builds
         run: |
-          cd dist/windows && zip ../../copyboard-windows.zip * && cd ../..
-          cd dist/macos    && zip ../../copyboard-macos.zip *   && cd ../..
+          cd dist/windows && zip -r ../../copyboard-windows.zip * && cd ../..
+          cd dist/macos    && zip -r ../../copyboard-macos.zip *   && cd ../..
           cd dist/linux    && tar -czf ../../copyboard-linux.tar.gz * && cd ../..
 
       - name: Create Release
@@ -94,8 +94,8 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --title "CopyBoard ${{ github.ref_name }}" \
             --notes "Automated build for ${{ github.ref_name }}.
-            - \`copyboard-windows.zip\` — Windows executable
-            - \`copyboard-macos.zip\` — macOS app bundle
+            - \`copyboard-windows.zip\` — Windows \`.exe\`
+            - \`copyboard-macos.zip\` — macOS \`.app\` bundle
             - \`copyboard-linux.tar.gz\` — Linux binary" \
             copyboard-windows.zip \
             copyboard-macos.zip \

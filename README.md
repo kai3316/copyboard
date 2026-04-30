@@ -74,7 +74,7 @@ pyinstaller copyboard.spec
 
 Find the output in `dist/`:
 - Windows: `dist/copyboard.exe`
-- macOS: `dist/copyboard`
+- macOS: `dist/copyboard.app`
 - Linux: `dist/copyboard`
 
 ## How It Works

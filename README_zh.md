@@ -74,7 +74,7 @@ pyinstaller copyboard.spec
 
 构建结果在 `dist/` 目录：
 - Windows: `dist/copyboard.exe`
-- macOS: `dist/copyboard`
+- macOS: `dist/copyboard.app`
 - Linux: `dist/copyboard`
 
 ## 工作原理
