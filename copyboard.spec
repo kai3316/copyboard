@@ -6,10 +6,14 @@ Build locally:
     pyinstaller copyboard.spec
 """
 
+import os
 import sys
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
+
+# Project root — needed so PyInstaller finds the 'internal' package
+_PROJ_ROOT = os.path.dirname(os.path.abspath(SPECPATH))
 
 hiddenimports = collect_submodules("internal")
 hiddenimports += [
@@ -23,13 +27,28 @@ hiddenimports += [
     "tkinter.messagebox",
     "logging.handlers",
 ]
+# Fallback: explicit internal modules in case collect_submodules misses them
+hiddenimports += [
+    "internal.clipboard.clipboard_windows",
+    "internal.clipboard.clipboard_darwin",
+    "internal.clipboard.clipboard_linux",
+    "internal.clipboard.format",
+    "internal.config.config",
+    "internal.protocol.codec",
+    "internal.security.pairing",
+    "internal.sync.manager",
+    "internal.transport.discovery",
+    "internal.transport.connection",
+    "internal.ui.settings_window",
+    "internal.ui.systray",
+]
 
 if sys.platform == "darwin":
     hiddenimports += ["pyobjc_framework_Cocoa"]
 
 a = Analysis(
     ["cmd/main.py"],
-    pathex=[],
+    pathex=[_PROJ_ROOT],
     binaries=[],
     datas=[],
     hiddenimports=hiddenimports,
