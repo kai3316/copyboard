@@ -44,7 +44,7 @@
 | 🌍 | **真正的跨平台** — Windows、macOS、Linux |
 | 🎨 | **现代界面** — 明暗主题、设备状态卡片、系统托盘 |
 | ⚡ | **资源高效** — Windows 事件驱动，其他平台最小化轮询 |
-| 📦 | **单文件可执行** — PyInstaller 打包（即将推出） |
+| 📦 | **单文件可执行** — PyInstaller 打包，CI 自动构建 |
 | 🧪 | **全面测试** — 99 项测试，CI 覆盖 3 个操作系统 × 3 个 Python 版本 |
 
 ## 工作原理
@@ -76,13 +76,26 @@
 
 ## 快速开始
 
-### 环境要求
+### 方式一：下载预构建可执行文件
+
+从 [GitHub Actions](https://github.com/kai3316/copyboard/actions/workflows/build.yml) 获取最新构建：
+
+- **Windows** — `copyboard.exe`（构件：`copyboard-windows`）
+- **macOS** — `copyboard.app`（构件：`copyboard-macos`）
+- **Linux** — `copyboard` 二进制文件（构件：`copyboard-linux`）
+
+点击最近一次成功的构建 → 滚动到底部 **Artifacts** → 下载对应你操作系统的文件。无需安装 Python。
+
+### 方式二：从源码运行
+
+**环境要求**
+
 - Python 3.10 或更新版本
 - Windows：无需额外依赖
 - macOS：无需额外依赖（使用系统内置 `pbpaste`/`pbcopy`）
 - Linux：需要 `xclip`（X11）或 `wl-clipboard`（Wayland）
 
-### 安装
+### 从源码安装
 
 ```bash
 # 克隆仓库

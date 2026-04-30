@@ -44,7 +44,7 @@ You're working on your Windows desktop. You copy a code snippet. Now you want to
 | 🌍 | **True cross-platform** — Windows, macOS, Linux |
 | 🎨 | **Modern UI** — light/dark theme, device status cards, system tray |
 | ⚡ | **Resource efficient** — event-driven on Windows, minimal polling elsewhere |
-| 📦 | **Single executable** — PyInstaller packaging (coming soon) |
+| 📦 | **Single executable** — PyInstaller packaging, auto-built via CI |
 | 🧪 | **Comprehensive tests** — 96 tests, CI on all 3 OS × 3 Python versions |
 
 ## How It Works
@@ -76,13 +76,26 @@ You're working on your Windows desktop. You copy a code snippet. Now you want to
 
 ## Quick Start
 
-### Prerequisites
+### Option A: Download pre-built executable
+
+Grab the latest build for your platform from [GitHub Actions](https://github.com/kai3316/copyboard/actions/workflows/build.yml):
+
+- **Windows** — `copyboard.exe` (artifact: `copyboard-windows`)
+- **macOS** — `copyboard.app` (artifact: `copyboard-macos`)
+- **Linux** — `copyboard` binary (artifact: `copyboard-linux`)
+
+Click the most recent successful workflow run → scroll to **Artifacts** at the bottom → download the one for your OS. No Python required.
+
+### Option B: Run from source
+
+**Prerequisites**
+
 - Python 3.10 or newer
 - Windows: no extra dependencies
 - macOS: no extra dependencies (uses built-in `pbpaste`/`pbcopy`)
 - Linux: `xclip` (X11) or `wl-clipboard` (Wayland)
 
-### Install
+### Install from source
 
 ```bash
 # Clone
