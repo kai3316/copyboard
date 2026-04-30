@@ -47,6 +47,30 @@ jobs:
         run: |
           pyinstaller copyboard.spec
 
+      - name: Diagnose macOS bundle
+        if: runner.os == 'macOS'
+        run: |
+          echo "=== Python version ==="
+          python --version
+          echo ""
+          echo "=== Bundle contents ==="
+          ls -la dist/copyboard.app/Contents/MacOS/
+          echo ""
+          echo "=== Linked libraries ==="
+          otool -L dist/copyboard.app/Contents/MacOS/copyboard 2>&1 || true
+          echo ""
+          echo "=== Frameworks in bundle ==="
+          find dist/copyboard.app -name "*.dylib" -o -name "*.framework" | head -30
+          echo ""
+          echo "=== Smoke test (capture startup errors) ==="
+          timeout 5 dist/copyboard.app/Contents/MacOS/copyboard 2>&1 || true
+          echo ""
+          echo "=== Crash logs ==="
+          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i copyboard || true
+          echo ""
+          echo "=== App logs ==="
+          cat ~/Library/Logs/CopyBoard/copyboard.log 2>/dev/null || true
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
