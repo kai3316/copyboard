@@ -47,35 +47,23 @@ jobs:
         run: |
           pyinstaller copyboard.spec
 
-      - name: Diagnose macOS bundle
-        if: runner.os == 'macOS'
+      - name: Package for release (preserve symlinks)
+        shell: bash
         run: |
-          echo "=== Python version ==="
-          python --version
-          echo ""
-          echo "=== Bundle contents ==="
-          ls -la dist/copyboard.app/Contents/MacOS/
-          echo ""
-          echo "=== Linked libraries ==="
-          otool -L dist/copyboard.app/Contents/MacOS/copyboard 2>&1 || true
-          echo ""
-          echo "=== Frameworks in bundle ==="
-          find dist/copyboard.app -name "*.dylib" -o -name "*.framework" | head -30
-          echo ""
-          echo "=== Smoke test (capture startup errors) ==="
-          timeout 5 dist/copyboard.app/Contents/MacOS/copyboard 2>&1 || true
-          echo ""
-          echo "=== Crash logs ==="
-          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i copyboard || true
-          echo ""
-          echo "=== App logs ==="
-          cat ~/Library/Logs/CopyBoard/copyboard.log 2>/dev/null || true
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            # ditto preserves .app bundle symlinks (plain zip does not)
+            ditto -c -k --sequesterRsrc --keepParent dist/copyboard.app copyboard-macos.zip
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            cd dist && zip -r ../copyboard-windows.zip *
+          else
+            cd dist && tar -czf ../copyboard-linux.tar.gz *
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/
+          path: copyboard-*.*
           if-no-files-found: error
 
   release:
@@ -91,25 +79,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: copyboard-windows
-          path: dist/windows
+          path: dist
 
       - name: Download macOS build
         uses: actions/download-artifact@v4
         with:
           name: copyboard-macos
-          path: dist/macos
+          path: dist
 
       - name: Download Linux build
         uses: actions/download-artifact@v4
         with:
           name: copyboard-linux
-          path: dist/linux
-
-      - name: Zip platform builds
-        run: |
-          cd dist/windows && zip -r ../../copyboard-windows.zip * && cd ../..
-          cd dist/macos    && zip -r ../../copyboard-macos.zip *   && cd ../..
-          cd dist/linux    && tar -czf ../../copyboard-linux.tar.gz * && cd ../..
+          path: dist
 
       - name: Create Release
         env:
@@ -122,6 +104,6 @@ jobs:
             - \`copyboard-windows.zip\` — Windows \`.exe\`
             - \`copyboard-macos.zip\` — macOS \`.app\` bundle
             - \`copyboard-linux.tar.gz\` — Linux binary" \
-            copyboard-windows.zip \
-            copyboard-macos.zip \
-            copyboard-linux.tar.gz
+            dist/copyboard-windows.zip \
+            dist/copyboard-macos.zip \
+            dist/copyboard-linux.tar.gz
