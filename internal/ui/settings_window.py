@@ -132,6 +132,7 @@ class SettingsWindow:
         self._style = Style(theme=LIGHT_THEME)
 
         self._window = ttk.Toplevel(self._root)
+        self._window.transient(self._root)
         self._window.title("CopyBoard Settings")
         self._window.geometry("660x580")
         self._window.minsize(560, 480)
