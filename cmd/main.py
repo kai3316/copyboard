@@ -326,9 +326,50 @@ def main():
 
     logger.info("CopyBoard is ready. System tray icon should appear.")
 
-    # Run pystray in a background thread, tkinter in the main thread
-    tray_thread = threading.Thread(target=systray.run, daemon=True)
-    tray_thread.start()
+    if sys.platform == "darwin":
+        # macOS: run pystray in a subprocess to avoid Apple Silicon GIL crash
+        # (pystray #138 — run_detached fails on M-series chips)
+        import multiprocessing
+
+        def _run_tray(device_name, pipe):
+            # Re-initialize logging in child process
+            setup_logging()
+            child_systray = SystrayApp(
+                device_name=device_name,
+                on_enable_toggle=lambda v: pipe.send(("toggle_sync", v)),
+                on_open_settings=lambda: pipe.send(("open_settings",)),
+                on_export_logs=lambda: pipe.send(("export_logs",)),
+                on_quit=lambda: pipe.send(("quit",)),
+            )
+            child_systray.run()
+
+        parent_conn, child_conn = multiprocessing.Pipe()
+        tray_proc = multiprocessing.Process(
+            target=_run_tray, args=(cfg.device_name, child_conn),
+            daemon=True,
+        )
+        tray_proc.start()
+
+        def _handle_tray_msg(msg):
+            cmd = msg[0]
+            if cmd == "toggle_sync":
+                on_enable_toggle(msg[1])
+            elif cmd == "open_settings":
+                open_settings()
+            elif cmd == "export_logs":
+                on_export_logs()
+            elif cmd == "quit":
+                on_quit()
+
+        def _poll_tray():
+            while parent_conn.poll():
+                _handle_tray_msg(parent_conn.recv())
+            root.after(100, _poll_tray)
+
+        root.after(100, _poll_tray)
+    else:
+        tray_thread = threading.Thread(target=systray.run, daemon=True)
+        tray_thread.start()
 
     try:
         root.mainloop()

@@ -45,7 +45,15 @@ Get the latest version from the [Releases page](https://github.com/kai3316/copyb
 
 Download, run, and you're ready. No installation, no Python required.
 
-> **Note for macOS users:** The app is not notarized. Right-click the app and select *Open* for the first launch.
+> **Note for macOS users:** The app is not notarized. If macOS blocks it, run this in Terminal first:
+> ```bash
+> xattr -cr copyboard.app
+> ```
+> Then right-click the app and select *Open*.
+> If the app still won't open, run the internal binary to see error details:
+> ```bash
+> ./copyboard.app/Contents/MacOS/copyboard
+> ```
 
 ## Install from Source
 

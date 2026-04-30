@@ -7,15 +7,11 @@ Build locally:
 """
 
 import sys
-
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
-# Collect all modules under 'internal' so PyInstaller finds them
 hiddenimports = collect_submodules("internal")
-
-# Third-party packages that may not be auto-detected
 hiddenimports += [
     "zeroconf",
     "cryptography",
@@ -50,7 +46,6 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 if sys.platform == "darwin":
-    # macOS: create an .app bundle so users can double-click to launch
     exe = EXE(
         pyz,
         a.scripts,
@@ -63,23 +58,35 @@ if sys.platform == "darwin":
         upx=True,
         console=False,
         disable_windowed_traceback=False,
-        argv_emulation=False,
+        argv_emulation=True,
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
     )
-    app = BUNDLE(
+    coll = COLLECT(
         exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name="copyboard",
+    )
+    app = BUNDLE(
+        coll,
         name="copyboard.app",
         icon=None,
         bundle_identifier="com.copyboard.app",
         info_plist={
             "NSHighResolutionCapable": True,
-            "LSUIElement": True,  # Hide dock icon (system tray app)
+            "LSUIElement": True,
+            "NSAppTransportSecurity": {
+                "NSAllowsLocalNetworking": True,
+            },
         },
     )
 else:
-    # Windows / Linux: single executable
     exe = EXE(
         pyz,
         a.scripts,
