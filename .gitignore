@@ -1,0 +1,42 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / packaging
+dist/
+build/
+*.egg-info/
+*.spec
+
+# Logs
+*.log
+*.log.[123]
+
+# Config (contains private keys!)
+config.json
+*.pem
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Environment
+.env
+.claude/
