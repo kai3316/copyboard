@@ -47,23 +47,27 @@ jobs:
         run: |
           pyinstaller copyboard.spec
 
-      - name: Package for release (preserve symlinks)
-        shell: bash
+      - name: Package for release (macOS ditto preserves symlinks)
+        if: runner.os == 'macOS'
         run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            # ditto preserves .app bundle symlinks (plain zip does not)
-            ditto -c -k --sequesterRsrc --keepParent dist/copyboard.app copyboard-macos.zip
-          elif [ "${{ runner.os }}" = "Windows" ]; then
-            cd dist && zip -r ../copyboard-windows.zip *
-          else
-            cd dist && tar -czf ../copyboard-linux.tar.gz *
-          fi
+          ditto -c -k --keepParent dist/copyboard.app copyboard-macos.zip
+
+      - name: Package for release (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/copyboard.exe -DestinationPath copyboard-windows.zip
+
+      - name: Package for release (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd dist && tar -czf ../copyboard-linux.tar.gz *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: copyboard-*.*
+          path: ${{ matrix.artifact }}*.*
           if-no-files-found: error
 
   release:
