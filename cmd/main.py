@@ -333,17 +333,8 @@ def main():
         # (pystray #138 — run_detached fails on M-series chips)
         import multiprocessing
 
-        def _run_tray(device_name, pipe):
-            # Re-initialize logging in child process
-            setup_logging()
-            child_systray = SystrayApp(
-                device_name=device_name,
-                on_enable_toggle=lambda v: pipe.send(("toggle_sync", v)),
-                on_open_settings=lambda: pipe.send(("open_settings",)),
-                on_export_logs=lambda: pipe.send(("export_logs",)),
-                on_quit=lambda: pipe.send(("quit",)),
-            )
-            child_systray.run()
+        # freeze_support must be called early for PyInstaller-frozen apps
+        multiprocessing.freeze_support()
 
         parent_conn, child_conn = multiprocessing.Pipe()
         tray_proc = multiprocessing.Process(
@@ -381,5 +372,24 @@ def main():
         on_quit()
 
 
+def _run_tray(device_name: str, pipe):
+    """Run the system tray in a subprocess (macOS only).
+
+    Must be at module level so it is picklable for multiprocessing with 'spawn'.
+    """
+    setup_logging()
+    child_systray = SystrayApp(
+        device_name=device_name,
+        on_enable_toggle=lambda v: pipe.send(("toggle_sync", v)),
+        on_open_settings=lambda: pipe.send(("open_settings",)),
+        on_export_logs=lambda: pipe.send(("export_logs",)),
+        on_quit=lambda: pipe.send(("quit",)),
+    )
+    child_systray.run()
+
+
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     main()
