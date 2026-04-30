@@ -47,19 +47,19 @@ You're working on your Windows desktop. You copy a code snippet. Now you want to
 ```
 ┌─────────── Windows ───────────┐          ┌──────────── Mac ────────────┐
 │                               │          │                             │
-│  📋  Clipboard Monitor        │          │  📋  NSPasteboard Poller     │
-│      (AddClipboardFormat-     │          │      (changeCount, 400ms)    │
+│  📋  Clipboard Monitor        │          │  📋  NSPasteboard Poller   │
+│      (AddClipboardFormat-     │          │      (changeCount, 400ms)   │
 │       Listener, event-driven) │          │                             │
 │              │                │          │              │              │
 │              ▼                │          │              ▼              │
-│  🔄  Sync Manager             │   TLS    │  🔄  Sync Manager           │
+│  🔄  Sync Manager             │   TLS    │  🔄  Sync Manager          │
 │      hash dedup · debounce    │◄────────►│      hash dedup · debounce  │
 │              │                │  1.3     │              │              │
 │              ▼                │          │              ▼              │
-│  📡  Transport (TCP:19990)    │          │  📡  Transport (TCP:19990)   │
+│  📡  Transport (TCP:19990)    │          │  📡  Transport (TCP:19990) │
 │              │                │          │              │              │
 │              ▼                │          │              ▼              │
-│  🔍  mDNS Service Browser     │          │  🔍  mDNS Service Browser   │
+│  🔍  mDNS Service Browser     │          │  🔍  mDNS Service Browser  │
 │      "_copyboard._tcp"        │          │      "_copyboard._tcp"      │
 └───────────────────────────────┘          └─────────────────────────────┘
 ```
