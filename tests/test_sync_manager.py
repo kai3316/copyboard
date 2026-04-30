@@ -109,14 +109,19 @@ class TestSyncManager:
     def test_throttle_rapid_changes(self):
         self.mgr.start()
 
+        # Fire 5 changes back-to-back (no sleep between them)
+        # All within the 0.3s SYNC_DEBOUNCE
         for i in range(5):
             self.reader.content = ClipboardContent(
                 types={ContentType.TEXT: f"rapid {i}".encode()},
             )
             self.monitor.fire()
-            time.sleep(0.05)  # well below SYNC_DEBOUNCE
+            # Brief yield to let other threads run — but much less than debounce
+            if i < 4:
+                time.sleep(0.02)
 
-        # Should only send the first one (others throttled)
+        time.sleep(0.1)
+        # Should only send the first one (others throttled within debounce window)
         assert len(self.sent) == 1
 
     def test_disabled_does_not_broadcast(self):
