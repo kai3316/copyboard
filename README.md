@@ -1,4 +1,9 @@
 <p align="center">
+  <a href="README.md">🇬🇧 English</a> &nbsp;|&nbsp;
+  <a href="README_zh.md">🇨🇳 中文</a>
+</p>
+
+<p align="center">
   <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="CopyBoard" width="80" height="80">
 </p>
 
