@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <!-- Clipboard body -->
+  <rect x="10" y="18" width="60" height="52" rx="6" fill="#508CDC"/>
+  <!-- Clipboard top bar -->
+  <rect x="25" y="8" width="30" height="14" rx="3" fill="#3C6EB4"/>
+  <!-- Paper lines -->
+  <line x1="20" y1="30" x2="60" y2="30" stroke="#DCE8F5" stroke-width="2" stroke-linecap="round"/>
+  <line x1="20" y1="38" x2="60" y2="38" stroke="#DCE8F5" stroke-width="2" stroke-linecap="round"/>
+  <line x1="20" y1="46" x2="45" y2="46" stroke="#DCE8F5" stroke-width="2" stroke-linecap="round"/>
+  <!-- Arrow (sync symbol) -->
+  <path d="M35 56 L30 56 L30 54 L35 54 Z M50 22 L55 22 L55 24 L50 24 Z"
+        fill="#A0C4EE" opacity="0.6"/>
+  <circle cx="40" cy="58" r="12" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.3"/>
+  <path d="M36 58 L40 54 L44 58" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6"/>
+</svg>
