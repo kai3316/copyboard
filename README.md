@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://github.com/kai3316/copyboard/actions"><img src="https://github.com/kai3316/copyboard/actions/workflows/test.yml/badge.svg" alt="Test"></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue" alt="Python 3.10+"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12-blue" alt="Python 3.12"></a>
   <a href="https://github.com/kai3316/copyboard/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
 </p>
 
@@ -45,7 +45,7 @@ You're working on your Windows desktop. You copy a code snippet. Now you want to
 | 🎨 | **Modern UI** — light/dark theme, device status cards, system tray |
 | ⚡ | **Resource efficient** — event-driven on Windows, minimal polling elsewhere |
 | 📦 | **Single executable** — PyInstaller packaging, auto-built via CI |
-| 🧪 | **Comprehensive tests** — 96 tests, CI on all 3 OS × 3 Python versions |
+| 🧪 | **Comprehensive tests** — 99 tests, CI on all 3 OS |
 
 ## How It Works
 
@@ -90,7 +90,7 @@ Click the most recent successful workflow run → scroll to **Artifacts** at the
 
 **Prerequisites**
 
-- Python 3.10 or newer
+- Python 3.12
 - Windows: no extra dependencies
 - macOS: no extra dependencies (uses built-in `pbpaste`/`pbcopy`)
 - Linux: `xclip` (X11) or `wl-clipboard` (Wayland)

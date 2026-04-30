@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://github.com/kai3316/copyboard/actions"><img src="https://github.com/kai3316/copyboard/actions/workflows/test.yml/badge.svg" alt="测试状态"></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue" alt="Python 3.10+"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12-blue" alt="Python 3.12"></a>
   <a href="https://github.com/kai3316/copyboard/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="许可证"></a>
 </p>
 
@@ -45,7 +45,7 @@
 | 🎨 | **现代界面** — 明暗主题、设备状态卡片、系统托盘 |
 | ⚡ | **资源高效** — Windows 事件驱动，其他平台最小化轮询 |
 | 📦 | **单文件可执行** — PyInstaller 打包，CI 自动构建 |
-| 🧪 | **全面测试** — 99 项测试，CI 覆盖 3 个操作系统 × 3 个 Python 版本 |
+| 🧪 | **全面测试** — 99 项测试，CI 覆盖 3 个操作系统 |
 
 ## 工作原理
 
@@ -90,7 +90,7 @@
 
 **环境要求**
 
-- Python 3.10 或更新版本
+- Python 3.12
 - Windows：无需额外依赖
 - macOS：无需额外依赖（使用系统内置 `pbpaste`/`pbcopy`）
 - Linux：需要 `xclip`（X11）或 `wl-clipboard`（Wayland）
