@@ -91,18 +91,21 @@ class PeerConnection:
             return False
 
     def _recv_loop(self):
+        end_reason = "unknown"
         while self._running:
             try:
                 header = self._recv_exact(FRAME_HEADER_SIZE)
                 if header is None:
+                    end_reason = "header recv returned None (remote closed or error)"
                     break
                 frame_len = struct.unpack(">I", header)[0]
                 if frame_len == 0 or frame_len > MAX_FRAME_SIZE:
-                    logger.warning("Invalid frame size from %s: %d", self.device_name, frame_len)
+                    end_reason = f"invalid frame size: {frame_len}"
                     break
 
                 payload = self._recv_exact(frame_len)
                 if payload is None:
+                    end_reason = "payload recv returned None"
                     break
 
                 msg = decode_message(payload)
@@ -110,13 +113,13 @@ class PeerConnection:
                     self._on_message(msg)
 
             except (ConnectionError, OSError) as e:
-                logger.info("Connection to %s closed: %s", self.device_name, e)
+                end_reason = f"ConnectionError: {e}"
                 break
             except Exception as e:
-                logger.warning("Error receiving from %s: %s", self.device_name, e)
+                end_reason = f"Exception: {type(e).__name__}: {e}"
                 break
 
-        logger.info("[%s] recv_loop ended (conn=%s)", self.device_name, hex(id(self)))
+        logger.info("[%s] recv_loop ended: %s (conn=%s)", self.device_name, end_reason, hex(id(self)))
         self._running = False
         if self._on_disconnect:
             logger.debug("[%s] calling on_disconnect callback (conn=%s)", self.device_name, hex(id(self)))
@@ -128,13 +131,15 @@ class PeerConnection:
             try:
                 chunk = self._sock.recv(n - len(buf))
                 if not chunk:
+                    logger.info("[%s] recv returned empty bytes (remote closed connection)", self.device_name)
                     return None
                 buf.extend(chunk)
             except socket.timeout:
                 if not self._running:
                     return None
                 continue
-            except Exception:
+            except Exception as e:
+                logger.info("[%s] recv exception: %s: %s", self.device_name, type(e).__name__, e)
                 return None
         return bytes(buf)
 
@@ -352,22 +357,28 @@ class TransportManager:
         def _connect():
             sock = None
             try:
-                logger.debug("[%s] TCP connecting to %s:%d", peer_name, address, port)
+                logger.info("[%s] TCP connecting to %s:%d", peer_name, address, port)
                 sock = socket.create_connection((address, port), timeout=10)
-                logger.debug("[%s] TCP connected, starting TLS handshake", peer_name)
+                logger.info("[%s] TCP connected, starting TLS handshake", peer_name)
 
                 verify_id = peer_id if self._pairing_mgr.is_peer_paired(peer_id) else None
                 ssl_context = self._build_ssl_context(
                     server_side=False, verify_peer_id=verify_id)
+                logger.info("[%s] SSL context built (verify_id=%s)", peer_name, verify_id[:12] if verify_id else "None")
 
                 ssl_sock = ssl_context.wrap_socket(sock, server_hostname=peer_id)
-                logger.debug("[%s] TLS handshake complete", peer_name)
+                logger.info("[%s] TLS handshake complete", peer_name)
 
                 # Extract real device_id from peer certificate CN.
                 # Discovery may pass a hashed ID for privacy; the cert
                 # CN is the authoritative device_id for pairing/storage.
                 real_peer_id = peer_id
                 peer_cert_der = ssl_sock.getpeercert(binary_form=True)
+                logger.info(
+                    "[%s] server cert: %s",
+                    peer_name,
+                    f"{len(peer_cert_der)} bytes" if peer_cert_der else "NONE",
+                )
                 if peer_cert_der:
                     peer_cert = x509.load_der_x509_certificate(peer_cert_der)
                     peer_cert_pem = peer_cert.public_bytes(Encoding.PEM).decode()
@@ -380,7 +391,7 @@ class TransportManager:
                         pass
 
                     was_paired = self._pairing_mgr.is_peer_paired(real_peer_id)
-                    logger.debug(
+                    logger.info(
                         "[%s] cert extracted: real_peer_id=%s, was_paired=%s, peer_id=%s",
                         peer_name, real_peer_id[:12], was_paired, peer_id[:12],
                     )
@@ -707,19 +718,24 @@ class TransportManager:
             client_sock = None
             try:
                 client_sock, addr = self._server_sock.accept()
-                logger.debug("TCP accepted from %s:%d", addr[0], addr[1])
+                logger.info("TCP accepted from %s:%d", addr[0], addr[1])
                 client_sock.settimeout(15)  # TLS handshake timeout
                 try:
                     ssl_sock = ssl_context.wrap_socket(client_sock, server_side=True)
-                    logger.debug("TLS handshake OK with %s:%d", addr[0], addr[1])
+                    logger.info("TLS handshake OK with %s:%d", addr[0], addr[1])
                 except ssl.SSLError as e:
-                    logger.debug("TLS handshake failed from %s:%d: %s", addr[0], addr[1], e)
+                    logger.warning("TLS handshake failed from %s:%d: %s", addr[0], addr[1], e)
                     client_sock.close()
                     continue
 
                 peer_id = ""
                 peer_name = ""
                 peer_cert_der = ssl_sock.getpeercert(binary_form=True)
+                logger.info(
+                    "Peer cert from %s:%d: %s",
+                    addr[0], addr[1],
+                    f"{len(peer_cert_der)} bytes" if peer_cert_der else "NONE (no client cert)",
+                )
 
                 if peer_cert_der:
                     peer_cert = x509.load_der_x509_certificate(peer_cert_der)
@@ -739,7 +755,7 @@ class TransportManager:
                     except Exception:
                         pass
 
-                    logger.debug(
+                    logger.info(
                         "Accepted TLS from %s:%d — peer_id=%s, peer_name=%s",
                         addr[0], addr[1], peer_id[:12] if peer_id else "N/A", peer_name or "N/A",
                     )
@@ -764,6 +780,9 @@ class TransportManager:
                 conn.set_on_message(self._on_peer_message)
                 conn.set_on_disconnect(self._on_peer_disconnected)
                 conn.start()
+                # Prevent the outer except handler from closing client_sock
+                # now that PeerConnection owns the ssl_sock (which wraps it).
+                client_sock = None
 
                 with self._lock:
                     if not self._running:
@@ -857,7 +876,7 @@ class TransportManager:
                         pass
             except Exception as e:
                 if self._running:
-                    logger.debug("Accept error: %s", e)
+                    logger.warning("Accept error: %s: %s", type(e).__name__, e, exc_info=True)
                 if client_sock:
                     try:
                         client_sock.close()
