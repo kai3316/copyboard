@@ -328,19 +328,7 @@ def main():
             parent=root,
             title="Select File to Send",
             filetypes=[
-                ("All files", "*.*"),
-                ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg *.ico *.webp *.tiff *.tif *.raw *.cr2 *.nef *.heic *.heif *.psd *.ai"),
-                ("Documents", "*.pdf *.txt *.csv *.html *.json *.xml *.md *.doc *.docx *.xls *.xlsx *.ppt *.pptx *.rtf *.odt *.ods *.odp *.pages *.numbers *.key *.tex"),
-                ("Videos", "*.mp4 *.mov *.avi *.mkv *.webm *.flv *.wmv *.m4v *.3gp *.ogv *.ts *.mts *.m2ts *.vob"),
-                ("Audio", "*.mp3 *.wav *.flac *.aac *.ogg *.wma *.m4a *.aiff *.alac *.opus *.mid *.midi"),
-                ("Archives", "*.zip *.tar *.gz *.7z *.rar *.bz2 *.xz *.lz *.lz4 *.zst *.cab *.arj"),
-                ("Code", "*.py *.js *.ts *.jsx *.tsx *.go *.rs *.java *.c *.cpp *.h *.hpp *.rb *.php *.swift *.kt *.scala *.r *.m *.mm *.pl *.sh *.bash *.ps1 *.bat *.sql *.r *.lua"),
-                ("Applications", "*.exe *.msi *.app *.dmg *.pkg *.deb *.rpm *.apk *.ipa *.AppImage *.bin *.run *.sh *.command"),
-                ("Fonts", "*.ttf *.otf *.woff *.woff2 *.eot *.ttc *.otc"),
-                ("Disk Images", "*.iso *.dmg *.img *.vhd *.vhdx *.vmdk *.qcow2 *.bin *.cue"),
-                ("Databases", "*.db *.sqlite *.sqlite3 *.sql *.mdb *.accdb *.sql.gz *.frm *.ibd"),
-                ("E-books", "*.epub *.mobi *.azw *.azw3 *.pdf *.djvu *.fb2 *.cbz *.cbr"),
-                ("Design/CAD", "*.psd *.ai *.sketch *.fig *.xd *.stl *.obj *.fbx *.blend *.step *.stp *.iges *.igs *.dwg *.dxf *.svg"),
+                ("All files", "*"),
             ],
         )
         if not file_path:
