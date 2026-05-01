@@ -265,10 +265,10 @@ class TransportManager:
                 if peer_cert:
                     ca_path.write_text(peer_cert, encoding="ascii")
                     ssl_context.load_verify_locations(cafile=str(ca_path))
-            elif server_side:
-                # Request but don't require client cert so we can extract peer identity
-                ssl_context.verify_mode = ssl.CERT_OPTIONAL
             else:
+                # Server and unpaired client: don't verify peer cert at TLS level.
+                # Peer identity is exchanged as an application-level frame after
+                # the handshake (see _send_identity / _recv_identity).
                 ssl_context.verify_mode = ssl.CERT_NONE
 
             return ssl_context
@@ -281,6 +281,41 @@ class TransportManager:
                         p.unlink()
                     except OSError:
                         pass
+
+    @staticmethod
+    def _send_identity(sock: ssl.SSLSocket, cert_pem: str):
+        """Send our certificate PEM as the first application-level frame."""
+        data = cert_pem.encode("ascii")
+        frame = struct.pack(">I", len(data)) + data
+        sock.sendall(frame)
+
+    @staticmethod
+    def _recv_identity(sock: ssl.SSLSocket, timeout: float = 10.0) -> bytes | None:
+        """Read the first frame from the peer — expected to be their cert PEM."""
+        prev_timeout = sock.gettimeout()
+        sock.settimeout(timeout)
+        try:
+            header = b""
+            while len(header) < FRAME_HEADER_SIZE:
+                chunk = sock.recv(FRAME_HEADER_SIZE - len(header))
+                if not chunk:
+                    return None
+                header += chunk
+            frame_len = struct.unpack(">I", header)[0]
+            if frame_len == 0 or frame_len > MAX_FRAME_SIZE:
+                return None
+            data = b""
+            while len(data) < frame_len:
+                chunk = sock.recv(frame_len - len(data))
+                if not chunk:
+                    return None
+                data += chunk
+            return data
+        except Exception as e:
+            logger.warning("Failed to read identity frame: %s", e)
+            return None
+        finally:
+            sock.settimeout(prev_timeout)
 
     def start_server(self):
         self._cleanup_stale_scratch()
@@ -369,19 +404,18 @@ class TransportManager:
                 ssl_sock = ssl_context.wrap_socket(sock, server_hostname=peer_id)
                 logger.info("[%s] TLS handshake complete", peer_name)
 
-                # Extract real device_id from peer certificate CN.
-                # Discovery may pass a hashed ID for privacy; the cert
-                # CN is the authoritative device_id for pairing/storage.
+                # Exchange identity at application level: send our cert,
+                # then read the server's cert from its identity frame.
+                identity = self._pairing_mgr.get_identity()
+                self._send_identity(ssl_sock, identity.certificate_pem)
+                logger.info("[%s] sent identity frame", peer_name)
+
+                # Read server's identity frame (cert PEM)
+                server_cert_data = self._recv_identity(ssl_sock)
                 real_peer_id = peer_id
-                peer_cert_der = ssl_sock.getpeercert(binary_form=True)
-                logger.info(
-                    "[%s] server cert: %s",
-                    peer_name,
-                    f"{len(peer_cert_der)} bytes" if peer_cert_der else "NONE",
-                )
-                if peer_cert_der:
-                    peer_cert = x509.load_der_x509_certificate(peer_cert_der)
-                    peer_cert_pem = peer_cert.public_bytes(Encoding.PEM).decode()
+                if server_cert_data:
+                    peer_cert_pem = server_cert_data.decode("ascii")
+                    peer_cert = x509.load_pem_x509_certificate(peer_cert_pem.encode())
 
                     try:
                         cn_attrs = peer_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
@@ -730,16 +764,17 @@ class TransportManager:
 
                 peer_id = ""
                 peer_name = ""
-                peer_cert_der = ssl_sock.getpeercert(binary_form=True)
-                logger.info(
-                    "Peer cert from %s:%d: %s",
-                    addr[0], addr[1],
-                    f"{len(peer_cert_der)} bytes" if peer_cert_der else "NONE (no client cert)",
-                )
+                peer_cert_pem = ""
 
-                if peer_cert_der:
-                    peer_cert = x509.load_der_x509_certificate(peer_cert_der)
-                    peer_cert_pem = peer_cert.public_bytes(Encoding.PEM).decode()
+                # Exchange identity at application level: send our cert,
+                # then read the client's cert from its identity frame.
+                identity = self._pairing_mgr.get_identity()
+                self._send_identity(ssl_sock, identity.certificate_pem)
+
+                client_cert_data = self._recv_identity(ssl_sock)
+                if client_cert_data:
+                    peer_cert_pem = client_cert_data.decode("ascii")
+                    peer_cert = x509.load_pem_x509_certificate(peer_cert_pem.encode())
 
                     try:
                         cn_attrs = peer_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
@@ -756,7 +791,7 @@ class TransportManager:
                         pass
 
                     logger.info(
-                        "Accepted TLS from %s:%d — peer_id=%s, peer_name=%s",
+                        "Identity from %s:%d — peer_id=%s, peer_name=%s",
                         addr[0], addr[1], peer_id[:12] if peer_id else "N/A", peer_name or "N/A",
                     )
                     was_paired = self._pairing_mgr.is_peer_paired(peer_id)
@@ -774,6 +809,8 @@ class TransportManager:
                             )
                         except Exception as e:
                             logger.debug("Could not generate shared pairing code: %s", e)
+                else:
+                    logger.warning("No identity frame from %s:%d — anonymous connection", addr[0], addr[1])
 
                 display_id = peer_id or "unknown"
                 conn = PeerConnection(display_id, peer_name or str(addr), ssl_sock)
