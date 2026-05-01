@@ -242,54 +242,56 @@ class TransportManager:
                            verify_peer_id: str | None = None) -> ssl.SSLContext:
         """Build an SSL context from in-memory identity and optional peer cert.
 
-        Loads the private key and certificate directly from memory via
-        cryptography objects — no key material is ever written to disk.
+        Writes key material to a secure per-user scratch directory (NOT system
+        /tmp). Files are cleaned up immediately after loading into the SSL context.
 
         server_side: True for accept(), False for connect().
         verify_peer_id: if set, require and pin this peer's certificate.
         """
         identity = self._pairing_mgr.get_identity()
+        scratch = self._secure_scratch_dir()
 
-        if server_side:
-            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        else:
-            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        uid = uuid.uuid4().hex[:8]
+        key_path = scratch / f"identity_key_{uid}.pem"
+        cert_path = scratch / f"identity_cert_{uid}.pem"
 
-        # Load identity key and cert directly from memory — no temp files.
-        ssl_context.use_private_key(identity.private_key)
-        ssl_context.use_certificate(identity.certificate)
-        ssl_context.check_hostname = False
-        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
-        # Restrict to 256-bit ciphers only — no AES-128-GCM.
-        ssl_context.set_ciphers(
-            "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256"
-        )
+        try:
+            key_path.write_text(identity.private_key_pem, encoding="ascii")
+            cert_path.write_text(identity.certificate_pem, encoding="ascii")
 
-        if verify_peer_id:
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
-            peer_cert = self._pairing_mgr.get_peer_certificate(verify_peer_id)
-            if peer_cert:
-                # Peer certificate (public) is written to a temp file only
-                # because load_verify_locations requires a path. The file
-                # is deleted immediately after loading.
-                scratch = self._secure_scratch_dir()
-                uid = uuid.uuid4().hex[:8]
-                ca_path = scratch / f"peer_cert_{uid}.pem"
-                try:
-                    ca_path.write_text(peer_cert, encoding="ascii")
-                    ssl_context.load_verify_locations(cafile=str(ca_path))
-                finally:
+            if server_side:
+                ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            else:
+                ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+
+            ssl_context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
+            ssl_context.check_hostname = False
+            ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
+
+            if verify_peer_id:
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
+                peer_cert = self._pairing_mgr.get_peer_certificate(verify_peer_id)
+                if peer_cert:
+                    ca_path = scratch / f"peer_cert_{uid}.pem"
                     try:
-                        ca_path.unlink()
-                    except OSError:
-                        pass
-        else:
-            # Server and unpaired client: don't verify peer cert at TLS level.
-            # Peer identity is exchanged as an application-level frame after
-            # the handshake (see _send_identity / _recv_identity).
-            ssl_context.verify_mode = ssl.CERT_NONE
+                        ca_path.write_text(peer_cert, encoding="ascii")
+                        ssl_context.load_verify_locations(cafile=str(ca_path))
+                    finally:
+                        try:
+                            ca_path.unlink()
+                        except OSError:
+                            pass
+            else:
+                ssl_context.verify_mode = ssl.CERT_NONE
 
-        return ssl_context
+            return ssl_context
+
+        finally:
+            for p in [key_path, cert_path]:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
 
     @staticmethod
     def _send_identity(sock: ssl.SSLSocket, cert_pem: str):
