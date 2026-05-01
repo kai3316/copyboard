@@ -387,7 +387,12 @@ def main():
         return pairing_mgr.get_pending_pairings()
 
     def on_pair(peer_id, code):
-        return pairing_mgr.confirm_pairing(peer_id, code)
+        result = pairing_mgr.confirm_pairing(peer_id, code)
+        if result:
+            save_cfg()
+            if peer_id not in transport_mgr.get_connected_peers():
+                on_connect(peer_id)
+        return result
 
     def on_unpair(peer_id):
         pairing_mgr.unpair_peer(peer_id)
@@ -404,6 +409,11 @@ def main():
         if not info:
             # peer_id may be a real device_id from the pairing manager,
             # while _discovered_peers is keyed by hashed mDNS IDs.
+            # Compute the hash directly and look up.
+            hashed = Discovery._hash_device_id(peer_id)
+            with _discovered_lock:
+                info = _discovered_peers.get(hashed)
+        if not info:
             # Try reverse lookup via the hash→real mapping.
             resolved = transport_mgr.get_resolved_hashes()
             hash_id = None
@@ -415,13 +425,15 @@ def main():
                 with _discovered_lock:
                     info = _discovered_peers.get(hash_id)
             if not info:
-                # Fallback: match by device name
+                # Fallback: match by device name (mDNS truncates to 8 chars)
                 peers = pairing_mgr.get_known_peers()
                 target = next((p for p in peers if p.device_id == peer_id), None)
                 if target:
                     with _discovered_lock:
                         for pid, pinfo in _discovered_peers.items():
-                            if pinfo["name"].lower() == target.device_name.lower():
+                            pname = pinfo["name"].lower()
+                            tname = target.device_name.lower()
+                            if pname == tname or tname.startswith(pname):
                                 info = pinfo
                                 break
         if info:

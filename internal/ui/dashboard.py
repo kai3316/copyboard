@@ -714,6 +714,15 @@ class DashboardWindow:
                 command=lambda d=dev_id: self._do_connect(d),
             ).pack(side="left", padx=(0, 4))
 
+        if paired and not connected and self._on_connect_peer:
+            ctk.CTkButton(
+                btns, text="Reconnect", width=80, height=26,
+                fg_color=ACCENT,
+                hover_color=("#2980B9", "#2471A3"),
+                font=ctk.CTkFont(size=11),
+                command=lambda d=dev_id: self._do_reconnect(d),
+            ).pack(side="left", padx=(0, 4))
+
         if paired:
             ctk.CTkButton(
                 btns, text="Unpair", width=60, height=26,
@@ -748,6 +757,11 @@ class DashboardWindow:
                 "The SAME code should appear on BOTH devices.\n"
                 "Enter the code and click 'Confirm Pairing' to complete.",
             )
+
+    def _do_reconnect(self, peer_id):
+        logger.info("User initiated reconnect to %s", peer_id)
+        if self._on_connect_peer:
+            self._on_connect_peer(peer_id)
 
     def _do_unpair(self, peer_id):
         if messagebox.askyesno("Unpair", f"Unpair this device?\n\n{peer_id}"):
