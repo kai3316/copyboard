@@ -196,9 +196,18 @@ def main():
         enc_mgr=enc_mgr if cfg.encryption_enabled else None,
     )
 
+    def _make_save_enc():
+        """Create an EncryptionManager for saving, using current cfg values."""
+        if not cfg.encryption_enabled:
+            return None
+        return EncryptionManager(
+            pairing_mgr.get_identity().fingerprint,
+            password=cfg.encryption_password,
+        )
+
     def _save_cfg_encrypted():
         """Save config with encryption if enabled."""
-        save(cfg, enc_mgr if cfg.encryption_enabled else None)
+        save(cfg, _make_save_enc())
 
     for peer in cfg.peers.values():
         try:
@@ -417,7 +426,7 @@ def main():
                     public_key_pem=peer.certificate_pem,
                     paired=peer.paired,
                 )
-        save(cfg, enc_mgr if cfg.encryption_enabled else None)
+        save(cfg, _make_save_enc())
 
     def get_peers():
         known = []
