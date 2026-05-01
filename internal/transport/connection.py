@@ -337,6 +337,15 @@ class TransportManager:
                     peer_name, peer_id[:12],
                 )
                 return  # already connected
+            # Resolve hashed mDNS ID to real device_id so we don't create
+            # a duplicate connection when the peer is stored under its real ID.
+            real_id = self._hash_to_real_id.get(peer_id)
+            if real_id and real_id in self._peers:
+                logger.debug(
+                    "[%s] connect_to_peer: already connected under real ID %s, skipping",
+                    peer_name, real_id[:12],
+                )
+                return
             self._peer_addresses[peer_id] = (peer_name, address, port)
         logger.info("[%s] connecting to %s:%d (peer_id=%s)", peer_name, address, port, peer_id[:12])
 
@@ -424,11 +433,24 @@ class TransportManager:
                     # so both sides agree on which one survives: the device with
                     # the lower device_id acts as client — its outgoing wins.
                     if real_peer_id in self._peers:
+                        existing = self._peers[real_peer_id]
                         if self._device_id < real_peer_id:
                             # We are the lower ID — our outgoing wins.
                             logger.info(
                                 "[%s] tiebreaker: our outgoing wins (we=%s < peer=%s) — replacing",
                                 peer_name, self._device_id[:12], real_peer_id[:12],
+                            )
+                            old = self._peers.pop(real_peer_id)
+                            old.set_on_disconnect(None)
+                            old.stop()
+                            self._peers[real_peer_id] = conn
+                        elif not existing.health_check():
+                            # Peer has lower ID but existing connection is dead
+                            # (e.g. closed by peer during a previous race round).
+                            # Keep our outgoing so we don't lose both connections.
+                            logger.info(
+                                "[%s] tiebreaker: peer should win but existing is dead — keeping our outgoing",
+                                peer_name,
                             )
                             old = self._peers.pop(real_peer_id)
                             old.set_on_disconnect(None)
@@ -570,6 +592,16 @@ class TransportManager:
                 logger.debug(
                     "[%s] reconnect timer fired but peer already connected — skipping",
                     peer_id[:12],
+                )
+                self._reconnect_attempts.pop(peer_id, None)
+                return
+            # Resolve hashed mDNS ID → real device_id so we don't reconnect
+            # when the peer is already connected under its real ID.
+            real_id = self._hash_to_real_id.get(peer_id)
+            if real_id and real_id in self._peers:
+                logger.debug(
+                    "[%s] reconnect timer fired but peer connected under real ID %s — skipping",
+                    peer_id[:12], real_id[:12],
                 )
                 self._reconnect_attempts.pop(peer_id, None)
                 return
@@ -740,11 +772,25 @@ class TransportManager:
                         # connection IS the peer's outgoing. If the peer has
                         # the lower ID, this incoming wins over any existing.
                         if peer_id in self._peers:
+                            existing = self._peers[peer_id]
                             if self._device_id > peer_id:
                                 # Peer is lower — their outgoing (this incoming) wins.
                                 logger.info(
                                     "[%s] tiebreaker: peer's outgoing wins (peer=%s < we=%s) — replacing",
                                     peer_id[:12], peer_id[:12], self._device_id[:12],
+                                )
+                                old = self._peers.pop(peer_id)
+                                old.set_on_disconnect(None)
+                                old.stop()
+                                self._peers[peer_id] = conn
+                            elif not existing.health_check():
+                                # We are lower but existing connection is dead
+                                # (e.g. our outgoing was closed by peer in a
+                                # previous race round). Keep the incoming so
+                                # we don't lose both connections.
+                                logger.info(
+                                    "[%s] tiebreaker: we should win but existing is dead — keeping incoming",
+                                    peer_id[:12],
                                 )
                                 old = self._peers.pop(peer_id)
                                 old.set_on_disconnect(None)
