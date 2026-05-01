@@ -130,6 +130,36 @@ def main():
     # ── Content filter ─────────────────────────────────────────
     content_filter = ContentFilter(enabled_categories=cfg.filter_enabled_categories)
 
+    # ── Encryption manager (before identity, so we can decrypt the key) ─
+    # The certificate is public and stored in plaintext — derive the
+    # fingerprint from it to bootstrap decryption of the private key.
+    from internal.security.pairing import fingerprint_pem as _fingerprint_pem
+
+    _device_fingerprint = ""
+    if cfg.encryption_enabled and cfg.certificate_pem:
+        try:
+            _device_fingerprint = _fingerprint_pem(cfg.certificate_pem)
+        except Exception:
+            pass
+
+    enc_mgr = EncryptionManager(
+        _device_fingerprint,
+        password=cfg.encryption_password if cfg.encryption_enabled else "",
+    )
+
+    # Decrypt private key before loading identity
+    if cfg.encryption_enabled and cfg.private_key_pem:
+        pt = enc_mgr.decrypt_storage(cfg.private_key_pem)
+        if pt is not None:
+            if pt != cfg.private_key_pem:
+                logger.info("Decrypted private key from encrypted storage")
+            cfg.private_key_pem = pt
+        else:
+            logger.warning(
+                "Private key decryption failed — possibly wrong password "
+                "or corrupted data. Trying as plaintext."
+            )
+
     # ── Pairing / Identity ──────────────────────────────────────
     pairing_mgr = PairingManager(cfg.device_id, cfg.device_name)
     identity = pairing_mgr.load_or_create_identity(
@@ -141,18 +171,12 @@ def main():
         save(cfg)
     logger.info("Certificate fingerprint: %s", identity.fingerprint_short)
 
-    # ── Encryption manager ──────────────────────────────────────
-    enc_mgr = EncryptionManager(
-        identity.fingerprint,
-        password=cfg.encryption_password if cfg.encryption_enabled else "",
-    )
-
-    # Decrypt private key if it was stored encrypted
-    if cfg.encryption_enabled and cfg.private_key_pem:
-        pt = enc_mgr.decrypt_storage(cfg.private_key_pem)
-        if pt is not None and pt != cfg.private_key_pem:
-            logger.info("Decrypted private key from encrypted storage")
-            cfg.private_key_pem = pt
+    # Re-create EncryptionManager with correct fingerprint if it changed
+    if identity.fingerprint != _device_fingerprint:
+        enc_mgr = EncryptionManager(
+            identity.fingerprint,
+            password=cfg.encryption_password if cfg.encryption_enabled else "",
+        )
 
     # ── Clipboard history ──────────────────────────────────────
     clipboard_history = ClipboardHistory(
