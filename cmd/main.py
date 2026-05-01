@@ -173,10 +173,10 @@ def main():
     identity = pairing_mgr.load_or_create_identity(
         cfg.private_key_pem, cfg.certificate_pem,
     )
-    if cfg.private_key_pem != identity.private_key_pem:
+    _is_new_identity = cfg.private_key_pem != identity.private_key_pem
+    if _is_new_identity:
         cfg.private_key_pem = identity.private_key_pem
         cfg.certificate_pem = identity.certificate_pem
-        save(cfg)
     logger.info("Certificate fingerprint: %s", identity.fingerprint_short)
 
     # Re-create EncryptionManager with correct fingerprint if it changed
@@ -185,6 +185,10 @@ def main():
             identity.fingerprint,
             password=cfg.encryption_password if cfg.encryption_enabled else "",
         )
+
+    # Save new identity with encryption (now that enc_mgr has correct fingerprint)
+    if _is_new_identity:
+        save(cfg, enc_mgr if cfg.encryption_enabled else None)
 
     # ── Clipboard history ──────────────────────────────────────
     clipboard_history = ClipboardHistory(
