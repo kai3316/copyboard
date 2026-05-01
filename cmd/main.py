@@ -329,9 +329,12 @@ def main():
             title="Select File to Send",
             filetypes=[
                 ("All files", "*.*"),
-                ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg"),
-                ("Documents", "*.pdf *.txt *.csv *.html *.json *.xml"),
-                ("Archives", "*.zip *.tar *.gz"),
+                ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg *.ico"),
+                ("Documents", "*.pdf *.txt *.csv *.html *.json *.xml *.md *.doc *.docx *.xls *.xlsx *.ppt *.pptx *.rtf"),
+                ("Videos", "*.mp4 *.mov *.avi *.mkv *.webm *.flv *.wmv"),
+                ("Audio", "*.mp3 *.wav *.flac *.aac *.ogg *.wma *.m4a"),
+                ("Archives", "*.zip *.tar *.gz *.7z *.rar *.bz2 *.xz"),
+                ("Code", "*.py *.js *.ts *.jsx *.tsx *.go *.rs *.java *.c *.cpp *.h *.rb *.php *.swift"),
             ],
         )
         if not file_path:
