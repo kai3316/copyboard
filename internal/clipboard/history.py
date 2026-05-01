@@ -8,7 +8,6 @@ import base64
 import json
 import logging
 import os
-import platform
 import re
 import tempfile
 import threading
@@ -16,6 +15,7 @@ import time
 from pathlib import Path
 
 from internal.clipboard.format import ClipboardContent, ContentType
+from internal.config.config import _config_dir
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +25,6 @@ _CONTENT_TYPE_LABELS: dict[ContentType, str] = {
     ContentType.RTF: "RTF",
     ContentType.IMAGE_PNG: "IMAGE",
 }
-
-
-def _config_dir() -> Path:
-    system = platform.system()
-    if system == "Windows":
-        base = os.environ.get("APPDATA", os.path.expanduser("~"))
-        return Path(base) / "CopyBoard"
-    elif system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "CopyBoard"
-    else:
-        return Path.home() / ".config" / "copyboard"
 
 
 def _strip_html(text: str) -> str:

@@ -265,7 +265,12 @@ def main():
 
     # ── Tkinter root (hidden, for settings window) ──────────────
     root = tk.Tk()
+    root.title("CopyBoard")  # avoid showing the default "tk" title on macOS
+    root.geometry("1x1+0+0")  # minimal size so file-dialog parent is near-invisible
     root.withdraw()  # hide the root window
+    # macOS: prevent closing the briefly-visible root window (e.g. during
+    # file dialogs) from destroying the root and quitting the whole app.
+    root.protocol("WM_DELETE_WINDOW", root.withdraw)
 
     # ── Export logs ─────────────────────────────────────────────
     def on_export_logs():
@@ -406,8 +411,6 @@ def main():
                 types[ct] = _b64.b64decode(b64_data)
         if types:
             content = ClipboardContent(types=types)
-            from internal.clipboard.platform import create_writer
-            writer = create_writer()
             writer.write(content)
             return True
         return False

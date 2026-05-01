@@ -520,6 +520,12 @@ class TransportManager:
             stale_peers = list(self._peers.values())
             self._peers.clear()
             saved_addresses = dict(self._peer_addresses)
+            # Cancel stale reconnect timers so they don't race with
+            # the wake-initiated reconnections below.
+            for timer in self._reconnect_timers.values():
+                timer.cancel()
+            self._reconnect_timers.clear()
+            self._reconnect_attempts.clear()
         for conn in stale_peers:
             try:
                 conn.stop()

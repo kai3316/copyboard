@@ -327,7 +327,7 @@ class _ClipboardWriter(ClipboardWriter):
 class WindowsClipboardMonitor(ClipboardMonitor):
     """Event-driven clipboard monitor using AddClipboardFormatListener."""
 
-    def __init__(self):
+    def __init__(self, poll_interval: float = 0.4):
         self._running = False
         self._thread = None
         self._callback = None
@@ -435,7 +435,7 @@ class _MSG(ctypes.Structure):
 
 
 def create_monitor(poll_interval: float = 0.4) -> ClipboardMonitor:
-    return WindowsClipboardMonitor()
+    return WindowsClipboardMonitor(poll_interval=poll_interval)
 
 
 def create_reader() -> ClipboardReader:

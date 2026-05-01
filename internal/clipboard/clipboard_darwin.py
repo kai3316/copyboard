@@ -10,6 +10,7 @@ Clipboard monitoring polls NSPasteboard.general.changeCount via osascript,
 since macOS provides no event-driven clipboard API.
 """
 
+import hashlib
 import logging
 import os
 import re
@@ -218,7 +219,15 @@ class _ClipboardWriter(ClipboardWriter):
 
 
 class DarwinClipboardMonitor(ClipboardMonitor):
-    """Poll-based clipboard monitor for macOS."""
+    """Poll-based clipboard monitor for macOS.
+
+    Uses content hashing (like the Linux implementation) rather than
+    AppleScript change-count polling.  AppleScript ``«class ccnt»`` is
+    unreliable on macOS ≥14 (Sonoma) where osascript clipboard access
+    may fail silently or require entitlements the bundled app lacks.
+    Hashing ``pbpaste`` output is fast for text, has no permission
+    requirements, and has been battle-tested on Linux.
+    """
 
     def __init__(self, poll_interval: float = POLL_INTERVAL):
         self._running = False
@@ -238,42 +247,39 @@ class DarwinClipboardMonitor(ClipboardMonitor):
         self._running = False
 
     def _poll_loop(self):
-        last_count = self._get_change_count()
-        while last_count == -1 and self._running:
-            time.sleep(self._poll_interval)
-            last_count = self._get_change_count()
-        logger.debug("Initial changeCount: %d", last_count)
+        last_hash = self._get_content_hash()
         while self._running:
             time.sleep(self._poll_interval)
-            current = self._get_change_count()
-            if current == -1:
-                continue  # osascript failed, skip this tick
-            if current != last_count:
-                logger.debug("Clipboard change detected, changeCount: %d", current)
-                last_count = current
+            current = self._get_content_hash()
+            if current and last_hash and current != last_hash:
+                last_hash = current
                 if self._callback:
                     try:
                         self._callback()
                     except Exception:
                         logger.warning("Clipboard change callback failed", exc_info=True)
+            elif current and not last_hash:
+                last_hash = current
 
-    def _get_change_count(self) -> int:
-        """Return the pasteboard change count, or -1 on failure."""
+    def _get_content_hash(self) -> str:
+        """Hash text + HTML pasteboard content for change detection."""
         try:
-            result = subprocess.run(
-                ["osascript", "-e", "get the clipboard's «class ccnt»"],
-                capture_output=True, timeout=2,
+            text = subprocess.run(
+                ["pbpaste", "-Prefer", "txt"],
+                capture_output=True, timeout=3,
             )
-            if result.returncode == 0 and result.stdout.strip():
-                return int(result.stdout.strip())
-            elif result.returncode != 0:
-                logger.debug("changeCount osascript failed (rc=%d): %s",
-                            result.returncode, result.stderr.decode(errors="replace")[:120])
-        except ValueError:
-            logger.debug("changeCount: non-integer value returned")
+            html = subprocess.run(
+                ["pbpaste", "-Prefer", "html"],
+                capture_output=True, timeout=3,
+            )
+            txt_data = text.stdout if text.returncode == 0 else b""
+            html_data = html.stdout if html.returncode == 0 else b""
+            combined = txt_data + html_data
+            if combined:
+                return hashlib.sha256(combined).hexdigest()
         except Exception:
-            logger.debug("changeCount: subprocess failed", exc_info=True)
-        return -1
+            pass
+        return ""
 
 
 def create_monitor(poll_interval: float = POLL_INTERVAL) -> ClipboardMonitor:
