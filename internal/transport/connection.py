@@ -418,17 +418,30 @@ class TransportManager:
                             self._peer_addresses[real_peer_id] = addr_info
                         # Remember mapping so UI can deduplicate
                         self._hash_to_real_id[peer_id] = real_peer_id
-                    # First connection wins: if already connected under real ID,
-                    # discard this duplicate instead of replacing (prevents
-                    # bidirectional connection race where each side closes the
-                    # other's connection).
+                    # Bidirectional connection race resolution:
+                    # Both sides may attempt outgoing connections simultaneously,
+                    # creating two TCP connections. Use a deterministic tiebreaker
+                    # so both sides agree on which one survives: the device with
+                    # the lower device_id acts as client — its outgoing wins.
                     if real_peer_id in self._peers:
-                        logger.info(
-                            "[%s] already connected under real ID — discarding duplicate (conn=%s)",
-                            peer_name, hex(id(conn)),
-                        )
-                        conn.set_on_disconnect(None)
-                        conn.stop()
+                        if self._device_id < real_peer_id:
+                            # We are the lower ID — our outgoing wins.
+                            logger.info(
+                                "[%s] tiebreaker: our outgoing wins (we=%s < peer=%s) — replacing",
+                                peer_name, self._device_id[:12], real_peer_id[:12],
+                            )
+                            old = self._peers.pop(real_peer_id)
+                            old.set_on_disconnect(None)
+                            old.stop()
+                            self._peers[real_peer_id] = conn
+                        else:
+                            # Peer has lower ID — their outgoing wins, discard ours.
+                            logger.info(
+                                "[%s] tiebreaker: peer's outgoing wins (peer=%s < we=%s) — discarding our outgoing",
+                                peer_name, real_peer_id[:12], self._device_id[:12],
+                            )
+                            conn.set_on_disconnect(None)
+                            conn.stop()
                     else:
                         self._peers[real_peer_id] = conn
                         logger.debug(
@@ -722,15 +735,29 @@ class TransportManager:
                                     hash_id[:12], peer_id[:12], addr[0],
                                 )
                                 self._hash_to_real_id[hash_id] = peer_id
-                        # First connection wins: if already connected to this
-                        # peer, discard the duplicate incoming connection.
+                        # Tiebreaker: the device with lower device_id acts as
+                        # client — its outgoing connection wins. This incoming
+                        # connection IS the peer's outgoing. If the peer has
+                        # the lower ID, this incoming wins over any existing.
                         if peer_id in self._peers:
-                            logger.info(
-                                "[%s] already connected — discarding duplicate incoming (conn=%s)",
-                                peer_id[:12], hex(id(conn)),
-                            )
-                            conn.set_on_disconnect(None)
-                            conn.stop()
+                            if self._device_id > peer_id:
+                                # Peer is lower — their outgoing (this incoming) wins.
+                                logger.info(
+                                    "[%s] tiebreaker: peer's outgoing wins (peer=%s < we=%s) — replacing",
+                                    peer_id[:12], peer_id[:12], self._device_id[:12],
+                                )
+                                old = self._peers.pop(peer_id)
+                                old.set_on_disconnect(None)
+                                old.stop()
+                                self._peers[peer_id] = conn
+                            else:
+                                # We are lower — our outgoing wins, discard incoming.
+                                logger.info(
+                                    "[%s] tiebreaker: our outgoing wins (we=%s < peer=%s) — discarding incoming",
+                                    peer_id[:12], self._device_id[:12], peer_id[:12],
+                                )
+                                conn.set_on_disconnect(None)
+                                conn.stop()
                         else:
                             self._peers[peer_id] = conn
                             logger.debug(
