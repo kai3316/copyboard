@@ -163,6 +163,7 @@ class TransportManager:
         self._reconnect_attempts: dict[str, int] = {}
         self._reconnect_timers: dict[str, threading.Timer] = {}
         self._max_reconnect_attempts = max_reconnect_attempts
+        self._hash_to_real_id: dict[str, str] = {}
 
     def set_on_peer_message(self, callback: Callable):
         self._on_peer_message = callback
@@ -379,19 +380,24 @@ class TransportManager:
 
                 with self._lock:
                     if not self._running:
+                        conn.set_on_disconnect(None)
                         conn.stop()
                         return
                     # If discovery used a hashed ID, also clean up under that key
                     if real_peer_id != peer_id:
                         old_hash = self._peers.pop(peer_id, None)
                         if old_hash:
+                            old_hash.set_on_disconnect(None)
                             old_hash.stop()
                         # Re-key address tracking under the real ID
                         addr_info = self._peer_addresses.pop(peer_id, None)
                         if addr_info:
                             self._peer_addresses[real_peer_id] = addr_info
+                        # Remember mapping so UI can deduplicate
+                        self._hash_to_real_id[peer_id] = real_peer_id
                     old = self._peers.pop(real_peer_id, None)
                     if old:
+                        old.set_on_disconnect(None)
                         old.stop()
                     self._peers[real_peer_id] = conn
 
@@ -430,11 +436,23 @@ class TransportManager:
         with self._lock:
             conn = self._peers.pop(peer_id, None)
         if conn:
+            conn.set_on_disconnect(None)
             conn.stop()
 
     def get_connected_peers(self) -> list[str]:
         with self._lock:
             return list(self._peers.keys())
+
+    def get_resolved_hashes(self) -> dict[str, str]:
+        """Return mapping of hashed mDNS peer_id → real device_id.
+
+        Discovery uses a hashed device_id for privacy; after the TLS
+        handshake the real device_id is extracted from the peer
+        certificate.  Callers can use this mapping to deduplicate
+        peer lists.
+        """
+        with self._lock:
+            return dict(self._hash_to_real_id)
 
     def _on_peer_disconnected(self, peer_id: str):
         with self._lock:
@@ -512,6 +530,7 @@ class TransportManager:
                         logger.warning(
                             "Health check failed for %s, disconnecting", peer_id,
                         )
+                        conn.set_on_disconnect(None)
                         conn.stop()
 
     def _handle_wake(self):
@@ -528,6 +547,7 @@ class TransportManager:
             self._reconnect_attempts.clear()
         for conn in stale_peers:
             try:
+                conn.set_on_disconnect(None)
                 conn.stop()
             except Exception:
                 pass
@@ -594,11 +614,13 @@ class TransportManager:
                 with self._lock:
                     if not self._running:
                         # Server was stopped during TLS handshake — clean up
+                        conn.set_on_disconnect(None)
                         conn.stop()
                         return
                     if peer_id:
                         old = self._peers.pop(peer_id, None)
                         if old:
+                            old.set_on_disconnect(None)
                             old.stop()
                         self._peers[peer_id] = conn
                     else:

@@ -352,6 +352,11 @@ def main():
             connected = p.device_id in transport_mgr.get_connected_peers()
             result.append((p.device_id, p.device_name, p.paired, connected))
             seen.add(p.device_id)
+        # Resolved hash IDs: skip discovered entries whose real ID already listed
+        resolved = transport_mgr.get_resolved_hashes()
+        for hash_id, real_id in resolved.items():
+            if real_id in seen:
+                seen.add(hash_id)
         with _discovered_lock:
             for peer_id, info in _discovered_peers.items():
                 if peer_id not in seen:
@@ -602,6 +607,9 @@ def main():
         multiprocessing.freeze_support()
 
         parent_conn, child_conn = multiprocessing.Pipe()
+        # Route main-process notifications through the pipe to the tray
+        # subprocess, which owns the pystray Icon reference.
+        notification_mgr.set_pipe(parent_conn)
         tray_proc = multiprocessing.Process(
             target=_run_tray, args=(cfg.device_name, child_conn),
             daemon=True,
@@ -653,6 +661,29 @@ def _run_tray(device_name: str, pipe):
         on_export_logs=lambda: pipe.send(("export_logs",)),
         on_quit=lambda: pipe.send(("quit",)),
     )
+
+    # Thread to receive notification requests from the main process.
+    # On macOS the main process has no pystray Icon reference; it sends
+    # notification requests through the pipe instead.
+    def _recv_notifications():
+        while True:
+            try:
+                if pipe.poll(1):
+                    msg = pipe.recv()
+                    if msg[0] == "show_notification" and child_systray._tray:
+                        try:
+                            child_systray._tray.notify(msg[2], title=msg[1])
+                        except Exception:
+                            pass
+            except (EOFError, BrokenPipeError, OSError):
+                break
+            except Exception:
+                pass
+
+    import threading as _th
+    _notif_thread = _th.Thread(target=_recv_notifications, daemon=True)
+    _notif_thread.start()
+
     child_systray.run()
 
 
