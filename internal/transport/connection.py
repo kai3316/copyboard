@@ -400,15 +400,15 @@ class TransportManager:
                         conn.set_on_disconnect(None)
                         conn.stop()
                         return
-                    # If discovery used a hashed ID, also clean up under that key
+                    # If discovery used a hashed ID, clean up and update mapping
                     if real_peer_id != peer_id:
                         logger.debug(
-                            "[%s] hash→real mismatch: hash=%s real=%s, cleaning up hash entry",
+                            "[%s] hash→real mismatch: hash=%s real=%s",
                             peer_name, peer_id[:12], real_peer_id[:12],
                         )
                         old_hash = self._peers.pop(peer_id, None)
                         if old_hash:
-                            logger.debug("[%s] stopping old connection under hash key (conn=%s)",
+                            logger.debug("[%s] removing stale hash-keyed connection (conn=%s)",
                                          peer_name, hex(id(old_hash)))
                             old_hash.set_on_disconnect(None)
                             old_hash.stop()
@@ -418,19 +418,23 @@ class TransportManager:
                             self._peer_addresses[real_peer_id] = addr_info
                         # Remember mapping so UI can deduplicate
                         self._hash_to_real_id[peer_id] = real_peer_id
-                    old = self._peers.pop(real_peer_id, None)
-                    if old:
-                        logger.debug(
-                            "[%s] replacing existing connection under real ID (old=%s, new=%s)",
-                            peer_name, hex(id(old)), hex(id(conn)),
+                    # First connection wins: if already connected under real ID,
+                    # discard this duplicate instead of replacing (prevents
+                    # bidirectional connection race where each side closes the
+                    # other's connection).
+                    if real_peer_id in self._peers:
+                        logger.info(
+                            "[%s] already connected under real ID — discarding duplicate (conn=%s)",
+                            peer_name, hex(id(conn)),
                         )
-                        old.set_on_disconnect(None)
-                        old.stop()
-                    self._peers[real_peer_id] = conn
-                    logger.debug(
-                        "[%s] stored in _peers[%s] (total peers: %d)",
-                        peer_name, real_peer_id[:12], len(self._peers),
-                    )
+                        conn.set_on_disconnect(None)
+                        conn.stop()
+                    else:
+                        self._peers[real_peer_id] = conn
+                        logger.debug(
+                            "[%s] stored in _peers[%s] (total peers: %d)",
+                            peer_name, real_peer_id[:12], len(self._peers),
+                        )
 
                 self._reconnect_attempts.pop(peer_id, None)
                 self._reconnect_attempts.pop(real_peer_id, None)
@@ -699,31 +703,18 @@ class TransportManager:
                         conn.stop()
                         return
                     if peer_id:
-                        old = self._peers.pop(peer_id, None)
-                        if old:
-                            logger.debug(
-                                "[%s] accept replacing existing connection (old=%s, new=%s)",
-                                peer_name or peer_id, hex(id(old)), hex(id(conn)),
-                            )
-                            old.set_on_disconnect(None)
-                            old.stop()
-                        self._peers[peer_id] = conn
-                        # Cancel any pending reconnect — we just got a fresh
-                        # connection from the peer, no need to reconnect.
+                        # Cancel any pending reconnect — the peer is reaching out
+                        # to us, so we don't need to reconnect to them.
                         timer = self._reconnect_timers.pop(peer_id, None)
                         if timer:
                             logger.debug(
-                                "[%s] cancelled pending reconnect timer for %s",
-                                peer_name or peer_id, peer_id[:12],
+                                "[%s] cancelled pending reconnect timer",
+                                peer_id[:12],
                             )
                             timer.cancel()
                         self._reconnect_attempts.pop(peer_id, None)
                         # Map hashed mDNS IDs to the real peer_id so the UI
-                        # can deduplicate. Discovery may use a hashed ID for
-                        # privacy, but the TLS cert gives the real ID.
-                        # Compare only IP address — the remote port is the
-                        # peer's server port (mDNS), not the ephemeral source
-                        # port of the accepted connection.
+                        # can deduplicate.
                         for hash_id, (_, h_addr, _) in list(self._peer_addresses.items()):
                             if h_addr == addr[0] and hash_id != peer_id:
                                 logger.debug(
@@ -731,10 +722,21 @@ class TransportManager:
                                     hash_id[:12], peer_id[:12], addr[0],
                                 )
                                 self._hash_to_real_id[hash_id] = peer_id
-                        logger.debug(
-                            "[%s] stored in _peers[%s] (total peers: %d)",
-                            peer_name or peer_id, peer_id[:12], len(self._peers),
-                        )
+                        # First connection wins: if already connected to this
+                        # peer, discard the duplicate incoming connection.
+                        if peer_id in self._peers:
+                            logger.info(
+                                "[%s] already connected — discarding duplicate incoming (conn=%s)",
+                                peer_id[:12], hex(id(conn)),
+                            )
+                            conn.set_on_disconnect(None)
+                            conn.stop()
+                        else:
+                            self._peers[peer_id] = conn
+                            logger.debug(
+                                "[%s] stored in _peers[%s] (total peers: %d)",
+                                peer_name or peer_id, peer_id[:12], len(self._peers),
+                            )
                     else:
                         # Track anonymous connections so they can be cleaned up
                         anon_key = f"__anon__{addr[0]}:{addr[1]}"
