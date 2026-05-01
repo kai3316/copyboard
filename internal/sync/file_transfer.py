@@ -811,6 +811,11 @@ class FileTransferManager:
         with self._lock:
             return list(self._history)
 
+    def clear_history(self) -> None:
+        """Delete all transfer history entries."""
+        with self._lock:
+            self._history.clear()
+
     def get_speed_test(self) -> dict | None:
         """Return current speed test state, if any."""
         with self._lock:

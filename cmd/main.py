@@ -329,12 +329,18 @@ def main():
             title="Select File to Send",
             filetypes=[
                 ("All files", "*.*"),
-                ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg *.ico"),
-                ("Documents", "*.pdf *.txt *.csv *.html *.json *.xml *.md *.doc *.docx *.xls *.xlsx *.ppt *.pptx *.rtf"),
-                ("Videos", "*.mp4 *.mov *.avi *.mkv *.webm *.flv *.wmv"),
-                ("Audio", "*.mp3 *.wav *.flac *.aac *.ogg *.wma *.m4a"),
-                ("Archives", "*.zip *.tar *.gz *.7z *.rar *.bz2 *.xz"),
-                ("Code", "*.py *.js *.ts *.jsx *.tsx *.go *.rs *.java *.c *.cpp *.h *.rb *.php *.swift"),
+                ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg *.ico *.webp *.tiff *.tif *.raw *.cr2 *.nef *.heic *.heif *.psd *.ai"),
+                ("Documents", "*.pdf *.txt *.csv *.html *.json *.xml *.md *.doc *.docx *.xls *.xlsx *.ppt *.pptx *.rtf *.odt *.ods *.odp *.pages *.numbers *.key *.tex"),
+                ("Videos", "*.mp4 *.mov *.avi *.mkv *.webm *.flv *.wmv *.m4v *.3gp *.ogv *.ts *.mts *.m2ts *.vob"),
+                ("Audio", "*.mp3 *.wav *.flac *.aac *.ogg *.wma *.m4a *.aiff *.alac *.opus *.mid *.midi"),
+                ("Archives", "*.zip *.tar *.gz *.7z *.rar *.bz2 *.xz *.lz *.lz4 *.zst *.cab *.arj"),
+                ("Code", "*.py *.js *.ts *.jsx *.tsx *.go *.rs *.java *.c *.cpp *.h *.hpp *.rb *.php *.swift *.kt *.scala *.r *.m *.mm *.pl *.sh *.bash *.ps1 *.bat *.sql *.r *.lua"),
+                ("Applications", "*.exe *.msi *.app *.dmg *.pkg *.deb *.rpm *.apk *.ipa *.AppImage *.bin *.run *.sh *.command"),
+                ("Fonts", "*.ttf *.otf *.woff *.woff2 *.eot *.ttc *.otc"),
+                ("Disk Images", "*.iso *.dmg *.img *.vhd *.vhdx *.vmdk *.qcow2 *.bin *.cue"),
+                ("Databases", "*.db *.sqlite *.sqlite3 *.sql *.mdb *.accdb *.sql.gz *.frm *.ibd"),
+                ("E-books", "*.epub *.mobi *.azw *.azw3 *.pdf *.djvu *.fb2 *.cbz *.cbr"),
+                ("Design/CAD", "*.psd *.ai *.sketch *.fig *.xd *.stl *.obj *.fbx *.blend *.step *.stp *.iges *.igs *.dwg *.dxf *.svg"),
             ],
         )
         if not file_path:
@@ -509,6 +515,9 @@ def main():
     def _delete_history_item(index: int):
         return clipboard_history.delete(index)
 
+    def _clear_transfer_history():
+        file_transfer_mgr.clear_history()
+
     # ── Settings window ──────────────────────────────────────────
     settings_win: SettingsWindow | None = None
 
@@ -576,6 +585,7 @@ def main():
             get_transfer_history=lambda: file_transfer_mgr.get_history(),
             on_speed_test=lambda: file_transfer_mgr.start_speed_test(transport_mgr.broadcast),
             get_speed_test_result=lambda: file_transfer_mgr.get_speed_test(),
+            clear_transfer_history=_clear_transfer_history,
         )
         dashboard_win.show()
 

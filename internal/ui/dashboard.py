@@ -64,6 +64,7 @@ class DashboardWindow:
         get_transfer_history: Callable | None = None,
         on_speed_test: Callable | None = None,
         get_speed_test_result: Callable | None = None,
+        clear_transfer_history: Callable | None = None,
     ):
         self._root = root
         self._get_config = get_config
@@ -90,6 +91,7 @@ class DashboardWindow:
         self._get_transfer_history = get_transfer_history
         self._on_speed_test = on_speed_test
         self._get_speed_test_result = get_speed_test_result
+        self._clear_transfer_history = clear_transfer_history
 
         self._window: ctk.CTkToplevel | None = None
         self._dark_mode = False
@@ -1245,6 +1247,13 @@ class DashboardWindow:
         # Defer rebuild so the button animation completes first
         self._root.after(50, self._refresh_history_list)
 
+    def _on_clear_transfer_history(self):
+        if self._clear_transfer_history is None:
+            return
+        if messagebox.askyesno("Clear Transfer History", "Delete all transfer history?"):
+            self._clear_transfer_history()
+            self._root.after(50, self._refresh_transfers)
+
     # ═══════════════════════════════════════════════════════════════
     # Panel: Transfers
     # ═══════════════════════════════════════════════════════════════
@@ -1302,9 +1311,27 @@ class DashboardWindow:
         # History (right)
         right = ctk.CTkFrame(card, fg_color="transparent")
         right.grid(row=0, column=2, sticky="nsew", padx=(6, 12), pady=(8, 8))
-        ctk.CTkLabel(right, text="History",
+        history_header = ctk.CTkFrame(right, fg_color="transparent")
+        history_header.pack(fill="x")
+        ctk.CTkLabel(history_header, text="History",
                     font=ctk.CTkFont(size=12, weight="bold"),
-        ).pack(anchor="w")
+        ).pack(side="left")
+        if self._clear_transfer_history:
+            ctk.CTkButton(
+                history_header, text="Clear", width=50, height=22,
+                fg_color="transparent", border_width=1,
+                text_color=("gray50", "gray60"),
+                border_color=("gray70", "gray40"),
+                hover_color=("#FADBD8", "#5B2C2C"),
+                font=ctk.CTkFont(size=10),
+                command=self._on_clear_transfer_history,
+            ).pack(side="right")
+        self._transfer_history_stats = ctk.CTkLabel(
+            right, text="",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray55", "gray55"),
+        )
+        self._transfer_history_stats.pack(anchor="w", pady=(1, 0))
         self._transfer_history_scroll = ctk.CTkScrollableFrame(right, fg_color="transparent",
                                                                 height=100)
         self._transfer_history_scroll.pack(fill="both", expand=True, pady=(2, 0))
@@ -1351,9 +1378,25 @@ class DashboardWindow:
                 font=ctk.CTkFont(size=12),
                 text_color=("gray50", "gray60"),
             ).pack(fill="x", pady=8)
+            if self._transfer_history_stats:
+                self._transfer_history_stats.configure(text="")
         else:
             for h in history[:20]:  # show last 20
                 self._create_transfer_history_card(h)
+            # Stats
+            total = len(history)
+            success = sum(1 for h in history if h.get("success"))
+            fail = total - success
+            total_size = sum(h.get("file_size", 0) for h in history)
+            parts = [f"{total} completed"]
+            if success:
+                parts.append(f"{success} ok")
+            if fail:
+                parts.append(f"{fail} fail")
+            if total_size > 0:
+                parts.append(self._format_size(total_size))
+            if self._transfer_history_stats:
+                self._transfer_history_stats.configure(text=" · ".join(parts))
 
         # ── Speed test result ──────────────────────────────────────
         if self._speed_test_label and self._get_speed_test_result:
