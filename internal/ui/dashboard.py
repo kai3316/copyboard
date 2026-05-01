@@ -93,7 +93,6 @@ class DashboardWindow:
         # Form vars
         self._sync_var: tk.BooleanVar | None = None
         self._autostart_var: tk.BooleanVar | None = None
-        self._pair_code_var: tk.StringVar | None = None
         self._history_search_var: tk.StringVar | None = None
 
         # Widget refs
@@ -107,6 +106,7 @@ class DashboardWindow:
         self._transfer_scroll: ctk.CTkScrollableFrame | None = None
         self._history_scroll: ctk.CTkScrollableFrame | None = None
         self._pending_label: ctk.CTkLabel | None = None
+        self._pending_frame: ctk.CTkFrame | None = None
         self._footer_label: ctk.CTkLabel | None = None
         self._status_footer: ctk.CTkLabel | None = None
         self._overview_device_name: ctk.CTkLabel | None = None
@@ -138,14 +138,14 @@ class DashboardWindow:
 
         self._window = ctk.CTkToplevel(self._root)
         self._window.title("CopyBoard")
-        self._window.geometry("660x660")
-        self._window.minsize(540, 520)
+        self._window.geometry("800x640")
+        self._window.minsize(720, 560)
         self._window.protocol("WM_DELETE_WINDOW", self._on_hide)
 
         self._window.update_idletasks()
         sw = self._window.winfo_screenwidth()
         sh = self._window.winfo_screenheight()
-        w, h = 660, 660
+        w, h = 800, 640
         self._window.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
         self._build_ui()
@@ -562,19 +562,23 @@ class DashboardWindow:
             text_color=("gray50", "gray60"),
         ).pack(anchor="w", pady=(0, 14))
 
-        # Device list
+        # Device list card
         card = ctk.CTkFrame(panel, corner_radius=12)
         card.pack(fill="both", expand=True, pady=(0, 10))
 
         self._device_scroll = ctk.CTkScrollableFrame(card, fg_color="transparent")
         self._device_scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
+        # Section labels (created once, hidden/shown in _refresh_devices)
+        self._known_header: ctk.CTkLabel | None = None
+        self._discovered_header: ctk.CTkLabel | None = None
+
         # Pairing section
         card2 = ctk.CTkFrame(panel, corner_radius=12)
         card2.pack(fill="x")
 
         ctk.CTkLabel(
-            card2, text="Pairing",
+            card2, text="Pairing Requests",
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 4))
 
@@ -582,8 +586,8 @@ class DashboardWindow:
             card2,
             text=(
                 "Click 'Connect' on a discovered device. "
-                "Both devices will show the SAME 8-digit pairing code.\n"
-                "Enter that code below and click Confirm to complete pairing."
+                "Both devices will show the same 8-digit code.\n"
+                "Verify the codes match, then click Confirm."
             ),
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
@@ -591,29 +595,15 @@ class DashboardWindow:
         )
         instr.pack(anchor="w", padx=16, pady=(0, 8))
 
-        code_row = ctk.CTkFrame(card2, fg_color="transparent")
-        code_row.pack(fill="x", padx=16, pady=(0, 6))
-
-        ctk.CTkLabel(code_row, text="Pairing Code:", font=ctk.CTkFont(size=12)).pack(side="left")
-
-        self._pair_code_var = tk.StringVar(value="")
-        ctk.CTkEntry(
-            code_row, textvariable=self._pair_code_var,
-            width=100, height=36, justify="center",
-            font=ctk.CTkFont(size=16),
-        ).pack(side="left", padx=(10, 8))
-
-        ctk.CTkButton(
-            code_row, text="Confirm Pairing", width=130, height=34,
-            command=self._on_confirm_pairing,
-        ).pack(side="left")
+        self._pending_frame = ctk.CTkFrame(card2, fg_color="transparent")
+        self._pending_frame.pack(fill="x", padx=16, pady=(0, 12))
 
         self._pending_label = ctk.CTkLabel(
-            card2, text="",
+            self._pending_frame, text="",
             font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         )
-        self._pending_label.pack(anchor="w", padx=16, pady=(6, 12))
+        self._pending_label.pack(anchor="w")
 
         return panel
 
@@ -639,19 +629,45 @@ class DashboardWindow:
                 justify="center",
             ).pack(fill="x", expand=True, pady=40)
         else:
-            for dev_id, dev_name, paired, connected in peers:
-                self._create_device_row(dev_id, dev_name, paired, connected)
+            known = [(i, d, p, c) for i, d, p, c in peers if p or c]
+            discovered = [(i, d, p, c) for i, d, p, c in peers if not p and not c]
 
-        # Pending pairing codes
-        if self._pending_label is not None:
+            if known:
+                self._add_section_header("📋  Known Devices", len(known))
+                for dev_id, dev_name, paired, connected in known:
+                    self._create_device_row(dev_id, dev_name, paired, connected)
+
+            if discovered:
+                self._add_section_header("🔍  Discovered Devices", len(discovered))
+                for dev_id, dev_name, paired, connected in discovered:
+                    self._create_device_row(dev_id, dev_name, paired, connected)
+
+        # Pending pairing codes — per-device confirm / reject buttons
+        if self._pending_frame is not None:
+            for child in self._pending_frame.winfo_children():
+                child.destroy()
             pending = self._get_pending() if self._get_pending else []
             if pending:
-                lines = "\n".join(f"  {pid[:12]}  →  {code}" for pid, code in pending)
-                self._pending_label.configure(
-                    text=f"Pending pairing codes:\n{lines}"
-                )
+                self._pending_label.pack_forget()
+                for peer_id, code, peer_name in pending:
+                    self._create_pending_row(peer_id, code, peer_name)
             else:
-                self._pending_label.configure(text="")
+                self._pending_label.configure(text="No pending pairing requests.")
+                self._pending_label.pack(anchor="w")
+
+    def _add_section_header(self, text: str, count: int):
+        header = ctk.CTkFrame(self._device_scroll, fg_color="transparent")
+        header.pack(fill="x", pady=(8, 2), padx=4)
+        ctk.CTkLabel(
+            header, text=text,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=("gray40", "gray70"),
+        ).pack(side="left")
+        ctk.CTkLabel(
+            header, text=str(count),
+            font=ctk.CTkFont(size=11),
+            text_color=("gray60", "gray50"),
+        ).pack(side="left", padx=(6, 0))
 
     def _create_device_row(self, dev_id, dev_name, paired, connected):
         if connected:
@@ -660,6 +676,9 @@ class DashboardWindow:
             color, status, icon = WARN_COLOR, "Paired (offline)", "\U0001F7E1"
         else:
             color, status, icon = ACCENT, "Discovered", "\U0001F535"
+
+        display_name = dev_name or dev_id[:12]
+        display_id = dev_id[:12] if dev_name else dev_id[:16]
 
         row = ctk.CTkFrame(self._device_scroll, fg_color=("gray95", "gray17"),
                           corner_radius=8)
@@ -676,7 +695,7 @@ class DashboardWindow:
         mid.pack(side="left", fill="x", expand=True)
 
         ctk.CTkLabel(
-            mid, text=dev_name,
+            mid, text=display_name,
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w")
 
@@ -697,7 +716,7 @@ class DashboardWindow:
         right.pack(side="right")
 
         ctk.CTkLabel(
-            right, text=dev_id[:12],
+            right, text=display_id,
             font=ctk.CTkFont(size=9),
             text_color=("gray60", "gray50"),
         ).pack(side="bottom", anchor="e")
@@ -773,40 +792,65 @@ class DashboardWindow:
             self._on_remove_peer(peer_id)
             self._refresh_devices()
 
-    def _on_confirm_pairing(self):
-        code = self._pair_code_var.get().strip()
-        if not code or not code.isdigit() or len(code) != 8:
-            messagebox.showwarning(
-                "Invalid Code",
-                "Please enter a valid 8-digit pairing code.\n\n"
-                "This code is displayed in the 'Pending pairing codes' "
-                "section above and on the OTHER device.",
-            )
+    def _create_pending_row(self, peer_id: str, code: str, peer_name: str):
+        row = ctk.CTkFrame(self._pending_frame, fg_color=("gray90", "gray20"),
+                          corner_radius=8)
+        row.pack(fill="x", pady=2)
+
+        inner = ctk.CTkFrame(row, fg_color="transparent")
+        inner.pack(fill="x", padx=12, pady=8)
+
+        ctk.CTkLabel(
+            inner, text=peer_name,
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            inner, text=f"Code: {code}",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=ACCENT,
+        ).pack(anchor="w", pady=(2, 6))
+
+        btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+        btn_row.pack(fill="x")
+
+        ctk.CTkButton(
+            btn_row, text="Confirm", width=80, height=28,
+            fg_color=STATUS_COLOR,
+            hover_color=("#27AE60", "#1E8449"),
+            font=ctk.CTkFont(size=12),
+            command=lambda pid=peer_id, c=code: self._on_confirm_pairing(pid, c),
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            btn_row, text="Reject", width=60, height=28,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#5B2C2C"),
+            font=ctk.CTkFont(size=11),
+            command=lambda pid=peer_id: self._on_reject_pairing(pid),
+        ).pack(side="left")
+
+    def _on_confirm_pairing(self, peer_id: str, code: str):
+        if not self._on_pair:
             return
-
-        pending = self._get_pending() if self._get_pending else []
-        if not pending:
-            messagebox.showinfo(
-                "No Pending",
-                "No pending pairing requests.\n\n"
-                "Click 'Connect' on a discovered device first.",
-            )
-            return
-
-        success = False
-        for peer_id, _ in pending:
-            if self._on_pair(peer_id, code):
-                success = True
-                break
-
+        success = self._on_pair(peer_id, code)
         if success:
+            if self._status_footer:
+                self._status_footer.configure(text="Device paired successfully")
             messagebox.showinfo("Paired", "Device paired successfully!")
-            self._pair_code_var.set("")
         else:
             messagebox.showerror(
                 "Failed",
-                "Invalid pairing code. Check the code on the other device and try again.",
+                "Pairing failed. The code may have expired.\n"
+                "Try connecting again.",
             )
+        self._refresh_devices()
+
+    def _on_reject_pairing(self, peer_id: str):
+        if self._on_unpair:
+            self._on_unpair(peer_id)
         self._refresh_devices()
 
     # ═══════════════════════════════════════════════════════════════

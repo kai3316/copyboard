@@ -104,7 +104,7 @@ class SettingsWindow:
         self._window = ctk.CTkToplevel(self._root)
         self._window.title("CopyBoard Settings")
         self._window.geometry("740x620")
-        self._window.minsize(620, 520)
+        self._window.minsize(680, 560)
         self._window.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._window.update_idletasks()

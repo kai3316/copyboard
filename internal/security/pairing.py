@@ -263,10 +263,15 @@ class PairingManager:
             self._pending_pairings.pop(peer_id, None)
             self._pairing_attempts.pop(peer_id, None)
 
-    def get_pending_pairings(self) -> list[tuple[str, str]]:
-        """Returns list of (peer_id, code) for pending pairings."""
+    def get_pending_pairings(self) -> list[tuple[str, str, str]]:
+        """Returns list of (peer_id, code, peer_name) for pending pairings."""
         with self._lock:
-            return [(pid, code) for pid, (code, _) in self._pending_pairings.items()]
+            result = []
+            for pid, (code, _) in self._pending_pairings.items():
+                peer = self._peers.get(pid)
+                name = peer.device_name if peer else pid[:12]
+                result.append((pid, code, name))
+            return result
 
     def get_paired_peers(self) -> list[PeerIdentity]:
         with self._lock:

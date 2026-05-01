@@ -364,27 +364,51 @@ def main():
         save(cfg)
 
     def get_peers():
-        result = []
+        known = []
+        discovered = []
         seen_ids = set()
         known_names = set()
+        connected_ids = set(transport_mgr.get_connected_peers())
+        resolved = transport_mgr.get_resolved_hashes()  # hash_id -> real_id
+        # Reverse mapping: real_id -> set of hash_ids
+        rev_resolved: dict[str, set] = {}
+        for h_id, r_id in resolved.items():
+            rev_resolved.setdefault(r_id, set()).add(h_id)
         for p in pairing_mgr.get_known_peers():
-            connected = p.device_id in transport_mgr.get_connected_peers()
-            result.append((p.device_id, p.device_name, p.paired, connected))
+            connected = p.device_id in connected_ids
+            if not connected:
+                # Also check if any hash ID mapped to this peer is connected
+                for h_id in rev_resolved.get(p.device_id, []):
+                    if h_id in connected_ids:
+                        connected = True
+                        break
+            known.append((p.device_id, p.device_name, p.paired, connected))
             seen_ids.add(p.device_id)
             known_names.add(p.device_name.lower())
         # Resolved hash IDs: skip discovered entries whose real ID already listed
-        resolved = transport_mgr.get_resolved_hashes()
         for hash_id, real_id in resolved.items():
             if real_id in seen_ids:
                 seen_ids.add(hash_id)
+        # Build a set of known name fragments for fuzzy matching
+        # (mDNS may truncate names to 8 chars, so check prefixes)
+        def _name_matches_known(disc_name: str) -> bool:
+            dl = disc_name.lower()
+            for kn in known_names:
+                if dl == kn or dl.startswith(kn) or kn.startswith(dl):
+                    return True
+            return False
         with _discovered_lock:
-            for peer_id, info in _discovered_peers.items():
-                if peer_id not in seen_ids and info["name"].lower() not in known_names:
-                    result.append((peer_id, info["name"], False, False))
-        return result
+            for peer_id, info in list(_discovered_peers.items()):
+                if peer_id in seen_ids:
+                    continue
+                if _name_matches_known(info["name"]):
+                    continue
+                discovered.append((peer_id, info["name"], False, False))
+        # Known devices first, then discovered
+        return known + discovered
 
     def get_pending():
-        return pairing_mgr.get_pending_pairings()
+        return pairing_mgr.get_pending_pairings()  # list of (peer_id, code, peer_name)
 
     def on_pair(peer_id, code):
         result = pairing_mgr.confirm_pairing(peer_id, code)

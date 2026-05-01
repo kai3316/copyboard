@@ -169,7 +169,7 @@ class TestPairingCode:
         assert "peer-1" in peer_ids
         assert "peer-2" in peer_ids
         # Codes should be 8-digit strings
-        for pid, code in pending:
+        for pid, code, _name in pending:
             assert len(code) == 8
             assert code.isdigit()
 
