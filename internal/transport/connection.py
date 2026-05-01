@@ -2,6 +2,7 @@
 
 import logging
 import os
+import select
 import socket
 import ssl
 import struct
@@ -81,12 +82,24 @@ class PeerConnection:
     def health_check(self) -> bool:
         """Check if the underlying TCP connection is still alive.
 
-        Uses SO_ERROR to detect broken connections without consuming data.
-        Returns False if the socket is in an error state.
+        Uses SO_ERROR for fast broken-connection detection, then a
+        non-blocking peek to catch remote-close (EOF) which SO_ERROR
+        does not surface. Returns False if the socket is dead.
         """
         try:
             error = self._sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-            return error == 0
+            if error != 0:
+                return False
+            if not self._running:
+                return False
+            # Non-blocking peek: if the socket is readable with no data
+            # pending, the remote has cleanly closed (EOF).
+            ready, _, _ = select.select([self._sock], [], [], 0)
+            if ready:
+                data = self._sock.recv(1, socket.MSG_PEEK)
+                if data == b"":
+                    return False
+            return True
         except Exception:
             return False
 
