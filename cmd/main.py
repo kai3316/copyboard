@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 
 # Add project root to Python path so 'internal' package can be found
 # (not needed in a PyInstaller-frozen bundle)
@@ -148,8 +148,6 @@ def main():
     # PBKDF2 verification token that we check here.
     if (cfg.encryption_enabled and cfg.encryption_password_hash
             and not cfg.encryption_password):
-        import tkinter as tk
-        from tkinter import simpledialog
         _tmp_root = tk.Tk()
         _tmp_root.withdraw()
         try:
