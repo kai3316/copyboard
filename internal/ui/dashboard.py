@@ -1288,30 +1288,29 @@ class DashboardWindow:
             command=self._do_speed_test,
         ).pack(side="left")
 
-        # ── Active + History side-by-side ───────────────────────────
+        # ── Active + History stacked vertically ──────────────────────
         card = ctk.CTkFrame(panel, corner_radius=12)
         card.pack(fill="x")
-        card.columnconfigure(0, weight=1, uniform="tf_sec")
-        card.columnconfigure(2, weight=1, uniform="tf_sec")
+        card.columnconfigure(0, weight=1)
 
-        # Active (left)
-        left = ctk.CTkFrame(card, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(12, 6), pady=(8, 8))
-        ctk.CTkLabel(left, text="Active",
+        # Active (top)
+        top = ctk.CTkFrame(card, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="nsew", padx=12, pady=(8, 4))
+        ctk.CTkLabel(top, text="Active",
                     font=ctk.CTkFont(size=12, weight="bold"),
         ).pack(anchor="w")
-        self._transfer_scroll = ctk.CTkScrollableFrame(left, fg_color="transparent",
-                                                       height=100)
-        self._transfer_scroll.pack(fill="both", expand=True, pady=(2, 0))
+        self._transfer_scroll = ctk.CTkScrollableFrame(top, fg_color="transparent",
+                                                       height=75)
+        self._transfer_scroll.pack(fill="x", expand=True, pady=(2, 0))
 
-        # Separator (vertical)
-        vsep = ctk.CTkFrame(card, width=1, fg_color=("gray80", "gray30"))
-        vsep.grid(row=0, column=1, sticky="ns", pady=12)
+        # Separator (horizontal)
+        hsep = ctk.CTkFrame(card, height=1, fg_color=("gray80", "gray30"))
+        hsep.grid(row=1, column=0, sticky="ew", padx=12)
 
-        # History (right)
-        right = ctk.CTkFrame(card, fg_color="transparent")
-        right.grid(row=0, column=2, sticky="nsew", padx=(6, 12), pady=(8, 8))
-        history_header = ctk.CTkFrame(right, fg_color="transparent")
+        # History (bottom)
+        bottom = ctk.CTkFrame(card, fg_color="transparent")
+        bottom.grid(row=2, column=0, sticky="nsew", padx=12, pady=(4, 8))
+        history_header = ctk.CTkFrame(bottom, fg_color="transparent")
         history_header.pack(fill="x")
         ctk.CTkLabel(history_header, text="History",
                     font=ctk.CTkFont(size=12, weight="bold"),
@@ -1327,14 +1326,14 @@ class DashboardWindow:
                 command=self._on_clear_transfer_history,
             ).pack(side="right")
         self._transfer_history_stats = ctk.CTkLabel(
-            right, text="",
+            bottom, text="",
             font=ctk.CTkFont(size=10),
             text_color=("gray55", "gray55"),
         )
         self._transfer_history_stats.pack(anchor="w", pady=(1, 0))
-        self._transfer_history_scroll = ctk.CTkScrollableFrame(right, fg_color="transparent",
-                                                                height=100)
-        self._transfer_history_scroll.pack(fill="both", expand=True, pady=(2, 0))
+        self._transfer_history_scroll = ctk.CTkScrollableFrame(bottom, fg_color="transparent",
+                                                                height=75)
+        self._transfer_history_scroll.pack(fill="x", expand=True, pady=(2, 0))
 
         # Speed test result below the card
         self._speed_test_label = ctk.CTkLabel(
