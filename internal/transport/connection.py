@@ -492,7 +492,12 @@ class TransportManager:
                         sock.close()
                     except Exception:
                         pass
-                self._schedule_reconnect(peer_id)
+                # Only auto-reconnect for paired peers
+                lookup = self._hash_to_real_id.get(peer_id, peer_id)
+                if self._pairing_mgr.is_peer_paired(lookup):
+                    self._schedule_reconnect(peer_id)
+                else:
+                    logger.info("[%s] connect failed and peer not paired — no auto-reconnect", peer_name)
 
         threading.Thread(target=_connect, daemon=True).start()
 
@@ -533,6 +538,7 @@ class TransportManager:
                     "[%s] disconnect: already removed from _peers (conn=%s)",
                     peer_id[:12], hex(id(conn)) if conn else "N/A",
                 )
+                return
             elif conn is not None and current is not conn:
                 # Disconnect is from a stale connection that was already
                 # replaced by a newer one (e.g. during bidirectional connection
@@ -548,7 +554,22 @@ class TransportManager:
                     peer_id[:12], hex(id(conn)) if conn else "N/A",
                 )
                 del self._peers[peer_id]
-        self._schedule_reconnect(peer_id)
+        # Only auto-reconnect to paired peers. Unpaired connections
+        # (during pairing) should be user-initiated to avoid a
+        # bidirectional reconnect race that tears down connections
+        # before the user can enter the pairing code.
+        if self._pairing_mgr.is_peer_paired(peer_id):
+            self._schedule_reconnect(peer_id)
+        else:
+            # Also check if the hashed mDNS ID maps to a paired real ID
+            real_id = self._hash_to_real_id.get(peer_id)
+            if real_id and self._pairing_mgr.is_peer_paired(real_id):
+                self._schedule_reconnect(peer_id)
+            else:
+                logger.info(
+                    "[%s] peer not paired — skipping auto-reconnect",
+                    peer_id[:12],
+                )
 
     def _schedule_reconnect(self, peer_id: str):
         with self._lock:
@@ -674,6 +695,10 @@ class TransportManager:
             except Exception:
                 pass
         for peer_id, (name, address, port) in saved_addresses.items():
+            lookup = self._hash_to_real_id.get(peer_id, peer_id)
+            if not self._pairing_mgr.is_peer_paired(lookup):
+                logger.debug("Wake recovery: skipping unpaired peer %s", name)
+                continue
             logger.info("Wake recovery: reconnecting to %s", name)
             self.connect_to_peer(peer_id, name, address, port)
 
