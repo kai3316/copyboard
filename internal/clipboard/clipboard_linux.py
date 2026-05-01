@@ -246,10 +246,11 @@ class _ClipboardWriter(ClipboardWriter):
 class LinuxClipboardMonitor(ClipboardMonitor):
     """Poll-based clipboard monitor for Linux."""
 
-    def __init__(self):
+    def __init__(self, poll_interval: float = POLL_INTERVAL):
         self._running = False
         self._thread = None
         self._callback = None
+        self._poll_interval = poll_interval
 
     def start(self, callback):
         self._callback = callback
@@ -265,7 +266,7 @@ class LinuxClipboardMonitor(ClipboardMonitor):
     def _poll_loop(self):
         last_hash = self._get_content_hash()
         while self._running:
-            time.sleep(POLL_INTERVAL)
+            time.sleep(self._poll_interval)
             current = self._get_content_hash()
             if current and last_hash and current != last_hash:
                 last_hash = current
@@ -295,8 +296,8 @@ class LinuxClipboardMonitor(ClipboardMonitor):
         return ""
 
 
-def create_monitor() -> ClipboardMonitor:
-    return LinuxClipboardMonitor()
+def create_monitor(poll_interval: float = POLL_INTERVAL) -> ClipboardMonitor:
+    return LinuxClipboardMonitor(poll_interval=poll_interval)
 
 
 def create_reader() -> ClipboardReader:
