@@ -26,6 +26,7 @@ FRAME_HEADER_SIZE = 4
 DATA_TIMEOUT = 30.0  # socket read timeout
 MAX_RECONNECT_ATTEMPTS = 10
 MAX_RECONNECT_BACKOFF = 30
+MIN_RECONNECT_DELAY = 3  # minimum 3s before first reconnect to allow accept_loop to resolve bidirectional races
 
 
 class PeerConnection:
@@ -107,7 +108,7 @@ class PeerConnection:
                     self._on_message(msg)
 
             except (ConnectionError, OSError) as e:
-                logger.debug("Connection to %s closed: %s", self.device_name, e)
+                logger.info("Connection to %s closed: %s", self.device_name, e)
                 break
             except Exception as e:
                 logger.warning("Error receiving from %s: %s", self.device_name, e)
@@ -487,7 +488,7 @@ class TransportManager:
                         peer_id, saved[1], saved[2], self._max_reconnect_attempts,
                     )
                 return
-            delay = min(2 ** attempts, MAX_RECONNECT_BACKOFF)
+            delay = max(MIN_RECONNECT_DELAY, min(2 ** attempts, MAX_RECONNECT_BACKOFF))
             self._reconnect_attempts[peer_id] = attempts + 1
         timer = threading.Timer(delay, self._try_reconnect, args=(peer_id,))
         timer.daemon = True
@@ -634,6 +635,12 @@ class TransportManager:
                             old.set_on_disconnect(None)
                             old.stop()
                         self._peers[peer_id] = conn
+                        # Cancel any pending reconnect — we just got a fresh
+                        # connection from the peer, no need to reconnect.
+                        timer = self._reconnect_timers.pop(peer_id, None)
+                        if timer:
+                            timer.cancel()
+                        self._reconnect_attempts.pop(peer_id, None)
                         # Map hashed mDNS IDs to the real peer_id so the UI
                         # can deduplicate. Discovery may use a hashed ID for
                         # privacy, but the TLS cert gives the real ID.

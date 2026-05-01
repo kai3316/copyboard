@@ -154,12 +154,18 @@ def main():
 
     # Callback for new pairing requests: notify the user and auto-open
     # the dashboard so the pairing code is visible on BOTH devices.
+    # Track notified codes to avoid spamming on connection storms.
+    _notified_pairings: dict[str, str] = {}  # peer_id -> last notified code
+
     def _on_new_pairing(peer_id, code, peer_name):
+        prev = _notified_pairings.get(peer_id)
+        if prev == code:
+            return  # same code, already notified
+        _notified_pairings[peer_id] = code
         notification_mgr.show(
             "Pairing Request",
             f"Device \"{peer_name}\" wants to pair — code: {code}",
         )
-        # Auto-open the dashboard so the user sees the pairing code entry
         root.after(0, open_dashboard)
 
     pairing_mgr.set_on_new_pairing(_on_new_pairing)
@@ -359,19 +365,21 @@ def main():
 
     def get_peers():
         result = []
-        seen = set()
+        seen_ids = set()
+        known_names = set()
         for p in pairing_mgr.get_known_peers():
             connected = p.device_id in transport_mgr.get_connected_peers()
             result.append((p.device_id, p.device_name, p.paired, connected))
-            seen.add(p.device_id)
+            seen_ids.add(p.device_id)
+            known_names.add(p.device_name.lower())
         # Resolved hash IDs: skip discovered entries whose real ID already listed
         resolved = transport_mgr.get_resolved_hashes()
         for hash_id, real_id in resolved.items():
-            if real_id in seen:
-                seen.add(hash_id)
+            if real_id in seen_ids:
+                seen_ids.add(hash_id)
         with _discovered_lock:
             for peer_id, info in _discovered_peers.items():
-                if peer_id not in seen:
+                if peer_id not in seen_ids and info["name"].lower() not in known_names:
                     result.append((peer_id, info["name"], False, False))
         return result
 
