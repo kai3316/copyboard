@@ -174,15 +174,12 @@ class EncryptionManager:
             # Not valid base64 — likely legacy plaintext
             return ciphertext_b64
         pt = decrypt(data, self.storage_key)
-        if pt is None:
-            if not is_encrypted(data):
-                # Legacy plaintext stored as base64 — decode and return
-                try:
-                    return data.decode("utf-8")
-                except Exception:
-                    return ciphertext_b64
-            return None  # auth failure
-        return pt.decode("utf-8")
+        if pt is not None:
+            return pt.decode("utf-8")
+        # Not encrypted — legacy plaintext, return original string unchanged
+        if not is_encrypted(data):
+            return ciphertext_b64
+        return None  # auth failure (bad tag or corrupt data)
 
     def encrypt_frame(self, plaintext: bytes, peer_fingerprint: str) -> bytes:
         """Encrypt frame payload bytes for app-layer encryption."""

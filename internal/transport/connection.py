@@ -81,12 +81,12 @@ class PeerConnection:
         try:
             if self._enc_mgr and self._peer_fingerprint:
                 data = self._enc_mgr.encrypt_frame(data, self._peer_fingerprint)
-                logger.debug(
+                logger.info(
                     "[%s] App-layer encrypted frame payload (%d bytes on wire)",
                     self.device_name, len(data),
                 )
             else:
-                logger.debug(
+                logger.warning(
                     "[%s] Sending unencrypted frame (%d bytes) — enc_mgr=%s peer_fp=%s",
                     self.device_name, len(data),
                     "set" if self._enc_mgr else "none",
@@ -146,7 +146,7 @@ class PeerConnection:
                 if self._enc_mgr and self._peer_fingerprint:
                     pt = self._enc_mgr.decrypt_frame(payload, self._peer_fingerprint)
                     if pt is not None:
-                        logger.debug(
+                        logger.info(
                             "[%s] App-layer decrypted frame payload (%d bytes plaintext)",
                             self.device_name, len(pt),
                         )
@@ -157,7 +157,7 @@ class PeerConnection:
                             "Possible tampering or wrong password.", self.device_name,
                         )
                     else:
-                        logger.debug(
+                        logger.warning(
                             "[%s] Received unencrypted frame (%d bytes) — passing through",
                             self.device_name, len(payload),
                         )
