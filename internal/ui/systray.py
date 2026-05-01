@@ -10,11 +10,15 @@ Cross-platform system tray icon with menu:
 Uses pystray with Pillow for icon rendering.
 """
 
+import ctypes
 import logging
+import sys
 from typing import Callable
 
 import pystray
 from PIL import Image, ImageDraw
+
+from internal.platform.notify import notification_mgr
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +70,14 @@ class SystrayApp:
         self,
         device_name: str,
         on_enable_toggle: Callable | None = None,
+        on_open_dashboard: Callable | None = None,
         on_open_settings: Callable | None = None,
         on_export_logs: Callable | None = None,
         on_quit: Callable | None = None,
     ):
         self._device_name = device_name
         self._on_enable_toggle = on_enable_toggle
+        self._on_open_dashboard = on_open_dashboard
         self._on_open_settings = on_open_settings
         self._on_export_logs = on_export_logs
         self._on_quit_cb = on_quit
@@ -80,11 +86,28 @@ class SystrayApp:
         self._icon_image = _create_icon_image()
         self._peers: list[str] = []
 
+        # Custom message for thread-safe menu updates on Windows.
+        # pystray._update_menu() destroys the current menu handle via
+        # DestroyMenu, which conflicts with TrackPopupMenuEx when the
+        # context menu is displayed.  Posting a message guarantees
+        # _update_menu() runs on the tray thread after the menu closes.
+        if sys.platform == "win32":
+            self._WM_UPDATE_MENU = 0x8000 + 0x100  # WM_APP + 256
+
     def set_syncing(self, enabled: bool):
         self._syncing = enabled
 
     def set_peers(self, peers: list[str]):
         self._peers = peers
+        if self._tray is None:
+            return
+        if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
+            hwnd = getattr(self._tray, "_hwnd", None)
+            if hwnd:
+                ctypes.windll.user32.PostMessageW(
+                    hwnd, self._WM_UPDATE_MENU, 0, 0)
+                return
+        self._tray.update_menu()
 
     def run(self):
         """Run the system tray. Blocks until quit."""
@@ -107,6 +130,8 @@ class SystrayApp:
                 checked=lambda item: self._syncing,
             ),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Show Dashboard", self._on_open_dashboard_click),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "Connected Devices",
                 pystray.Menu(self._build_peer_menu),
@@ -126,6 +151,18 @@ class SystrayApp:
             "CopyBoard",
             menu,
         )
+
+        # Register a custom message handler so set_peers() can safely
+        # trigger menu updates from the peer updater thread.  The
+        # handler runs on the pystray thread (via the Windows message
+        # pump), avoiding DestroyMenu / TrackPopupMenuEx races.
+        if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
+            self._tray._message_handlers[self._WM_UPDATE_MENU] = (
+                lambda w, l: self._tray._update_menu() or 0
+            )
+
+        notification_mgr.set_tray(self._tray)
+
         self._tray.run()
 
     def stop(self):
@@ -150,6 +187,13 @@ class SystrayApp:
         self._syncing = not self._syncing
         if self._on_enable_toggle:
             self._on_enable_toggle(self._syncing)
+        logger.info("Sync %s via tray", "enabled" if self._syncing else "paused")
+        if self._tray:
+            self._tray.update_menu()
+
+    def _on_open_dashboard_click(self, icon, item):
+        if self._on_open_dashboard:
+            self._on_open_dashboard()
 
     def _on_open_settings_click(self, icon, item):
         if self._on_open_settings:

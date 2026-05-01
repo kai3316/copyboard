@@ -19,7 +19,6 @@ Threats addressed:
 import datetime
 import hashlib
 import logging
-import random
 import secrets
 import threading
 import time
@@ -87,7 +86,7 @@ class PairingManager:
         self._identity: DeviceIdentity | None = None
         self._peers: dict[str, PeerIdentity] = {}
         self._pending_pairings: dict[str, tuple[str, float]] = {}  # peer_id -> (code, timestamp)
-        self._pairing_attempts: dict[str, int] = {}  # peer_id -> attempt count
+        self._pairing_attempts: dict[str, list[float]] = {}  # peer_id -> list of attempt timestamps
         self._lock = threading.Lock()
 
     def load_or_create_identity(
@@ -168,8 +167,34 @@ class PairingManager:
         code = str(code_int).zfill(PAIRING_CODE_LENGTH)
         with self._lock:
             self._pending_pairings[peer_id] = (code, time.time())
-            self._pairing_attempts[peer_id] = 0
+            self._pairing_attempts[peer_id] = []
         logger.info("Generated pairing code for %s", peer_id)
+        return code
+
+    def generate_shared_pairing_code(self, peer_id: str) -> str:
+        """Generate a pairing code derived from both devices' certificate fingerprints.
+
+        Both sides independently compute the same code after TLS cert exchange,
+        so users can visually verify the codes match — like Bluetooth Numeric Comparison.
+        """
+        identity = self._identity
+        if not identity:
+            raise RuntimeError("Identity not loaded")
+        with self._lock:
+            peer = self._peers.get(peer_id)
+        if not peer:
+            raise ValueError(f"Peer {peer_id} not known — cert exchange required first")
+
+        # Sort fingerprints so both sides derive the same code
+        fps = sorted([identity.fingerprint, peer.fingerprint])
+        shared = hashlib.sha256((fps[0] + fps[1]).encode()).hexdigest()
+        code_int = int(shared[:10], 16) % (10 ** PAIRING_CODE_LENGTH)
+        code = str(code_int).zfill(PAIRING_CODE_LENGTH)
+
+        with self._lock:
+            self._pending_pairings[peer_id] = (code, time.time())
+            self._pairing_attempts[peer_id] = []
+        logger.info("Shared pairing code for %s: %s (derived from cert fingerprints)", peer_id, code)
         return code
 
     def confirm_pairing(self, peer_id: str, code: str) -> bool:
@@ -179,19 +204,19 @@ class PairingManager:
             if not pending:
                 return False
 
-            expected, timestamp = pending
+            expected, _timestamp = pending
             now = time.time()
 
-            # Sliding window rate limit: track individual attempt timestamps
-            attempts = self._pairing_attempts.get(peer_id, 0)
-            if attempts >= MAX_PAIRING_ATTEMPTS:
-                if now - timestamp < PAIRING_ATTEMPT_WINDOW:
-                    logger.warning("Rate limit hit for pairing with %s", peer_id)
-                    return False
-                # Reset after window
-                self._pairing_attempts[peer_id] = 0
+            # Sliding window rate limit: drop attempts older than the window
+            attempts = self._pairing_attempts.get(peer_id, [])
+            attempts = [t for t in attempts if now - t < PAIRING_ATTEMPT_WINDOW]
+            if len(attempts) >= MAX_PAIRING_ATTEMPTS:
+                logger.warning("Rate limit hit for pairing with %s", peer_id)
+                self._pairing_attempts[peer_id] = attempts
+                return False
 
-            self._pairing_attempts[peer_id] = attempts + 1
+            attempts.append(now)
+            self._pairing_attempts[peer_id] = attempts
 
             if expected == code:
                 del self._pending_pairings[peer_id]
@@ -200,12 +225,20 @@ class PairingManager:
                     self._peers[peer_id].paired = True
                 logger.info("Pairing confirmed for %s", peer_id)
                 return True
-            logger.debug("Pairing code mismatch for %s (attempt %d)", peer_id, attempts + 1)
+            logger.debug("Pairing code mismatch for %s (attempt %d)", peer_id, len(attempts))
             return False
 
     def reject_pairing(self, peer_id: str):
         with self._lock:
             self._pending_pairings.pop(peer_id, None)
+
+    def unpair_peer(self, peer_id: str):
+        """Mark a paired peer as unpaired without removing it."""
+        with self._lock:
+            peer = self._peers.get(peer_id)
+            if peer:
+                peer.paired = False
+                logger.info("Peer unpaired: %s (%s)", peer.device_name, peer_id)
 
     def remove_peer(self, peer_id: str):
         """Remove a peer entirely from both known and pending lists."""
@@ -234,6 +267,7 @@ class PairingManager:
         subject = issuer = x509.Name([
             x509.NameAttribute(NameOID.COMMON_NAME, self._device_id),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, "CopyBoard"),
+            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self._device_name),
         ])
 
         certificate = (
@@ -241,7 +275,7 @@ class PairingManager:
             .subject_name(subject)
             .issuer_name(issuer)
             .public_key(private_key.public_key())
-            .serial_number(random.getrandbits(64))
+            .serial_number(secrets.randbits(64))
             .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
             .not_valid_after(datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3650))
             .add_extension(

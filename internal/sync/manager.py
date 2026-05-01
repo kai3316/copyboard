@@ -12,9 +12,10 @@ import logging
 import threading
 import time
 import uuid
-from typing import Callable
+from typing import Callable, Optional
 
 from internal.clipboard.format import ClipboardContent, SyncMessage
+from internal.clipboard.history import ClipboardHistory
 from internal.clipboard.platform import create_monitor, create_reader, create_writer
 
 logger = logging.getLogger(__name__)
@@ -27,18 +28,22 @@ DEDUP_RING_SIZE = 64
 
 class SyncManager:
     def __init__(self, device_id: str, device_name: str,
-                 reader=None, writer=None, monitor=None):
+                 reader=None, writer=None, monitor=None,
+                 history: Optional[ClipboardHistory] = None,
+                 sync_debounce: float = 0.3):
         self._device_id = device_id
         self._device_name = device_name
         self._reader = reader if reader is not None else create_reader()
         self._writer = writer if writer is not None else create_writer()
         self._monitor = monitor if monitor is not None else create_monitor()
+        self._history = history
         self._enabled = True
         self._on_send: Callable | None = None
         self._lock = threading.Lock()
         self._last_local_hash: str | None = None
         self._last_send_time = 0.0
         self._dedup_ring: list[str] = []
+        self._sync_debounce = sync_debounce
 
     @property
     def on_send(self) -> Callable | None:
@@ -85,8 +90,12 @@ class SyncManager:
             if len(self._dedup_ring) > DEDUP_RING_SIZE:
                 self._dedup_ring = self._dedup_ring[-DEDUP_RING_SIZE:]
 
+            # Set _last_local_hash so the clipboard monitor ignores the
+            # write we're about to make (prevents re-broadcasting remote content).
+            self._last_local_hash = content_hash
+
         # Write to local clipboard
-        logger.debug(
+        logger.info(
             "Writing remote clipboard from %s: %d format(s)",
             msg.source_device, len(content.types),
         )
@@ -102,11 +111,18 @@ class SyncManager:
         if content.is_empty():
             return
 
+        # Record in clipboard history (if available)
+        if self._history is not None:
+            try:
+                self._history.add(content)
+            except Exception:
+                logger.debug("Failed to add to clipboard history", exc_info=True)
+
         content_hash = content.hash_key()
 
         with self._lock:
             now = time.time()
-            if now - self._last_send_time < SYNC_DEBOUNCE:
+            if now - self._last_send_time < self._sync_debounce:
                 return
             if content_hash == self._last_local_hash:
                 return
@@ -123,7 +139,7 @@ class SyncManager:
             source_device=self._device_id,
         )
 
-        logger.debug("Local clipboard changed: %d format(s)", len(content.types))
+        logger.info("Local clipboard changed: %d format(s)", len(content.types))
 
         if self._on_send:
             self._on_send(msg)

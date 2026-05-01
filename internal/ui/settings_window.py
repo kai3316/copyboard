@@ -1,11 +1,8 @@
-"""Modern settings window using ttkbootstrap.
+"""Settings window for CopyBoard — Network, Content Filter, and About.
 
-Sidebar navigation + card-based content panels.
-Supports light/dark theme toggle, colour-coded device status,
-and real-time peer list updates.
-
-Maintains the original constructor API so cmd/main.py works unchanged:
-    SettingsWindow(root, get_config, save_config, get_peers, ...)
+This is a secondary window accessed from the dashboard. It contains
+configuration that users rarely change: network settings, content
+filtering preferences, and version information.
 """
 
 import logging
@@ -13,829 +10,326 @@ import tkinter as tk
 from tkinter import messagebox
 from typing import Callable
 
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from ttkbootstrap.style import Style
+import customtkinter as ctk
+
+from internal.clipboard.filter import ALL_CATEGORIES, CATEGORY_LABELS
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Colour constants for device status indicators
-# ---------------------------------------------------------------------------
 STATUS_COLORS = {
-    "Connected": "#28a745",  # green
-    "Paired":    "#f0ad4e",  # amber
-    "Pending":   "#868e96",  # gray
+    "Connected":  "#2ECC71",
+    "Paired":     "#F39C12",
+    "Discovered": "#3498DB",
+    "Pending":    "#95A5A6",
 }
-STATUS_BOOTSTYLE = {
-    "Connected": "success",
-    "Paired":    "warning",
-    "Pending":   "secondary",
-}
-
-LIGHT_THEME = "flatly"
-DARK_THEME  = "darkly"
 
 
 class SettingsWindow:
-    """Modern settings dialog with sidebar navigation."""
-
-    # ═══════════════════════════════════════════════════════════════
-    # Constructor (API unchanged)
-    # ═══════════════════════════════════════════════════════════════
+    """Settings window with sidebar navigation — separate from the main dashboard."""
 
     def __init__(
         self,
         root: tk.Tk,
         get_config: Callable,
         save_config: Callable,
-        get_peers: Callable,
-        get_pending_pairings: Callable,
-        get_sync_enabled: Callable,
-        set_sync_enabled: Callable,
-        on_pair: Callable,
-        on_unpair: Callable,
-        on_remove_peer: Callable,
-        on_export_logs: Callable | None = None,
         on_closed: Callable | None = None,
+        on_export_logs: Callable | None = None,
+        get_filter_categories: Callable | None = None,
+        set_filter_categories: Callable | None = None,
+        get_log_text: Callable | None = None,
     ):
-        """
-        Args:
-            root:                 Hidden tkinter root.
-            get_config:           () -> Config
-            save_config:          () -> None
-            get_peers:            () -> list[(device_id, device_name, paired, connected)]
-            get_pending_pairings: () -> list[(peer_id, code)]
-            get_sync_enabled:     () -> bool
-            set_sync_enabled:     (bool) -> None
-            on_pair:              (peer_id, code) -> bool
-            on_unpair:            (peer_id) -> None
-            on_remove_peer:       (peer_id) -> None
-            on_export_logs:       () -> None
-            on_closed:            Called when the window is closed (for cleanup)
-        """
         self._root = root
         self._get_config = get_config
         self._save_config = save_config
-        self._get_peers = get_peers
-        self._get_pending = get_pending_pairings
-        self._get_sync = get_sync_enabled
-        self._set_sync = set_sync_enabled
-        self._on_pair = on_pair
-        self._on_unpair = on_unpair
-        self._on_remove_peer = on_remove_peer
-        self._on_export_logs = on_export_logs
         self._on_closed = on_closed
+        self._on_export_logs = on_export_logs
+        self._get_filter_categories = get_filter_categories
+        self._set_filter_categories = set_filter_categories
+        self._get_log_text = get_log_text
 
-        # Internal state
-        self._window: ttk.Toplevel | None = None
-        self._style: Style | None = None
+        self._window: ctk.CTkToplevel | None = None
+        self._dark_mode = False
+        self._current_panel = "network"
         self._refresh_job: str | None = None
-        self._dark_mode: bool = False
-        self._current_panel: str = "general"
 
-        # Widget references (populated in show)
-        self._content_frame: ttk.Frame | None = None
-        self._sidebar_buttons: dict[str, ttk.Button] = {}
-        self._panels: dict[str, ttk.Frame] = {}
-        self._theme_btn: ttk.Button | None = None
-        self._status_label: ttk.Label | None = None
-        self._sync_meter: ttk.Floodgauge | None = None
-        self._device_cards_inner: ttk.Frame | None = None
-        self._device_canvas: tk.Canvas | None = None
-        self._canvas_window: int | None = None
-        self._pending_label: ttk.Label | None = None
+        # Widget references
+        self._sidebar_buttons: dict[str, ctk.CTkButton] = {}
+        self._panels: dict[str, ctk.CTkFrame] = {}
+        self._content_frame: ctk.CTkFrame | None = None
+        self._status_label: ctk.CTkLabel | None = None
 
-        # Data-bound tk vars
-        self._dev_name_var: tk.StringVar | None = None
-        self._sync_var: tk.BooleanVar | None = None
-        self._autostart_var: tk.BooleanVar | None = None
+        # Widget refs
+        self._log_text: ctk.CTkTextbox | None = None
+
+        # Form vars
         self._port_var: tk.StringVar | None = None
         self._svc_var: tk.StringVar | None = None
         self._relay_var: tk.StringVar | None = None
-        self._pair_code_var: tk.StringVar | None = None
+        self._filter_vars: dict[str, tk.BooleanVar] = {}
+        # Advanced panel vars
+        self._history_max_var: tk.StringVar | None = None
+        self._file_receive_dir_var: tk.StringVar | None = None
+        self._sync_debounce_var: tk.StringVar | None = None
+        self._poll_interval_var: tk.StringVar | None = None
+        self._max_reconnect_var: tk.StringVar | None = None
+        self._transfer_timeout_var: tk.StringVar | None = None
+        self._log_level_var: tk.StringVar | None = None
+        self._notifications_var: tk.BooleanVar | None = None
 
     # ═══════════════════════════════════════════════════════════════
-    # Public API (must match original)
+    # Public API
     # ═══════════════════════════════════════════════════════════════
 
     def show(self):
-        """Create and show the settings window (or lift if already open)."""
         if self._window is not None:
-            self._window.lift()
-            self._window.focus_force()
-            return
+            try:
+                self._window.deiconify()
+                self._window.lift()
+                self._window.focus_force()
+                self._window.update_idletasks()
+                self._window.attributes("-topmost", True)
+                self._window.after(200, lambda: self._window.attributes("-topmost", False))
+                if self._window.winfo_viewable():
+                    self._switch_panel(self._current_panel)
+                    return
+                self._window.destroy()
+                self._window = None
+            except tk.TclError:
+                self._window = None
 
-        logger.info("Opening settings window")
-        # Bootstrap the ttkbootstrap style
-        self._style = Style(theme=LIGHT_THEME)
+        logger.info("Opening CopyBoard settings")
+        ctk.set_appearance_mode("dark" if self._dark_mode else "light")
+        ctk.set_default_color_theme("blue")
 
-        self._window = ttk.Toplevel(self._root)
+        self._window = ctk.CTkToplevel(self._root)
         self._window.title("CopyBoard Settings")
-        self._window.geometry("660x580")
-        self._window.minsize(560, 480)
+        self._window.geometry("740x620")
+        self._window.minsize(620, 520)
         self._window.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        try:
-            self._window.iconphoto(False, self._make_tk_icon())
-        except Exception:
-            pass
+        self._window.update_idletasks()
+        sw = self._window.winfo_screenwidth()
+        sh = self._window.winfo_screenheight()
+        w, h = 740, 620
+        self._window.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
         self._build_ui()
-        self._switch_panel("general")
-        self._schedule_refresh()
+        self._switch_panel("network")
 
-    # ═══════════════════════════════════════════════════════════════
-    # Lifecycle
-    # ═══════════════════════════════════════════════════════════════
+        try:
+            self._window.attributes("-topmost", True)
+            self._window.after(200, lambda: self._window.attributes("-topmost", False))
+        except tk.TclError:
+            pass
 
     def _on_close(self):
-        """Clean up and destroy the window."""
-        if self._refresh_job is not None:
-            self._root.after_cancel(self._refresh_job)
-            self._refresh_job = None
         if self._window is not None:
             self._window.destroy()
             self._window = None
-            self._device_cards_inner = None
-            self._device_canvas = None
-            self._canvas_window = None
             self._sidebar_buttons.clear()
             self._panels.clear()
+            self._filter_vars.clear()
         if self._on_closed is not None:
             self._on_closed()
-
-    def _schedule_refresh(self):
-        """Periodically refresh the device list and sync meter."""
-        self._refresh_device_list()
-        self._refresh_sync_meter()
-        if self._window is not None:
-            self._refresh_job = self._root.after(2000, self._schedule_refresh)
 
     # ═══════════════════════════════════════════════════════════════
     # UI construction
     # ═══════════════════════════════════════════════════════════════
 
     def _build_ui(self):
-        """Assemble the full window layout: header / sidebar / content / footer."""
-        outer = ttk.Frame(self._window, padding=0)
-        outer.pack(fill=BOTH, expand=YES)
+        outer = ctk.CTkFrame(self._window, fg_color="transparent")
+        outer.pack(fill="both", expand=True)
 
-        self._build_header(outer)
+        # Header
+        header = ctk.CTkFrame(outer, corner_radius=0, fg_color=("#1A5276", "#1B2A3A"))
+        header.pack(fill="x")
+        h_inner = ctk.CTkFrame(header, fg_color="transparent")
+        h_inner.pack(fill="x", padx=20, pady=(14, 14))
 
-        # Body row: sidebar | separator | content
-        body = ttk.Frame(outer)
-        body.pack(fill=BOTH, expand=YES)
+        ctk.CTkLabel(
+            h_inner, text="\U0001F527  Settings",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=("#FFFFFF", "#E0E0E0"),
+        ).pack(side="left")
+
+        self._theme_btn = ctk.CTkButton(
+            h_inner, text="☾  Dark" if not self._dark_mode else "☀  Light",
+            width=90, height=32, fg_color="transparent",
+            border_width=1, border_color=("#7F8C8D", "#566573"),
+            text_color=("#FFFFFF", "#E0E0E0"),
+            hover_color=("#5D6D7E", "#4A5568"),
+            command=self._toggle_theme,
+        )
+        self._theme_btn.pack(side="right")
+
+        # Body: sidebar | content
+        body = ctk.CTkFrame(outer, fg_color="transparent")
+        body.pack(fill="both", expand=True)
 
         self._build_sidebar(body)
-        ttk.Separator(body, orient=VERTICAL).pack(side=LEFT, fill=Y)
 
-        self._build_content_area(body)
+        sep = ctk.CTkFrame(body, width=1, fg_color=("gray75", "gray30"))
+        sep.pack(side="left", fill="y")
 
-        self._build_footer(outer)
+        self._content_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self._content_frame.pack(side="left", fill="both", expand=True)
 
-    # ── Header ────────────────────────────────────────────────────
+        # Build panels
+        self._panels["network"] = self._build_network_panel()
+        self._panels["filter"] = self._build_filter_panel()
+        self._panels["advanced"] = self._build_advanced_panel()
+        self._panels["logs"] = self._build_logs_panel()
+        self._panels["about"] = self._build_about_panel()
 
-    def _build_header(self, parent: ttk.Frame):
-        """Top bar with brand name and theme toggle."""
-        header = ttk.Frame(parent, padding=(16, 10, 12, 10))
-        header.configure(bootstyle="primary")
-        header.pack(fill=X)
+        # Footer
+        footer = ctk.CTkFrame(outer, height=44, corner_radius=0,
+                              fg_color=("gray90", "gray15"))
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
+        f_inner = ctk.CTkFrame(footer, fg_color="transparent")
+        f_inner.pack(fill="x", padx=20, pady=8)
 
-        # Brand
-        brand = ttk.Frame(header)
-        brand.pack(side=LEFT)
-
-        ttk.Label(
-            brand,
-            text=u"\U0001F4CB  ",
-            font=("Segoe UI", 14),
-            bootstyle="inverse-primary",
-            padding=(0, 0, 2, 0),
-        ).pack(side=LEFT)
-
-        ttk.Label(
-            brand,
-            text="CopyBoard",
-            font=("Segoe UI", 14, "bold"),
-            bootstyle="inverse-primary",
-        ).pack(side=LEFT)
-
-        # Theme toggle
-        self._theme_btn = ttk.Button(
-            header,
-            text=u"\U0001F319  Dark",
-            bootstyle="light-outline",
-            command=self._toggle_theme,
-            width=10,
+        self._status_label = ctk.CTkLabel(
+            f_inner, text="Ready", text_color=("gray50", "gray60"),
+            font=ctk.CTkFont(size=11),
         )
-        self._theme_btn.pack(side=RIGHT)
+        self._status_label.pack(side="left")
 
-    # ── Sidebar ───────────────────────────────────────────────────
+        ctk.CTkButton(
+            f_inner, text="Close", width=60, height=28,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray70"),
+            border_color=("gray60", "gray50"),
+            hover_color=("gray85", "gray25"),
+            command=self._on_close,
+        ).pack(side="right")
 
-    def _build_sidebar(self, body: ttk.Frame):
-        """Vertical navigation rail on the left."""
-        sidebar = ttk.Frame(body, width=160, bootstyle="light")
-        sidebar.pack(side=LEFT, fill=Y)
+    # ── Sidebar ────────────────────────────────────────────────────
+
+    def _build_sidebar(self, body):
+        sidebar = ctk.CTkFrame(body, width=180, fg_color="transparent")
+        sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
-        inner = ttk.Frame(sidebar, padding=(8, 20, 8, 12))
-        inner.pack(fill=BOTH, expand=YES)
+        inner = ctk.CTkFrame(sidebar, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=8, pady=16)
 
-        # Navigation items: (key, icon, label)
-        nav_items = [
-            ("general", u"\U0001F3E0", "General"),
-            ("devices", u"\U0001F4F1", "Devices"),
-            ("network", u"\U0001F310", "Network"),
-            ("about",    u"ℹ️", "About"),
+        nav = [
+            ("network", "\U0001F310  Network"),
+            ("filter",  "\U0001F6E1  Content Filter"),
+            ("advanced", "⚙  Advanced"),
+            ("logs",    "\U0001F4C4  Logs"),
+            ("about",   "ℹ️  About"),
         ]
 
-        self._sidebar_buttons = {}
-        for key, icon, label in nav_items:
-            btn = ttk.Button(
-                inner,
-                text=f"  {icon}   {label}",
-                bootstyle="light-link",
+        for key, label in nav:
+            btn = ctk.CTkButton(
+                inner, text=label, anchor="w",
+                height=40, corner_radius=8,
+                fg_color="transparent",
+                text_color=("gray30", "gray80"),
+                hover_color=("gray85", "gray25"),
+                font=ctk.CTkFont(size=13),
                 command=lambda k=key: self._switch_panel(k),
-                padding=(8, 8),
             )
-            btn.pack(fill=X, pady=3, ipady=6)
+            btn.pack(fill="x", pady=3)
             self._sidebar_buttons[key] = btn
-
-    # ── Content area ──────────────────────────────────────────────
-
-    def _build_content_area(self, body: ttk.Frame):
-        """Container that hosts the switchable panels."""
-        self._content_frame = ttk.Frame(body, padding=(20, 18, 20, 10))
-        self._content_frame.pack(side=LEFT, fill=BOTH, expand=YES)
-
-        # Build each panel
-        self._panels["general"] = self._build_general_panel()
-        self._panels["devices"] = self._build_devices_panel()
-        self._panels["network"] = self._build_network_panel()
-        self._panels["about"]    = self._build_about_panel()
-
-    # ── Footer ────────────────────────────────────────────────────
-
-    def _build_footer(self, parent: ttk.Frame):
-        """Bottom bar with status text and close button."""
-        ttk.Separator(parent, orient=HORIZONTAL).pack(fill=X)
-
-        footer = ttk.Frame(parent, padding=(16, 8))
-        footer.pack(fill=X)
-
-        self._status_label = ttk.Label(
-            footer, text="Ready",
-            bootstyle="secondary",
-        )
-        self._status_label.pack(side=LEFT)
-
-        ttk.Button(
-            footer,
-            text="Close",
-            bootstyle="outline-secondary",
-            command=self._on_close,
-            width=8,
-        ).pack(side=RIGHT)
 
     # ═══════════════════════════════════════════════════════════════
     # Panel switching
     # ═══════════════════════════════════════════════════════════════
 
     def _switch_panel(self, key: str):
-        """Show the panel for *key* and hide all others.
-
-        Updates sidebar button highlighting and refreshes
-        data-driven panels on entry.
-        """
         if self._content_frame is None:
             return
-
-        # Hide / show panels
         for pk, panel in self._panels.items():
             if pk == key:
-                panel.pack(in_=self._content_frame, fill=BOTH, expand=YES)
+                panel.pack(in_=self._content_frame, fill="both", expand=True,
+                          padx=20, pady=16)
             else:
                 panel.pack_forget()
-
-        # Highlight active sidebar button
         for pk, btn in self._sidebar_buttons.items():
             if pk == key:
-                btn.configure(bootstyle="primary-link")
+                btn.configure(
+                    fg_color=("#2A82C7", "#1F6AA5"),
+                    text_color=("#FFFFFF", "#FFFFFF"),
+                )
             else:
-                btn.configure(bootstyle="light-link")
-
+                btn.configure(
+                    fg_color="transparent",
+                    text_color=("gray30", "gray80"),
+                )
         self._current_panel = key
-
-        # Refresh content on entry
-        if key == "devices":
-            self._refresh_device_list()
-        elif key == "general":
-            self._refresh_sync_meter()
-
-    # ═══════════════════════════════════════════════════════════════
-    # Panel: General
-    # ═══════════════════════════════════════════════════════════════
-
-    def _build_general_panel(self) -> ttk.Frame:
-        panel = ttk.Frame(self._content_frame)
-        cfg = self._get_config()
-
-        # Section heading
-        ttk.Label(
-            panel, text="General Settings",
-            font=("Segoe UI", 14, "bold"),
-        ).pack(anchor=W, pady=(0, 14))
-
-        # ── Device Information card ──────────────────────────────
-        card = ttk.Labelframe(panel, text="  Device Information  ", padding=12)
-        card.pack(fill=X, pady=(0, 12))
-
-        row1 = ttk.Frame(card)
-        row1.pack(fill=X, pady=(0, 8))
-        ttk.Label(row1, text="Device Name", width=14, anchor=W).pack(side=LEFT)
-        self._dev_name_var = tk.StringVar(value=cfg.device_name)
-        ttk.Entry(row1, textvariable=self._dev_name_var).pack(
-            side=LEFT, fill=X, expand=YES, padx=(12, 0),
-        )
-
-        row2 = ttk.Frame(card)
-        row2.pack(fill=X, pady=(0, 8))
-        ttk.Label(row2, text="Device ID", width=14, anchor=W).pack(side=LEFT)
-        id_var = tk.StringVar(value=cfg.device_id)
-        ttk.Entry(row2, textvariable=id_var, state="readonly").pack(
-            side=LEFT, fill=X, expand=YES, padx=(12, 0),
-        )
-
-        save_row = ttk.Frame(card)
-        save_row.pack(fill=X)
-        ttk.Button(
-            save_row, text="Save Device Name",
-            bootstyle="primary-outline",
-            command=self._on_save_general,
-        ).pack(side=LEFT)
-        if self._on_export_logs is not None:
-            ttk.Button(
-                save_row, text=u"\U0001F4BE  Export Logs",
-                bootstyle="info-outline",
-                command=self._on_export_logs,
-                padding=(10, 4),
-            ).pack(side=LEFT, padx=(10, 0))
-
-        # ── Sync Settings card ───────────────────────────────────
-        card2 = ttk.Labelframe(panel, text="  Sync & Startup  ", padding=12)
-        card2.pack(fill=X, pady=(0, 12))
-
-        # Sync health meter
-        self._sync_meter = ttk.Floodgauge(
-            card2,
-            text="Sync Health",
-            value=0,
-            maximum=100,
-            length=320,
-            mode=DETERMINATE,
-            bootstyle="success",
-        )
-        self._sync_meter.pack(fill=X, pady=(0, 12))
-
-        # Enable sync
-        self._sync_var = tk.BooleanVar(value=self._get_sync())
-        ttk.Checkbutton(
-            card2,
-            text="Enable real-time clipboard sync",
-            variable=self._sync_var,
-            command=self._on_toggle_sync,
-            bootstyle="success-round-toggle",
-        ).pack(anchor=W, pady=(0, 8))
-
-        # Auto-start
-        self._autostart_var = tk.BooleanVar(value=cfg.auto_start)
-        ttk.Checkbutton(
-            card2,
-            text="Start CopyBoard on login",
-            variable=self._autostart_var,
-            command=self._on_toggle_autostart,
-            bootstyle="success-round-toggle",
-        ).pack(anchor=W)
-
-        return panel
-
-    # ── General callbacks ────────────────────────────────────────
-
-    def _on_toggle_sync(self):
-        enabled = self._sync_var.get()
-        self._set_sync(enabled)
-        cfg = self._get_config()
-        cfg.sync_enabled = enabled
-        self._save_config()
-        self._status_label.config(
-            text="Sync " + ("enabled" if enabled else "paused"),
-        )
-        logger.info("Sync %s", "enabled" if enabled else "paused")
-
-    def _on_toggle_autostart(self):
-        cfg = self._get_config()
-        cfg.auto_start = self._autostart_var.get()
-        self._save_config()
-        logger.info("Auto-start %s", "enabled" if cfg.auto_start else "disabled")
-
-    def _on_save_general(self):
-        new_name = self._dev_name_var.get().strip()
-        if not new_name:
-            logger.warning("Device name save attempted with empty name")
-            messagebox.showwarning("Invalid", "Device name cannot be empty.")
-            return
-        old_name = self._get_config().device_name
-        cfg = self._get_config()
-        cfg.device_name = new_name
-        self._save_config()
-        logger.info("Device name changed: %s -> %s", old_name, new_name)
-        messagebox.showinfo("Saved", f"Device name updated to: {new_name}")
-
-    # ═══════════════════════════════════════════════════════════════
-    # Sync health meter
-    # ═══════════════════════════════════════════════════════════════
-
-    def _refresh_sync_meter(self):
-        """Drive the Floodgauge from current peer connection state."""
-        if self._sync_meter is None:
-            return
-        try:
-            peers = self._get_peers()
-            if not peers:
-                self._sync_meter.configure(value=0)
-                return
-
-            connected = sum(1 for _, _, _, c in peers if c)
-            paired = sum(1 for _, _, p, _ in peers if p)
-            total = len(peers)
-
-            # Weighted health: connected peers at 100 %, paired-only at 50 %
-            health = int(((connected + 0.5 * max(paired - connected, 0))
-                          / max(total, 1)) * 100)
-            health = min(health, 100)
-
-            self._sync_meter.configure(value=health)
-        except Exception:
-            pass
-
-    # ═══════════════════════════════════════════════════════════════
-    # Panel: Devices  (card-based, replaces Treeview)
-    # ═══════════════════════════════════════════════════════════════
-
-    def _build_devices_panel(self) -> ttk.Frame:
-        panel = ttk.Frame(self._content_frame)
-
-        ttk.Label(
-            panel, text="Device Management",
-            font=("Segoe UI", 14, "bold"),
-        ).pack(anchor=W, pady=(0, 14))
-
-        # ── Known Devices ────────────────────────────────────────
-        card = ttk.Labelframe(panel, text="  Known Devices  ", padding=8)
-        card.pack(fill=BOTH, expand=YES, pady=(0, 12))
-
-        # Scrollable area for device cards (Canvas + Scrollbar)
-        sf_outer = ttk.Frame(card)
-        sf_outer.pack(fill=BOTH, expand=YES)
-
-        self._device_canvas = tk.Canvas(sf_outer, height=140, highlightthickness=0,
-                                         borderwidth=0)
-        scrollbar = ttk.Scrollbar(sf_outer, orient=VERTICAL,
-                                  command=self._device_canvas.yview)
-        self._device_canvas.configure(yscrollcommand=scrollbar.set)
-
-        self._device_cards_inner = ttk.Frame(self._device_canvas, padding=2)
-        self._canvas_window = self._device_canvas.create_window(
-            (0, 0), window=self._device_cards_inner, anchor=NW,
-        )
-
-        self._device_canvas.pack(side=LEFT, fill=BOTH, expand=YES)
-        scrollbar.pack(side=RIGHT, fill=Y)
-
-        # Bind scroll region update and mousewheel
-        self._device_cards_inner.bind("<Configure>", self._on_cards_inner_configure)
-        self._device_canvas.bind("<Configure>", self._on_canvas_configure)
-        self._device_canvas.bind("<Enter>", self._bind_mousewheel)
-        self._device_canvas.bind("<Leave>", self._unbind_mousewheel)
-
-        # ── Pairing ──────────────────────────────────────────────
-        card2 = ttk.Labelframe(panel, text="  Pairing  ", padding=12)
-        card2.pack(fill=X, pady=(0, 8))
-
-        row = ttk.Frame(card2)
-        row.pack(fill=X)
-
-        ttk.Label(row, text="Pairing Code:").pack(side=LEFT)
-
-        self._pair_code_var = tk.StringVar(value="")
-        ttk.Entry(
-            row,
-            textvariable=self._pair_code_var,
-            width=10,
-            font=("Segoe UI", 15),
-            justify=CENTER,
-        ).pack(side=LEFT, padx=(10, 8))
-
-        ttk.Button(
-            row,
-            text="Confirm Pairing",
-            bootstyle="success",
-            command=self._on_confirm_pairing,
-        ).pack(side=LEFT)
-
-        self._pending_label = ttk.Label(card2, text="", bootstyle="info")
-        self._pending_label.pack(anchor=W, pady=(8, 0))
-
-        return panel
-
-    # ── Device card factory ──────────────────────────────────────
-
-    @staticmethod
-    def _status_dot_color(status: str) -> str:
-        """Return hex colour for a device status."""
-        if status == "Connected":
-            return STATUS_COLORS["Connected"]
-        elif status == "Paired":
-            return STATUS_COLORS["Paired"]
-        else:
-            return STATUS_COLORS["Pending"]
-
-    @staticmethod
-    def _status_bootstyle(status: str) -> str:
-        """Return ttkbootstrap bootstyle for a device status badge."""
-        return STATUS_BOOTSTYLE.get(status, "secondary")
-
-    def _create_device_card(self, dev_id: str, dev_name: str,
-                            paired: bool, connected: bool):
-        """Build a single device card with colour-coded status dot."""
-        if connected:
-            status = "Connected"
-        elif paired:
-            status = "Paired"
-        else:
-            status = "Pending"
-
-        color = self._status_dot_color(status)
-        badge_bs = self._status_bootstyle(status)
-
-        # Card frame
-        card = ttk.Frame(self._device_cards_inner, padding=10)
-        card.pack(fill=X, pady=2)
-
-        # ── Status dot (tk.Label with coloured circle glyph) ─────
-        dot = tk.Label(
-            card,
-            text=u"●",          # filled circle
-            fg=color,
-            font=("", 16),
-            bg=self._get_card_bg(card),
-            bd=0,
-            padx=0,
-            pady=0,
-        )
-        dot.pack(side=LEFT, padx=(0, 10))
-
-        # ── Middle: name + id ────────────────────────────────────
-        middle = ttk.Frame(card)
-        middle.pack(side=LEFT, fill=X, expand=YES)
-
-        name_row = ttk.Frame(middle)
-        name_row.pack(fill=X)
-
-        ttk.Label(
-            name_row,
-            text=dev_name,
-            font=("Segoe UI", 11, "bold"),
-        ).pack(side=LEFT)
-
-        # Status badge
-        ttk.Label(
-            name_row,
-            text=f"  {status}  ",
-            bootstyle=badge_bs,
-            font=("Segoe UI", 10),
-        ).pack(side=LEFT, padx=(8, 0))
-
-        ttk.Label(
-            middle,
-            text=dev_id,
-            bootstyle="secondary",
-            font=("Segoe UI", 10),
-        ).pack(anchor=W)
-
-        # ── Right: action buttons ────────────────────────────────
-        btns = ttk.Frame(card)
-        btns.pack(side=RIGHT, padx=(8, 0))
-
-        ttk.Button(
-            btns,
-            text="Unpair",
-            bootstyle="warning-outline",
-            command=lambda d=dev_id: self._do_unpair(d),
-            padding=(8, 3),
-        ).pack(side=LEFT, padx=(0, 5))
-
-        ttk.Button(
-            btns,
-            text="Remove",
-            bootstyle="danger-outline",
-            command=lambda d=dev_id: self._do_remove(d),
-            padding=(8, 3),
-        ).pack(side=LEFT)
-
-        return card
-
-    def _get_card_bg(self, _widget: ttk.Frame | None = None) -> str:
-        """Pull the current theme background colour."""
-        try:
-            # Use ttkbootstrap's colour utility for the standard background
-            return self._style.colors.bg  # type: ignore[union-attr]
-        except Exception:
-            return "#ffffff"
-
-    # ── Device list refresh ──────────────────────────────────────
-
-    def _refresh_device_list(self):
-        """Rebuild all device cards and update the pending label."""
-        if self._device_cards_inner is None:
-            return
-
-        # Destroy old cards
-        for child in self._device_cards_inner.winfo_children():
-            child.destroy()
-
-        peers = self._get_peers()
-        for dev_id, dev_name, paired, connected in peers:
-            self._create_device_card(dev_id, dev_name, paired, connected)
-
-        # Empty state
-        if not peers:
-            ttk.Label(
-                self._device_cards_inner,
-                text=(
-                    "No devices discovered yet.\n"
-                    "Devices on your LAN will appear here automatically."
-                ),
-                bootstyle="secondary",
-                justify=CENTER,
-                padding=(0, 24),
-            ).pack(fill=X, expand=YES)
-
-        # Pending pairings label
-        if self._pending_label is not None:
-            pending = self._get_pending()
-            if pending:
-                lines = "\n".join(
-                    f"    {pid} : {code}" for pid, code in pending
-                )
-                self._pending_label.configure(
-                    text=f"Pairing codes to share:\n{lines}",
-                )
-            else:
-                self._pending_label.configure(text="")
-
-        # Defer scroll region update until after layout settles
-        if self._window is not None:
-            self._window.after(50, self._on_cards_inner_configure)
-
-    # ── Canvas scrolling helpers ──────────────────────────────────
-
-    def _on_cards_inner_configure(self, _event=None):
-        """Update scrollregion when inner frame size changes."""
-        if self._device_canvas is not None:
-            self._device_canvas.configure(
-                scrollregion=self._device_canvas.bbox("all"),
-            )
-
-    def _on_canvas_configure(self, event):
-        """Keep inner frame width matching canvas width."""
-        if self._device_canvas is not None and self._canvas_window is not None:
-            self._device_canvas.itemconfig(
-                self._canvas_window, width=event.width,
-            )
-
-    def _bind_mousewheel(self, _event=None):
-        if self._device_canvas is not None:
-            self._device_canvas.bind_all(
-                "<MouseWheel>",
-                lambda e: self._device_canvas.yview_scroll(
-                    int(-1 * (e.delta / 120)), "units"),
-            )
-
-    def _unbind_mousewheel(self, _event=None):
-        if self._device_canvas is not None:
-            self._device_canvas.unbind_all("<MouseWheel>")
-
-    # ── Device actions ───────────────────────────────────────────
-
-    def _do_unpair(self, peer_id: str):
-        if messagebox.askyesno("Unpair", f"Unpair this device?\n\n{peer_id}"):
-            logger.info("Unpairing peer: %s", peer_id)
-            self._on_unpair(peer_id)
-            self._refresh_device_list()
-            logger.info("Peer unpaired: %s", peer_id)
-
-    def _do_remove(self, peer_id: str):
-        if messagebox.askyesno("Remove", f"Remove this device?\n\n{peer_id}"):
-            logger.info("Removing peer: %s", peer_id)
-            self._on_remove_peer(peer_id)
-            self._refresh_device_list()
-            logger.info("Peer removed: %s", peer_id)
-
-    def _on_confirm_pairing(self):
-        code = self._pair_code_var.get().strip()
-        if not code or not code.isdigit() or len(code) != 6:
-            logger.warning("Pairing attempt with invalid code: %r", code)
-            messagebox.showwarning(
-                "Invalid Code",
-                "Please enter a valid 6-digit pairing code.",
-            )
-            return
-
-        pending = self._get_pending()
-        if not pending:
-            logger.info("No pending pairing requests")
-            messagebox.showinfo("No Pending", "No pending pairing requests.")
-            return
-
-        logger.info("Confirming pairing (code=%s) against %d pending peer(s)", code, len(pending))
-        # Try each pending peer with the entered code
-        success = False
-        for peer_id, _ in pending:
-            if self._on_pair(peer_id, code):
-                logger.info("Pairing succeeded for %s", peer_id)
-                success = True
-                break
-
-        if success:
-            messagebox.showinfo("Success", "Device paired successfully!")
-            self._pair_code_var.set("")
-        else:
-            logger.warning("Pairing failed for all pending peers (code=%s)", code)
-            messagebox.showerror(
-                "Failed",
-                "Invalid pairing code. Check and try again.",
-            )
-
-        self._refresh_device_list()
+        if key == "logs":
+            self._refresh_log_text(self._log_text)
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Network
     # ═══════════════════════════════════════════════════════════════
 
-    def _build_network_panel(self) -> ttk.Frame:
-        panel = ttk.Frame(self._content_frame)
+    def _build_network_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
         cfg = self._get_config()
 
-        ttk.Label(
+        ctk.CTkLabel(
             panel, text="Network Settings",
-            font=("Segoe UI", 14, "bold"),
-        ).pack(anchor=W, pady=(0, 14))
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 16))
 
-        # ── Connection card ──────────────────────────────────────
-        card = ttk.Labelframe(panel, text="  Connection  ", padding=12)
-        card.pack(fill=X, pady=(0, 12))
+        card = ctk.CTkFrame(panel, corner_radius=12)
+        card.pack(fill="x", pady=(0, 12))
 
-        # Port
-        row1 = ttk.Frame(card)
-        row1.pack(fill=X, pady=(0, 8))
-        ttk.Label(row1, text="TCP Port", width=14, anchor=W).pack(side=LEFT)
+        ctk.CTkLabel(
+            card, text="Connection",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        row1 = ctk.CTkFrame(card, fg_color="transparent")
+        row1.pack(fill="x", padx=16, pady=(0, 8))
+        ctk.CTkLabel(row1, text="TCP Port", width=100, anchor="w").pack(side="left")
         self._port_var = tk.StringVar(value=str(cfg.port))
-        ttk.Entry(row1, textvariable=self._port_var, width=10).pack(side=LEFT, padx=(12, 0))
-        ttk.Label(
-            row1, text="(1024 – 65535, restart required)",
-            bootstyle="secondary", font=("Segoe UI", 10),
-        ).pack(side=LEFT, padx=(8, 0))
+        ctk.CTkEntry(row1, textvariable=self._port_var, width=80, height=32).pack(side="left", padx=(12, 8))
+        ctk.CTkLabel(
+            row1, text="(1024–65535, restart required)",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        ).pack(side="left")
 
-        # Service type
-        row2 = ttk.Frame(card)
-        row2.pack(fill=X, pady=(0, 8))
-        ttk.Label(row2, text="Service Type", width=14, anchor=W).pack(side=LEFT)
+        row2 = ctk.CTkFrame(card, fg_color="transparent")
+        row2.pack(fill="x", padx=16, pady=(0, 14))
+        ctk.CTkLabel(row2, text="Service Type", width=100, anchor="w").pack(side="left")
         self._svc_var = tk.StringVar(value=cfg.service_type)
-        ttk.Entry(row2, textvariable=self._svc_var).pack(
-            side=LEFT, fill=X, expand=YES, padx=(12, 0),
-        )
+        ctk.CTkEntry(row2, textvariable=self._svc_var, height=32).pack(
+            side="left", fill="x", expand=True, padx=(12, 0))
 
-        # ── Relay card ───────────────────────────────────────────
-        card2 = ttk.Labelframe(panel, text="  Relay (optional)  ", padding=12)
-        card2.pack(fill=X, pady=(0, 12))
+        # Relay card
+        card2 = ctk.CTkFrame(panel, corner_radius=12)
+        card2.pack(fill="x", pady=(0, 12))
 
-        ttk.Label(card2, text="Relay URL", anchor=W).pack(anchor=W)
+        ctk.CTkLabel(
+            card2, text="Relay (optional)",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 6))
+
+        ctk.CTkLabel(
+            card2, text="Relay URL", anchor="w",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=16)
         self._relay_var = tk.StringVar(value=cfg.relay_url)
-        ttk.Entry(card2, textvariable=self._relay_var).pack(fill=X, pady=(6, 4))
-        ttk.Label(
-            card2,
-            text="Leave blank for LAN-only sync. Set a relay server URL to sync across different networks.",
-            bootstyle="secondary", font=("Segoe UI", 10), wraplength=380,
-        ).pack(anchor=W)
+        ctk.CTkEntry(card2, textvariable=self._relay_var, height=32).pack(
+            fill="x", padx=16, pady=(4, 6))
 
-        ttk.Button(
+        ctk.CTkLabel(
+            card2,
+            text="Leave blank for LAN-only sync. Set a relay server URL for cross-network sync.",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        ctk.CTkButton(
             panel, text="Save Network Settings",
-            bootstyle="primary-outline",
-            command=self._on_save_network,
-        ).pack(anchor=W)
+            width=180, height=34, command=self._on_save_network,
+        ).pack(anchor="w")
 
         return panel
 
@@ -845,83 +339,414 @@ class SettingsWindow:
             if not 1024 <= port <= 65535:
                 raise ValueError("Port out of range")
         except ValueError:
-            logger.warning("Invalid port entered: %s", self._port_var.get())
-            messagebox.showwarning("Invalid", "Port must be 1024 – 65535.")
+            messagebox.showwarning("Invalid", "Port must be 1024–65535.")
             return
 
         cfg = self._get_config()
-        old_port = cfg.port
-        old_svc = cfg.service_type
-        old_relay = cfg.relay_url
         cfg.port = port
         cfg.service_type = self._svc_var.get().strip()
         cfg.relay_url = self._relay_var.get().strip()
         self._save_config()
-        logger.info("Network settings saved (port=%d->%d, svc=%s->%s, relay=%s->%s)",
-                    old_port, port, old_svc, cfg.service_type,
-                    old_relay or "(none)", cfg.relay_url or "(none)")
         messagebox.showinfo(
             "Saved",
-            "Network settings saved.\n\n"
-            "Restart CopyBoard for port changes to take effect.",
+            "Network settings saved.\nRestart CopyBoard for changes to take effect.",
         )
+
+    # ═══════════════════════════════════════════════════════════════
+    # Panel: Content Filter
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_filter_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+
+        ctk.CTkLabel(
+            panel, text="Content Filter",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        ctk.CTkLabel(
+            panel,
+            text="When enabled, sensitive content is replaced with [FILTERED] before syncing to other devices.",
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray60"),
+            justify="left",
+        ).pack(anchor="w", pady=(0, 16))
+
+        card = ctk.CTkFrame(panel, corner_radius=12)
+        card.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkLabel(
+            card, text="Sensitive Content Categories",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        active = self._get_filter_categories() if self._get_filter_categories else []
+
+        for category in ALL_CATEGORIES:
+            label = CATEGORY_LABELS.get(category, category)
+            var = tk.BooleanVar(value=category in active)
+            self._filter_vars[category] = var
+            ctk.CTkSwitch(
+                card, text=label,
+                variable=var,
+                font=ctk.CTkFont(size=12),
+            ).pack(anchor="w", padx=16, pady=(0, 6))
+
+        # Spacer at bottom of card
+        ctk.CTkFrame(card, height=8, fg_color="transparent").pack()
+
+        ctk.CTkButton(
+            panel, text="Save Filter Settings",
+            width=180, height=34, command=self._on_save_filter,
+        ).pack(anchor="w")
+
+        return panel
+
+    def _on_save_filter(self):
+        enabled = [cat for cat in ALL_CATEGORIES if self._filter_vars.get(cat, tk.BooleanVar()).get()]
+        if self._set_filter_categories:
+            self._set_filter_categories(enabled)
+        cfg = self._get_config()
+        cfg.filter_enabled_categories = enabled
+        self._save_config()
+        messagebox.showinfo("Saved", "Content filter settings saved.")
+
+    # ═══════════════════════════════════════════════════════════════
+    # Panel: Advanced
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_advanced_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        cfg = self._get_config()
+
+        scroll = ctk.CTkScrollableFrame(panel, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            scroll, text="Advanced Settings",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ctk.CTkLabel(
+            scroll, text="Some changes require a restart to take effect.",
+            font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+        ).pack(anchor="w", pady=(0, 14))
+
+        def _desc(parent, text):
+            ctk.CTkLabel(
+                parent, text=text, wraplength=420,
+                font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+                anchor="w", justify="left",
+            ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        def _row(parent):
+            r = ctk.CTkFrame(parent, fg_color="transparent")
+            r.pack(fill="x", padx=16, pady=(0, 2))
+            return r
+
+        # ── Card 1: Clipboard & Sync ──────────────────────────────
+        card1 = ctk.CTkFrame(scroll, corner_radius=12)
+        card1.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            card1, text="Clipboard & Sync",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        r = _row(card1)
+        ctk.CTkLabel(r, text="History Max Entries", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._history_max_var = tk.StringVar(value=str(cfg.history_max_entries))
+        ctk.CTkEntry(r, textvariable=self._history_max_var,
+                     width=80, height=32).pack(side="right")
+        _desc(card1, "Maximum clipboard history entries to keep (10–1000)")
+
+        r = _row(card1)
+        ctk.CTkLabel(r, text="Sync Debounce (seconds)", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._sync_debounce_var = tk.StringVar(value=str(cfg.sync_debounce))
+        ctk.CTkEntry(r, textvariable=self._sync_debounce_var,
+                     width=80, height=32).pack(side="right")
+        _desc(card1, "Minimum interval between outgoing syncs (0.1–5.0)")
+
+        r = _row(card1)
+        ctk.CTkLabel(r, text="Poll Interval (seconds)", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._poll_interval_var = tk.StringVar(value=str(cfg.clipboard_poll_interval))
+        ctk.CTkEntry(r, textvariable=self._poll_interval_var,
+                     width=80, height=32).pack(side="right")
+        _desc(card1, "Clipboard change detection frequency (0.1–5.0). macOS/Linux only. Restart required.")
+
+        # ── Card 2: File Transfer ─────────────────────────────────
+        card2 = ctk.CTkFrame(scroll, corner_radius=12)
+        card2.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            card2, text="File Transfer",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        ctk.CTkLabel(
+            card2, text="Receive Directory", anchor="w",
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", padx=16, pady=(0, 4))
+        dir_row = ctk.CTkFrame(card2, fg_color="transparent")
+        dir_row.pack(fill="x", padx=16, pady=(0, 2))
+        self._file_receive_dir_var = tk.StringVar(value=cfg.file_receive_dir)
+        ctk.CTkEntry(dir_row, textvariable=self._file_receive_dir_var,
+                     height=32, placeholder_text="~/Downloads/CopyBoard").pack(
+            side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(
+            dir_row, text="Browse...", width=80, height=32,
+            command=self._browse_receive_dir,
+        ).pack(side="right")
+        _desc(card2, "Where received files are saved. Leave blank for default. Restart required.")
+
+        r = _row(card2)
+        ctk.CTkLabel(r, text="Transfer Timeout (seconds)", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._transfer_timeout_var = tk.StringVar(value=str(cfg.transfer_timeout))
+        ctk.CTkEntry(r, textvariable=self._transfer_timeout_var,
+                     width=80, height=32).pack(side="right")
+        _desc(card2, "Maximum time for a file transfer before it's considered stale (30–3600)")
+
+        # ── Card 3: Connection ────────────────────────────────────
+        card3 = ctk.CTkFrame(scroll, corner_radius=12)
+        card3.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            card3, text="Connection",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        r = _row(card3)
+        ctk.CTkLabel(r, text="Max Reconnect Attempts", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._max_reconnect_var = tk.StringVar(value=str(cfg.max_reconnect_attempts))
+        ctk.CTkEntry(r, textvariable=self._max_reconnect_var,
+                     width=80, height=32).pack(side="right")
+        _desc(card3, "How many times to retry connecting to a lost peer (1–100). Restart required.")
+
+        # ── Card 4: Logging & Notifications ───────────────────────
+        card4 = ctk.CTkFrame(scroll, corner_radius=12)
+        card4.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            card4, text="Logging & Notifications",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        r = _row(card4)
+        ctk.CTkLabel(r, text="Log Level", anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._log_level_var = tk.StringVar(value=cfg.log_level)
+        ctk.CTkOptionMenu(
+            r, variable=self._log_level_var,
+            values=["DEBUG", "INFO", "WARNING", "ERROR"],
+            width=120, height=32,
+        ).pack(side="right")
+
+        self._notifications_var = tk.BooleanVar(value=cfg.notifications_enabled)
+        ctk.CTkSwitch(
+            card4, text="Enable desktop notifications",
+            variable=self._notifications_var,
+            font=ctk.CTkFont(size=13),
+        ).pack(anchor="w", padx=16, pady=(8, 14))
+
+        # ── Save button ──────────────────────────────────────────
+        ctk.CTkButton(
+            scroll, text="Save Advanced Settings",
+            width=200, height=36, command=self._on_save_advanced,
+        ).pack(anchor="w", pady=(4, 16))
+
+        return panel
+
+    def _browse_receive_dir(self):
+        from tkinter import filedialog
+        from pathlib import Path
+        directory = filedialog.askdirectory(
+            parent=self._window,
+            title="Select File Receive Directory",
+            initialdir=self._file_receive_dir_var.get() or str(Path.home() / "Downloads" / "CopyBoard"),
+        )
+        if directory:
+            self._file_receive_dir_var.set(directory)
+
+    def _on_save_advanced(self):
+        from pathlib import Path
+        errors = []
+
+        try:
+            history_max = int(self._history_max_var.get())
+            if not 10 <= history_max <= 1000:
+                raise ValueError
+        except ValueError:
+            errors.append("History Max Entries: must be 10–1000")
+            history_max = None
+
+        try:
+            debounce = float(self._sync_debounce_var.get())
+            if not 0.1 <= debounce <= 5.0:
+                raise ValueError
+        except ValueError:
+            errors.append("Sync Debounce: must be 0.1–5.0 seconds")
+            debounce = None
+
+        try:
+            poll = float(self._poll_interval_var.get())
+            if not 0.1 <= poll <= 5.0:
+                raise ValueError
+        except ValueError:
+            errors.append("Poll Interval: must be 0.1–5.0 seconds")
+            poll = None
+
+        receive_dir = self._file_receive_dir_var.get().strip()
+        if receive_dir and not Path(receive_dir).parent.exists():
+            errors.append("Receive Directory: parent folder does not exist")
+
+        try:
+            timeout = float(self._transfer_timeout_var.get())
+            if not 30 <= timeout <= 3600:
+                raise ValueError
+        except ValueError:
+            errors.append("Transfer Timeout: must be 30–3600 seconds")
+            timeout = None
+
+        try:
+            max_reconnect = int(self._max_reconnect_var.get())
+            if not 1 <= max_reconnect <= 100:
+                raise ValueError
+        except ValueError:
+            errors.append("Max Reconnect Attempts: must be 1–100")
+            max_reconnect = None
+
+        if errors:
+            messagebox.showwarning("Validation Error", "\n".join(errors))
+            return
+
+        cfg = self._get_config()
+        cfg.history_max_entries = history_max
+        cfg.file_receive_dir = receive_dir
+        cfg.sync_debounce = debounce
+        cfg.clipboard_poll_interval = poll
+        cfg.max_reconnect_attempts = max_reconnect
+        cfg.transfer_timeout = timeout
+        cfg.log_level = self._log_level_var.get()
+        cfg.notifications_enabled = self._notifications_var.get()
+        self._save_config()
+
+        if self._status_label:
+            self._status_label.configure(text="Advanced settings saved")
+        messagebox.showinfo(
+            "Saved",
+            "Advanced settings saved.\n\n"
+            "Settings marked 'Restart required' will take effect\n"
+            "after restarting CopyBoard.",
+        )
+
+    # ═══════════════════════════════════════════════════════════════
+    # Panel: Logs
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_logs_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+
+        header = ctk.CTkFrame(panel, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkLabel(
+            header, text="Application Logs",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(side="left")
+
+        btn_row = ctk.CTkFrame(header, fg_color="transparent")
+        btn_row.pack(side="right")
+
+        ctk.CTkButton(
+            btn_row, text="⟳  Refresh", width=90, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray70"),
+            border_color=("gray60", "gray50"),
+            hover_color=("gray85", "gray25"),
+            font=ctk.CTkFont(size=11),
+            command=lambda: self._refresh_log_text(self._log_text),
+        ).pack(side="left", padx=(0, 6))
+
+        if self._on_export_logs:
+            ctk.CTkButton(
+                btn_row, text="\U0001F4BE  Export", width=80, height=30,
+                font=ctk.CTkFont(size=11),
+                command=self._on_export_logs,
+            ).pack(side="left")
+
+        card = ctk.CTkFrame(panel, corner_radius=12)
+        card.pack(fill="both", expand=True)
+
+        self._log_text = ctk.CTkTextbox(card, font=ctk.CTkFont(size=11), wrap="word")
+        self._log_text.pack(fill="both", expand=True, padx=8, pady=8)
+        self._refresh_log_text(self._log_text)
+
+        return panel
+
+    def _refresh_log_text(self, widget):
+        if self._get_log_text:
+            try:
+                text = self._get_log_text()
+                widget.configure(state="normal")
+                widget.delete("1.0", "end")
+                widget.insert("1.0", text)
+                widget.see("end")
+                widget.configure(state="disabled")
+            except Exception:
+                pass
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: About
     # ═══════════════════════════════════════════════════════════════
 
-    def _build_about_panel(self) -> ttk.Frame:
-        panel = ttk.Frame(self._content_frame)
+    def _build_about_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
 
-        # Centered content
-        centre = ttk.Frame(panel)
-        centre.pack(expand=YES, fill=BOTH)
+        center = ctk.CTkFrame(panel, fg_color="transparent")
+        center.pack(expand=True, fill="both")
 
-        ttk.Label(
-            centre,
-            text=u"\U0001F4CB",
-            font=("Segoe UI", 32),
-        ).pack(pady=(0, 6))
+        ctk.CTkLabel(
+            center, text="\U0001F4CB", font=ctk.CTkFont(size=40),
+        ).pack(pady=(0, 8))
 
-        ttk.Label(
-            centre,
-            text="CopyBoard",
-            font=("Segoe UI", 18, "bold"),
+        ctk.CTkLabel(
+            center, text="CopyBoard",
+            font=ctk.CTkFont(size=22, weight="bold"),
         ).pack(pady=(0, 4))
 
-        ttk.Label(
-            centre,
-            text="v1.0.0",
-            bootstyle="secondary",
-            font=("Segoe UI", 11),
+        ctk.CTkLabel(
+            center, text="v1.0.0",
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray60"),
         ).pack()
 
-        ttk.Label(
-            centre,
-            text="\nCross-platform clipboard sharing\n"
-                 "between Windows, macOS, and Linux.",
-            justify=CENTER,
-            font=("Segoe UI", 11),
-        ).pack(pady=(16, 12))
+        ctk.CTkLabel(
+            center,
+            text="Cross-platform clipboard sharing\nbetween Windows, macOS, and Linux.",
+            font=ctk.CTkFont(size=13),
+            justify="center",
+        ).pack(pady=(20, 18))
 
-        # Feature list
-        card = ttk.Labelframe(centre, text="  Features  ", padding=12)
-        card.pack(fill=X, pady=(4, 0))
+        feat_card = ctk.CTkFrame(center, corner_radius=12,
+                                fg_color=("gray95", "gray17"))
+        feat_card.pack(fill="x", padx=20)
 
         features = [
-            (u"✅", "Automatic peer discovery on LAN (mDNS/Bonjour)"),
-            (u"\U0001F512", "TLS 1.3 encrypted transport"),
-            (u"\U0001F4C4", "Supports text, HTML, RTF, and images"),
-            (u"⚡", "Zero configuration needed"),
-            (u"\U0001F4A1", "Certificate pinning — detects MITM attacks"),
-            (u"\U0001F6AB", "8-digit pairing code, rate-limited"),
+            ("✅", "Automatic peer discovery on LAN (mDNS/Bonjour)"),
+            ("\U0001F512", "TLS 1.3 encrypted transport + certificate pinning"),
+            ("\U0001F4C4", "Text, HTML, RTF, and image clipboard support"),
+            ("⚡", "Zero configuration — just run it"),
+            ("\U0001F6AB", "8-digit pairing code, rate-limited"),
+            ("\U0001F4E4", "File sharing between devices"),
         ]
 
         for icon, desc in features:
-            row = ttk.Frame(card)
-            row.pack(fill=X, pady=2)
-            ttk.Label(row, text=icon, font=("Segoe UI", 11)).pack(side=LEFT, padx=(0, 6))
-            ttk.Label(row, text=desc, font=("Segoe UI", 10)).pack(side=LEFT)
+            row = ctk.CTkFrame(feat_card, fg_color="transparent")
+            row.pack(fill="x", padx=14, pady=3)
+            ctk.CTkLabel(row, text=icon, font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 8))
+            ctk.CTkLabel(row, text=desc, font=ctk.CTkFont(size=11)).pack(side="left")
+
+        ctk.CTkFrame(feat_card, height=6, fg_color="transparent").pack()
 
         return panel
 
@@ -930,49 +755,8 @@ class SettingsWindow:
     # ═══════════════════════════════════════════════════════════════
 
     def _toggle_theme(self):
-        """Flip between light (flatly) and dark (darkly) themes."""
-        if self._style is None:
-            return
-
         self._dark_mode = not self._dark_mode
-        if self._dark_mode:
-            self._style.theme_use(DARK_THEME)
-            self._theme_btn.configure(text=u"☀️  Light")
-            logger.info("Theme switched to dark (darkly)")
-        else:
-            self._style.theme_use(LIGHT_THEME)
-            self._theme_btn.configure(text=u"\U0001F319  Dark")
-            logger.info("Theme switched to light (flatly)")
-
-        # Redraw device cards so status-dot backgrounds match new theme
-        self._refresh_device_list()
-
-    # ═══════════════════════════════════════════════════════════════
-    # Window icon (PIL-based, identical to original)
-    # ═══════════════════════════════════════════════════════════════
-
-    def _make_tk_icon(self) -> tk.PhotoImage:
-        """Create a small clipboard icon for the title bar."""
-        from PIL import Image, ImageDraw
-
-        size = 32
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        m = 4
-        y0 = m + 5
-        draw.rounded_rectangle(
-            [m, y0, size - m, size - m], radius=4, fill=(80, 140, 220),
+        ctk.set_appearance_mode("dark" if self._dark_mode else "light")
+        self._theme_btn.configure(
+            text="☀  Light" if self._dark_mode else "☾  Dark"
         )
-        bw = size // 3
-        bx0 = (size - bw) // 2
-        draw.rounded_rectangle(
-            [bx0, m, bx0 + bw, y0 + 3], radius=2, fill=(60, 110, 180),
-        )
-        for i in range(3):
-            ly = y0 + 6 + i * 5
-            draw.line(
-                [m + 8, ly, size - m - 8, ly],
-                fill=(220, 230, 245), width=1,
-            )
-
-        return tk.PhotoImage(master=self._root, data=img.tobytes("raw", "RGBA"))

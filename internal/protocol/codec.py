@@ -10,8 +10,9 @@ Frame format (TLV + header):
   [M bytes] source_device
   [L bytes] payload (JSON-serialized content metadata + format descriptors)
 
-Payload JSON structure:
+Clipboard payload JSON structure:
 {
+  "msg_type": "clipboard",
   "types": {
     "TEXT": "<base64>",
     "HTML": "<base64>",
@@ -19,6 +20,18 @@ Payload JSON structure:
   },
   "timestamp": 1234567890.123
 }
+
+File transfer payload JSON structures:
+  file_request:  {"msg_type": "file_request", "transfer_id": "...",
+                  "file_name": "...", "file_size": N, "mime_type": "..."}
+  file_chunk:    {"msg_type": "file_chunk", "transfer_id": "...",
+                  "chunk_index": N, "total_chunks": N, "data": "<base64>"}
+  file_ack:      {"msg_type": "file_ack", "transfer_id": "..."}
+  file_reject:   {"msg_type": "file_reject", "transfer_id": "..."}
+  file_complete: {"msg_type": "file_complete", "transfer_id": "...", "status": "..."}
+
+If "msg_type" is absent from the payload, it defaults to "clipboard" for
+backward compatibility.
 """
 
 import base64
@@ -34,7 +47,7 @@ from internal.clipboard.format import ClipboardContent, ContentType, SyncMessage
 
 MAGIC = 0x4342  # "CB" for CopyBoard
 VERSION = 1
-HEADER_FMT = ">H B I"  # magic, version, payload_length (we'll use a simpler approach)
+HEADER_FMT = ">H B I"  # magic, version, payload_length
 HEADER_SIZE = 7
 
 _TYPE_NAME_MAP = {
@@ -45,22 +58,23 @@ _TYPE_NAME_MAP = {
 }
 _NAME_TYPE_MAP = {v: k for k, v in _TYPE_NAME_MAP.items()}
 
+# Valid message types for file transfer routing
+FILE_TRANSFER_MSG_TYPES = frozenset({
+    "file_request", "file_chunk", "file_ack", "file_reject", "file_complete",
+})
 
-def encode_message(msg: SyncMessage) -> bytes:
-    """Encode a SyncMessage to wire format bytes."""
-    payload = {
-        "types": {},
-        "timestamp": msg.content.timestamp,
-    }
 
-    for content_type, data in msg.content.types.items():
-        name = _TYPE_NAME_MAP[content_type]
-        payload["types"][name] = base64.b64encode(data).decode("ascii")
+def encode_frame(payload_dict: dict, msg_id: str = "", source_device: str = "") -> bytes:
+    """Encode a generic JSON payload dict into the binary frame format.
 
-    payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    This is the low-level encoder used by both clipboard sync and file transfers.
+    Any dict can be passed as the payload; it will be JSON-serialized and wrapped
+    in the standard CopyBoard binary frame.
+    """
+    payload_bytes = json.dumps(payload_dict, ensure_ascii=False).encode("utf-8")
 
-    msg_id_bytes = (msg.msg_id or uuid.uuid4().hex).encode("ascii")
-    src_str = msg.source_device[:255]
+    msg_id_bytes = (msg_id or uuid.uuid4().hex).encode("ascii")
+    src_str = source_device[:255]
     while True:
         src_bytes = src_str.encode("utf-8")
         if len(src_bytes) <= 255:
@@ -78,8 +92,43 @@ def encode_message(msg: SyncMessage) -> bytes:
     return buf.getvalue()
 
 
+def encode_message(msg: SyncMessage, msg_type: str = "clipboard") -> bytes:
+    """Encode a SyncMessage to wire format bytes.
+
+    Args:
+        msg: The SyncMessage containing clipboard content.
+        msg_type: The message type discriminator (default "clipboard").
+                  File transfers use types like "file_request", "file_chunk", etc.
+    """
+    payload: dict = {
+        "msg_type": msg_type,
+        "types": {},
+        "timestamp": msg.content.timestamp,
+    }
+
+    for content_type, data in msg.content.types.items():
+        name = _TYPE_NAME_MAP.get(content_type)
+        if name is None:
+            logger.debug("Skipping unregistered content type: %s", content_type)
+            continue
+        payload["types"][name] = base64.b64encode(data).decode("ascii")
+
+    return encode_frame(payload, msg.msg_id, msg.source_device)
+
+
 def decode_message(data: bytes) -> SyncMessage | None:
-    """Decode wire format bytes to a SyncMessage, or None if invalid."""
+    """Decode wire format bytes to a SyncMessage, or None if invalid.
+
+    The returned SyncMessage will have a ``msg_type`` attribute set:
+      - "clipboard" for legacy/new clipboard sync messages.
+      - One of the ``FILE_TRANSFER_MSG_TYPES`` for file transfers.
+      - Falls back to "clipboard" if the ``msg_type`` field is missing
+        from the JSON payload (backward compatibility).
+
+    The raw decoded payload dict is stored as ``_raw_payload`` on the
+    returned object so that file transfer handlers can access the full
+    message body without a second deserialization.
+    """
     if len(data) < HEADER_SIZE:
         return None
 
@@ -128,6 +177,9 @@ def decode_message(data: bytes) -> SyncMessage | None:
     except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         return None
 
+    # --- Extract message type (backward-compatible) ---
+    msg_type = payload.get("msg_type", "clipboard")
+
     content = ClipboardContent(
         timestamp=payload.get("timestamp", 0.0),
     )
@@ -141,8 +193,15 @@ def decode_message(data: bytes) -> SyncMessage | None:
                 logger.debug("Invalid base64 for content type %s", name)
                 continue
 
-    return SyncMessage(
+    result = SyncMessage(
         content=content,
         msg_id=msg_id,
         source_device=source_device,
     )
+
+    # Attach metadata so callers can route file-transfer messages without
+    # re-parsing the raw bytes.
+    result.msg_type = msg_type
+    result._raw_payload = payload
+
+    return result

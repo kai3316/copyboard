@@ -34,9 +34,19 @@ class Config:
     peers: dict[str, PeerInfo] = field(default_factory=dict)
     sync_enabled: bool = True
     auto_start: bool = False
+    filter_enabled_categories: list[str] = field(default_factory=list)
     relay_url: str = ""
     private_key_pem: str = ""
     certificate_pem: str = ""
+    # Advanced settings
+    history_max_entries: int = 50
+    file_receive_dir: str = ""
+    sync_debounce: float = 0.3
+    clipboard_poll_interval: float = 0.4
+    max_reconnect_attempts: int = 10
+    transfer_timeout: float = 120.0
+    log_level: str = "INFO"
+    notifications_enabled: bool = True
 
     def add_peer(self, peer: PeerInfo):
         self.peers[peer.device_id] = peer
@@ -84,11 +94,21 @@ def load() -> Config:
         cfg = Config()
         for key in (
             "device_id", "device_name", "port", "service_type",
-            "sync_enabled", "auto_start", "relay_url",
+            "sync_enabled", "auto_start",
+            "filter_enabled_categories",
+            "relay_url",
             "private_key_pem", "certificate_pem",
+            "history_max_entries", "file_receive_dir",
+            "sync_debounce", "clipboard_poll_interval",
+            "max_reconnect_attempts", "transfer_timeout",
+            "log_level", "notifications_enabled",
         ):
             if key in data:
                 setattr(cfg, key, data[key])
+        # Migrate from old filter_sensitive bool
+        if "filter_sensitive" in data and not data.get("filter_enabled_categories"):
+            if data["filter_sensitive"]:
+                cfg.filter_enabled_categories = ["credit_card", "ssn", "api_key", "private_key", "password"]
         for peer_data in data.get("peers", []):
             try:
                 peer = PeerInfo(
@@ -115,9 +135,18 @@ def save(cfg: Config):
         "service_type": cfg.service_type,
         "sync_enabled": cfg.sync_enabled,
         "auto_start": cfg.auto_start,
+        "filter_enabled_categories": cfg.filter_enabled_categories,
         "relay_url": cfg.relay_url,
         "private_key_pem": cfg.private_key_pem,
         "certificate_pem": cfg.certificate_pem,
+        "history_max_entries": cfg.history_max_entries,
+        "file_receive_dir": cfg.file_receive_dir,
+        "sync_debounce": cfg.sync_debounce,
+        "clipboard_poll_interval": cfg.clipboard_poll_interval,
+        "max_reconnect_attempts": cfg.max_reconnect_attempts,
+        "transfer_timeout": cfg.transfer_timeout,
+        "log_level": cfg.log_level,
+        "notifications_enabled": cfg.notifications_enabled,
         "peers": [
             {
                 "device_id": p.device_id,

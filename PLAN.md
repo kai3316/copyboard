@@ -44,7 +44,8 @@ copyboard/
 │   ├── protocol/
 │   │   └── codec.py                  # 二进制帧编解码 (TLV+JSON载荷)
 │   ├── sync/
-│   │   └── manager.py                # 同步引擎 (去重/防回环/防抖)
+│   │   ├── manager.py                # 同步引擎 (去重/防回环/防抖)
+│   │   └── file_transfer.py          # 文件传输引擎 (分块/TCP直传/进度)
 │   ├── transport/
 │   │   ├── discovery.py              # mDNS 局域网设备发现 (zeroconf)
 │   │   └── connection.py             # TLS 1.3 TCP 连接管理
@@ -52,7 +53,7 @@ copyboard/
 │   │   └── pairing.py                # Ed25519证书+8位配对码+证书指纹+速率限制
 │   └── ui/
 │       ├── systray.py                # 系统托盘 UI (pystray)
-│       └── settings_window.py        # 图形化设置界面 (ttkbootstrap)
+│       └── settings_window.py        # 图形化设置界面 (customtkinter)
 ├── requirements.txt
 ├── run.bat
 ├── Makefile
@@ -135,9 +136,9 @@ copyboard/
 | **Phase 1** | 项目结构、配置、协议编解码、剪贴板接口 | ✅ 完成 |
 | **Phase 2** | Windows/macOS/Linux 剪贴板监听、Sync Manager | ✅ 完成 |
 | **Phase 3** | mDNS 发现、TLS 连接、Ed25519 配对认证 | ✅ 完成 |
-| **Phase 4** | 系统托盘 UI、ttkbootstrap 图形化设置界面 | ✅ 完成 |
+| **Phase 4** | 系统托盘 UI、customtkinter 图形化设置界面 | ✅ 完成 |
 | **Phase 5** | 安全加固（8位配对码、证书指纹校验、速率限制、证书变更检测） | ✅ 完成 |
-| **Phase 6** | 开机自启、PyInstaller 打包、中继服务器 | ❌ 未做 |
+| **Phase 6** | 文件传输（分块/TCP直传/进度）、开机自启、PyInstaller 打包、中继服务器 | 🔄 文件传输已完成 |
 | **Phase 7** | 跨平台联调测试、压力测试、代码签名 | ❌ 未做 |
 
 ---
@@ -158,15 +159,16 @@ copyboard/
 
 ## 8. 图形化设置界面
 
-使用 **ttkbootstrap** 构建现代化界面：
+使用 **customtkinter** 构建现代化界面：
 
-- 侧边栏导航（非传统选项卡）
+- 侧边栏导航（General / Devices / Security / Network / Transfers）
 - 卡片式设备列表，状态色标（绿=已连接，橙=已配对，灰=待配对）
 - 明暗色主题切换
-- 设备管理：配对、取消配对、移除
+- 设备管理：配对、取消配对、移除、手动连接
 - 配对码显示与确认
-- 网络设置（端口、服务类型、中继地址）
-- 设备名称编辑、同步开关、开机自启选项
+- 同步开关、设备名称编辑
+- 网络设置（端口、服务类型）
+- 文件传输面板：发送文件、传输进度卡片（方向/状态/进度条）
 
 ---
 
@@ -179,14 +181,12 @@ copyboard/
 3. **通知提醒**：配对请求时桌面通知、同步失败提醒
 4. **剪贴板历史**：本地存储最近 50 条记录，支持搜索和重新复制
 5. **内容过滤**：检测密码/密钥特征，可选不同步敏感内容
-6. **文件分享**：在设备间直接传输文件
-   - 从文件管理器拖拽文件到 CopyBoard 托盘图标即可发送到已配对设备
-   - 支持单文件/多文件/文件夹，自动压缩打包传输
-   - 分块传输 + SHA-256 校验，支持断点续传
-   - 默认上限 2GB，可配置调整
-   - 接收端弹出保存对话框，支持一键打开/打开所在文件夹
-   - 传输进度实时显示（速率、进度百分比、剩余时间）
+6. **文件分享**：在设备间直接传输文件 ✅ 已实现
+   - 从设置界面选择文件发送到已配对设备
+   - 分块传输 + SHA-256 校验
+   - 传输进度实时显示（进度条、百分比）
    - 与剪贴板同步共享同一 TLS 1.3 加密通道
+   - 自动接收来自已配对设备的文件
 
 ### 中期（v1.4 - v2.0）
 
@@ -247,7 +247,7 @@ python cmd/main.py
 | `cryptography` | Ed25519 证书、TLS 操作 |
 | `Pillow` | 图片处理、系统托盘图标、剪贴板图片读写 |
 | `pystray` | 跨平台系统托盘 |
-| `ttkbootstrap` | 现代化 GUI 设置界面 |
+| `customtkinter` | 现代化 GUI 设置界面 |
 
 ---
 

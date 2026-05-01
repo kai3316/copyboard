@@ -33,8 +33,8 @@ class ClipboardContent:
         return len(self.types) == 0
 
     def best_format(self) -> tuple[ContentType, bytes] | None:
-        """Return the best available format: HTML > RTF > TEXT > IMAGE."""
-        for fmt in (ContentType.HTML, ContentType.RTF, ContentType.TEXT, ContentType.IMAGE_PNG):
+        """Return the best available format: HTML > IMAGE_PNG > RTF > TEXT."""
+        for fmt in (ContentType.HTML, ContentType.IMAGE_PNG, ContentType.RTF, ContentType.TEXT):
             if fmt in self.types:
                 return fmt, self.types[fmt]
         return None

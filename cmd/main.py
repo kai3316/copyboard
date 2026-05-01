@@ -19,12 +19,18 @@ from tkinter import filedialog, messagebox
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from internal.clipboard.filter import ContentFilter
+from internal.clipboard.history import ClipboardHistory
 from internal.config.config import Config, PeerInfo, load, save
-from internal.protocol.codec import encode_message
+from internal.platform.autostart import enable_autostart, disable_autostart, is_autostart_enabled
+from internal.platform.notify import notification_mgr
+from internal.protocol.codec import FILE_TRANSFER_MSG_TYPES, encode_message
 from internal.security.pairing import PairingManager
+from internal.sync.file_transfer import FileTransferManager
 from internal.sync.manager import SyncManager
 from internal.transport.connection import TransportManager
 from internal.transport.discovery import Discovery
+from internal.ui.dashboard import DashboardWindow
 from internal.ui.settings_window import SettingsWindow
 from internal.ui.systray import SystrayApp
 
@@ -112,6 +118,20 @@ def main():
     cfg = load()
     logger.info("Device: %s (%s)", cfg.device_name, cfg.device_id)
 
+    # ── Auto-start ─────────────────────────────────────────────
+    if cfg.auto_start and not is_autostart_enabled():
+        try:
+            enable_autostart()
+            logger.info("Auto-start enabled on boot")
+        except Exception as e:
+            logger.warning("Failed to enable auto-start: %s", e)
+
+    # ── Content filter ─────────────────────────────────────────
+    content_filter = ContentFilter(enabled_categories=cfg.filter_enabled_categories)
+
+    # ── Clipboard history ──────────────────────────────────────
+    clipboard_history = ClipboardHistory(max_entries=cfg.history_max_entries)
+
     # ── Pairing / Identity ──────────────────────────────────────
     pairing_mgr = PairingManager(cfg.device_id, cfg.device_name)
     identity = pairing_mgr.load_or_create_identity(
@@ -133,32 +153,99 @@ def main():
             logger.warning("Skipping peer %s: %s", peer.device_name, e)
 
     # ── Sync Manager ────────────────────────────────────────────
-    sync_mgr = SyncManager(cfg.device_id, cfg.device_name)
+    from internal.clipboard.platform import create_monitor, create_reader, create_writer
+    monitor = create_monitor(poll_interval=cfg.clipboard_poll_interval)
+    reader = create_reader()
+    writer = create_writer()
+    sync_mgr = SyncManager(cfg.device_id, cfg.device_name,
+                           reader=reader, writer=writer, monitor=monitor,
+                           history=clipboard_history,
+                           sync_debounce=cfg.sync_debounce)
     sync_mgr.set_enabled(cfg.sync_enabled)
 
     # ── Transport ───────────────────────────────────────────────
     transport_mgr = TransportManager(
         cfg.device_id, cfg.device_name, cfg.port, pairing_mgr,
+        max_reconnect_attempts=cfg.max_reconnect_attempts,
     )
 
     def on_local_sync(msg):
+        # Apply content filter if enabled
+        if content_filter.is_active and content_filter.is_sensitive(msg.content):
+            sensitivity = content_filter.describe_sensitivity(msg.content)
+            logger.info("Filtering sensitive content: %s", sensitivity)
+            msg.content = content_filter.filter_content(msg.content)
         data = encode_message(msg)
         transport_mgr.broadcast(data)
 
     sync_mgr.on_send = on_local_sync
 
+    # ── File Transfer ─────────────────────────────────────────
+    file_receive_dir = cfg.file_receive_dir if cfg.file_receive_dir else None
+    file_transfer_mgr = FileTransferManager(
+        cfg.device_id,
+        output_dir=file_receive_dir,
+        transfer_timeout=cfg.transfer_timeout,
+    )
+
+    def on_transfer_progress(transfer_id: str, progress: float):
+        logger.debug("File transfer %s: %.0f%%", transfer_id[:8], progress * 100)
+
+    def on_transfer_complete(transfer_id: str, success: bool):
+        logger.info("File transfer %s: %s",
+                    transfer_id[:8], "complete" if success else "failed")
+        if success:
+            notification_mgr.show("File Transfer", "File sent successfully")
+        else:
+            notification_mgr.show("File Transfer", "File transfer failed")
+
+    def on_file_received(transfer_id: str, saved_path: str, file_name: str):
+        logger.info("File received: %s -> %s", file_name, saved_path)
+        notification_mgr.show("File Received", f"Received: {file_name}")
+
+    def on_transfer_request(transfer_id: str, file_name: str, file_size: int,
+                            mime_type: str, send_fn) -> None:
+        # Auto-accept files from paired peers for now
+        logger.info("File request: %s (%d bytes, %s) -- auto-accepting",
+                    file_name, file_size, mime_type)
+        file_transfer_mgr.accept_transfer(transfer_id, send_fn)
+
+    file_transfer_mgr.set_on_transfer_progress(on_transfer_progress)
+    file_transfer_mgr.set_on_transfer_complete(on_transfer_complete)
+    file_transfer_mgr.set_on_file_received(on_file_received)
+    file_transfer_mgr.set_on_transfer_request(on_transfer_request)
+
+    # ── Message routing ───────────────────────────────────────
     def on_peer_message(msg):
-        sync_mgr.handle_remote_message(msg)
+        msg_type = getattr(msg, "msg_type", "clipboard")
+        if msg_type in FILE_TRANSFER_MSG_TYPES:
+            raw_payload = getattr(msg, "_raw_payload", {})
+            file_transfer_mgr.handle_message(
+                msg_type, raw_payload, transport_mgr.broadcast,
+            )
+        else:
+            sync_mgr.handle_remote_message(msg)
 
     transport_mgr.set_on_peer_message(on_peer_message)
 
     # ── Discovery ───────────────────────────────────────────────
     discovery = Discovery(cfg.device_id, cfg.device_name, cfg.port, cfg.service_type)
 
+    # Discovered (but not yet connected) peers: peer_id -> {name, address, port}
+    _discovered_peers: dict[str, dict] = {}
+    _discovered_lock = threading.Lock()
+
     def on_peer_found(peer_id, peer_name, address, port):
-        transport_mgr.connect_to_peer(peer_id, peer_name, address, port)
+        with _discovered_lock:
+            _discovered_peers[peer_id] = {
+                "name": peer_name, "address": address, "port": port,
+            }
+        logger.info("Peer discovered: %s (%s) at %s:%d — waiting for pairing",
+                    peer_name, peer_id, address, port)
 
     def on_peer_lost(peer_id):
+        with _discovered_lock:
+            _discovered_peers.pop(peer_id, None)
         transport_mgr.disconnect_peer(peer_id)
 
     discovery.set_callbacks(on_peer_found, on_peer_lost)
@@ -166,7 +253,15 @@ def main():
     # ── Start services ──────────────────────────────────────────
     sync_mgr.start()
     transport_mgr.start_server()
+    transport_mgr.set_on_wake(discovery._wake_recovery)
     discovery.start()
+
+    # ── Apply advanced config ──────────────────────────────────
+    notification_mgr.enabled = cfg.notifications_enabled
+    if cfg.log_level:
+        _level = getattr(logging, cfg.log_level.upper(), None)
+        if _level is not None:
+            logging.getLogger().setLevel(_level)
 
     # ── Tkinter root (hidden, for settings window) ──────────────
     root = tk.Tk()
@@ -174,6 +269,9 @@ def main():
 
     # ── Export logs ─────────────────────────────────────────────
     def on_export_logs():
+        root.after(0, _do_export_logs)
+
+    def _do_export_logs():
         log_path = _get_log_path()
         dest = filedialog.asksaveasfilename(
             parent=root,
@@ -198,85 +296,201 @@ def main():
             messagebox.showerror("Error", f"Failed to export log:\n{e}")
             logger.error("Failed to export log: %s", e)
 
-    # ── Settings window factory ─────────────────────────────────
+    # ── Send file ──────────────────────────────────────────────
+    def on_send_file():
+        root.after(0, _do_send_file)
+
+    def _do_send_file():
+        file_path = filedialog.askopenfilename(
+            parent=root,
+            title="Select File to Send",
+            filetypes=[
+                ("All files", "*.*"),
+                ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg"),
+                ("Documents", "*.pdf *.txt *.csv *.html *.json *.xml"),
+                ("Archives", "*.zip *.tar *.gz"),
+            ],
+        )
+        if not file_path:
+            return
+        try:
+            transfer_id = file_transfer_mgr.send_file(file_path, transport_mgr.broadcast)
+            logger.info("File transfer initiated: %s", transfer_id[:8])
+            messagebox.showinfo(
+                "File Transfer",
+                f"Sending: {os.path.basename(file_path)}",
+            )
+        except FileNotFoundError:
+            messagebox.showerror("Error", f"File not found:\n{file_path}")
+
+    # ── Window factories ─────────────────────────────────
+
+    # Shared callbacks used by both windows
+    def get_cfg():
+        return cfg
+
+    def save_cfg():
+        for peer in pairing_mgr.get_known_peers():
+            if peer.device_id not in cfg.peers:
+                cfg.peers[peer.device_id] = PeerInfo(
+                    device_id=peer.device_id,
+                    device_name=peer.device_name,
+                    public_key_pem=peer.certificate_pem,
+                    paired=peer.paired,
+                )
+        save(cfg)
+
+    def get_peers():
+        result = []
+        seen = set()
+        for p in pairing_mgr.get_known_peers():
+            connected = p.device_id in transport_mgr.get_connected_peers()
+            result.append((p.device_id, p.device_name, p.paired, connected))
+            seen.add(p.device_id)
+        with _discovered_lock:
+            for peer_id, info in _discovered_peers.items():
+                if peer_id not in seen:
+                    result.append((peer_id, info["name"], False, False))
+        return result
+
+    def get_pending():
+        return pairing_mgr.get_pending_pairings()
+
+    def on_pair(peer_id, code):
+        return pairing_mgr.confirm_pairing(peer_id, code)
+
+    def on_unpair(peer_id):
+        pairing_mgr.unpair_peer(peer_id)
+        pairing_mgr.reject_pairing(peer_id)
+        transport_mgr.disconnect_peer(peer_id)
+        if peer_id in cfg.peers:
+            cfg.peers[peer_id].paired = False
+        save(cfg)
+
+    def on_connect(peer_id):
+        with _discovered_lock:
+            info = _discovered_peers.get(peer_id)
+        if info:
+            logger.info("User initiated pairing with %s (%s)", peer_id, info['name'])
+            transport_mgr.connect_to_peer(
+                peer_id, info["name"], info["address"], info["port"],
+            )
+        else:
+            logger.warning("Cannot connect: peer %s not in discovered list", peer_id)
+
+    def on_remove(peer_id):
+        pairing_mgr.remove_peer(peer_id)
+        transport_mgr.disconnect_peer(peer_id)
+        with _discovered_lock:
+            _discovered_peers.pop(peer_id, None)
+        cfg.peers.pop(peer_id, None)
+        save(cfg)
+
+    def _get_history():
+        return clipboard_history.get_all()
+
+    def _search_history(query: str):
+        return clipboard_history.search(query)
+
+    def _copy_from_history(index: int):
+        entry = clipboard_history.get(index)
+        if entry is None or "types" not in entry:
+            return False
+        import base64 as _b64
+        from internal.clipboard.format import ClipboardContent, ContentType as _CT
+        types: dict = {}
+        _type_map = {"TEXT": _CT.TEXT, "HTML": _CT.HTML, "IMAGE": _CT.IMAGE_PNG, "RTF": _CT.RTF}
+        for key, b64_data in entry["types"].items():
+            ct = _type_map.get(key)
+            if ct is not None:
+                types[ct] = _b64.b64decode(b64_data)
+        if types:
+            content = ClipboardContent(types=types)
+            from internal.clipboard.platform import create_writer
+            writer = create_writer()
+            writer.write(content)
+            return True
+        return False
+
+    def _clear_history():
+        clipboard_history.clear()
+
+    # ── Settings window ──────────────────────────────────────────
     settings_win: SettingsWindow | None = None
 
     def _create_settings_window():
         nonlocal settings_win
-        if settings_win is None:
-
-            def get_cfg():
-                return cfg
-
-            def save_cfg():
-                save(cfg)
-                # Also save peers from pairing manager
-                for peer in pairing_mgr.get_known_peers():
-                    if peer.device_id not in cfg.peers:
-                        cfg.peers[peer.device_id] = PeerInfo(
-                            device_id=peer.device_id,
-                            device_name=peer.device_name,
-                            public_key_pem=peer.certificate_pem,
-                            paired=peer.paired,
-                        )
-                save(cfg)
-
-            def get_peers():
-                result = []
-                for p in pairing_mgr.get_known_peers():
-                    connected = p.device_id in transport_mgr.get_connected_peers()
-                    result.append((p.device_id, p.device_name, p.paired, connected))
-                return result
-
-            def get_pending():
-                return pairing_mgr.get_pending_pairings()
-
-            def on_pair(peer_id, code):
-                return pairing_mgr.confirm_pairing(peer_id, code)
-
-            def on_unpair(peer_id):
-                pairing_mgr.reject_pairing(peer_id)
-                transport_mgr.disconnect_peer(peer_id)
-                # Update peer in config
-                if peer_id in cfg.peers:
-                    cfg.peers[peer_id].paired = False
-                save(cfg)
-
-            def on_remove(peer_id):
-                pairing_mgr.remove_peer(peer_id)
-                transport_mgr.disconnect_peer(peer_id)
-                cfg.peers.pop(peer_id, None)
-                save(cfg)
-
-            def _on_win_closed():
-                nonlocal settings_win
-                settings_win = None
-
-            settings_win = SettingsWindow(
-                root=root,
-                get_config=get_cfg,
-                save_config=save_cfg,
-                get_peers=get_peers,
-                get_pending_pairings=get_pending,
-                get_sync_enabled=lambda: cfg.sync_enabled,
-                set_sync_enabled=lambda v: sync_mgr.set_enabled(v),
-                on_pair=on_pair,
-                on_unpair=on_unpair,
-                on_remove_peer=on_remove,
-                on_export_logs=on_export_logs,
-                on_closed=_on_win_closed,
-            )
+        if settings_win is not None:
             settings_win.show()
+            return
+
+        def _on_settings_closed():
+            nonlocal settings_win
+            settings_win = None
+
+        settings_win = SettingsWindow(
+            root=root,
+            get_config=get_cfg,
+            save_config=save_cfg,
+            on_closed=_on_settings_closed,
+            on_export_logs=on_export_logs,
+            get_filter_categories=lambda: content_filter.enabled_categories,
+            set_filter_categories=lambda cats: (
+                setattr(content_filter, 'enabled_categories', cats),
+                setattr(cfg, 'filter_enabled_categories', cats),
+            ),
+            get_log_text=lambda: _get_log_path().read_text(encoding="utf-8") if _get_log_path().exists() else "No log file yet.",
+        )
+        settings_win.show()
 
     def open_settings():
-        """Called from systray menu — schedule on tkinter's main thread."""
         root.after(0, _create_settings_window)
+
+    # ── Dashboard window ─────────────────────────────────────────
+    dashboard_win: DashboardWindow | None = None
+
+    def _create_dashboard_window():
+        nonlocal dashboard_win
+        if dashboard_win is not None:
+            dashboard_win.show()
+            return
+
+        dashboard_win = DashboardWindow(
+            root=root,
+            get_config=get_cfg,
+            save_config=save_cfg,
+            get_peers=get_peers,
+            get_sync_enabled=lambda: cfg.sync_enabled,
+            set_sync_enabled=lambda v: (sync_mgr.set_enabled(v), systray.set_syncing(v)),
+            on_open_settings=open_settings,
+            on_send_file=on_send_file,
+            on_toggle_autostart=lambda enabled: (
+                enable_autostart() if enabled else disable_autostart()
+            ),
+            get_transfers=lambda: file_transfer_mgr.get_transfers(),
+            on_cancel_transfer=lambda tid: file_transfer_mgr.cancel_transfer(tid, transport_mgr.broadcast),
+            get_pending_pairings=get_pending,
+            on_pair=on_pair,
+            on_unpair=on_unpair,
+            on_connect_peer=on_connect,
+            on_remove_peer=on_remove,
+            get_history=_get_history,
+            search_history=_search_history,
+            copy_from_history=_copy_from_history,
+            clear_history=_clear_history,
+        )
+        dashboard_win.show()
+
+    def open_dashboard():
+        root.after(0, _create_dashboard_window)
 
     # ── Systray ─────────────────────────────────────────────────
     def on_enable_toggle(enabled: bool):
         sync_mgr.set_enabled(enabled)
         cfg.sync_enabled = enabled
         save(cfg)
+        systray.set_syncing(enabled)
+        logger.info("Sync %s", "enabled" if enabled else "paused")
 
     _shutting_down = False
 
@@ -305,6 +519,7 @@ def main():
     systray = SystrayApp(
         device_name=cfg.device_name,
         on_enable_toggle=on_enable_toggle,
+        on_open_dashboard=open_dashboard,
         on_open_settings=open_settings,
         on_export_logs=on_export_logs,
         on_quit=on_quit,
@@ -313,20 +528,67 @@ def main():
     _stop_updater = threading.Event()
 
     def update_peers_loop():
+        prev_display: list[str] = []
+        prev_connected: set[str] = set()
+        prev_pending: list[tuple] = []
+        cleanup_counter = 0
         while not _stop_updater.is_set():
-            peer_ids = transport_mgr.get_connected_peers()
-            peer_names = []
-            for pid in peer_ids:
+            connected_ids = transport_mgr.get_connected_peers()
+            peer_display = []
+            seen = set()
+            for pid in connected_ids:
                 peers = pairing_mgr.get_known_peers()
                 found = next((p for p in peers if p.device_id == pid), None)
-                peer_names.append(found.device_name if found else pid)
-            systray.set_peers(peer_names)
+                name = found.device_name if found else pid
+                peer_display.append(f"{name}  (connected)")
+                seen.add(pid)
+            # Also show discovered but not connected peers
+            with _discovered_lock:
+                for pid, info in _discovered_peers.items():
+                    if pid not in seen:
+                        peer_display.append(f"{info['name']}  (found)")
+            if peer_display != prev_display:
+                prev_display = peer_display
+                systray.set_peers(peer_display)
+
+            # Notify on connect/disconnect
+            connected_set = set(connected_ids)
+            for pid in connected_set - prev_connected:
+                peers = pairing_mgr.get_known_peers()
+                found = next((p for p in peers if p.device_id == pid), None)
+                name = found.device_name if found else pid[:12]
+                notification_mgr.show("Device Connected", f"{name} is now connected")
+            for pid in prev_connected - connected_set:
+                peers = pairing_mgr.get_known_peers()
+                found = next((p for p in peers if p.device_id == pid), None)
+                name = found.device_name if found else pid[:12]
+                notification_mgr.show("Device Disconnected", f"{name} has disconnected")
+            prev_connected = connected_set
+
+            # Notify on new pending pairing codes
+            pending = get_pending()
+            if len(pending) > len(prev_pending):
+                notification_mgr.show("Pairing Request", "A device wants to pair — enter the pairing code to confirm")
+            prev_pending = pending
+
+            # Periodically clean up stale file transfers (~every 30s)
+            cleanup_counter += 1
+            if cleanup_counter >= 10:
+                cleanup_counter = 0
+                try:
+                    file_transfer_mgr.cleanup_stale_transfers()
+                except Exception:
+                    pass
+
             _stop_updater.wait(3)
 
     updater = threading.Thread(target=update_peers_loop, daemon=True)
     updater.start()
 
     logger.info("CopyBoard is ready. System tray icon should appear.")
+
+    # Auto-open the dashboard on startup
+    root.after(500, open_dashboard)
 
     if sys.platform == "darwin":
         # macOS: run pystray in a subprocess to avoid Apple Silicon GIL crash
@@ -347,6 +609,8 @@ def main():
             cmd = msg[0]
             if cmd == "toggle_sync":
                 on_enable_toggle(msg[1])
+            elif cmd == "open_dashboard":
+                open_dashboard()
             elif cmd == "open_settings":
                 open_settings()
             elif cmd == "export_logs":
@@ -381,6 +645,7 @@ def _run_tray(device_name: str, pipe):
     child_systray = SystrayApp(
         device_name=device_name,
         on_enable_toggle=lambda v: pipe.send(("toggle_sync", v)),
+        on_open_dashboard=lambda: pipe.send(("open_dashboard",)),
         on_open_settings=lambda: pipe.send(("open_settings",)),
         on_export_logs=lambda: pipe.send(("export_logs",)),
         on_quit=lambda: pipe.send(("quit",)),

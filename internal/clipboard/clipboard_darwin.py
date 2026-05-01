@@ -12,6 +12,7 @@ since macOS provides no event-driven clipboard API.
 
 import logging
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -125,7 +126,9 @@ class _ClipboardWriter(ClipboardWriter):
 
     def _set_text(self, data: bytes):
         try:
-            subprocess.run(["pbcopy"], input=data, timeout=2)
+            result = subprocess.run(["pbcopy"], input=data, timeout=2)
+            if result.returncode != 0:
+                logger.warning("pbcopy returned non-zero exit code: %d", result.returncode)
         except Exception:
             logger.debug("pbcopy write failed", exc_info=True)
 
@@ -148,7 +151,9 @@ class _ClipboardWriter(ClipboardWriter):
             )
         except Exception:
             logger.debug("osascript html write failed, falling back to text", exc_info=True)
-            self._set_text(data)
+            # Strip HTML tags before setting as plain text
+            text = re.sub(r'<[^>]*>', '', data.decode('utf-8', errors='replace'))
+            self._set_text(text.encode('utf-8'))
         finally:
             if tmp_path:
                 try:
@@ -215,10 +220,11 @@ class _ClipboardWriter(ClipboardWriter):
 class DarwinClipboardMonitor(ClipboardMonitor):
     """Poll-based clipboard monitor for macOS."""
 
-    def __init__(self):
+    def __init__(self, poll_interval: float = POLL_INTERVAL):
         self._running = False
         self._thread = None
         self._callback = None
+        self._poll_interval = poll_interval
 
     def start(self, callback):
         logger.info("Clipboard monitor started")
@@ -233,10 +239,15 @@ class DarwinClipboardMonitor(ClipboardMonitor):
 
     def _poll_loop(self):
         last_count = self._get_change_count()
+        while last_count == -1 and self._running:
+            time.sleep(self._poll_interval)
+            last_count = self._get_change_count()
         logger.debug("Initial changeCount: %d", last_count)
         while self._running:
-            time.sleep(POLL_INTERVAL)
+            time.sleep(self._poll_interval)
             current = self._get_change_count()
+            if current == -1:
+                continue  # osascript failed, skip this tick
             if current != last_count:
                 logger.debug("Clipboard change detected, changeCount: %d", current)
                 last_count = current
@@ -244,9 +255,10 @@ class DarwinClipboardMonitor(ClipboardMonitor):
                     try:
                         self._callback()
                     except Exception:
-                        pass
+                        logger.warning("Clipboard change callback failed", exc_info=True)
 
     def _get_change_count(self) -> int:
+        """Return the pasteboard change count, or -1 on failure."""
         try:
             result = subprocess.run(
                 ["osascript", "-e", "get the clipboard's «class ccnt»"],
@@ -254,13 +266,18 @@ class DarwinClipboardMonitor(ClipboardMonitor):
             )
             if result.returncode == 0 and result.stdout.strip():
                 return int(result.stdout.strip())
-        except (ValueError, Exception):
-            pass
-        return 0
+            elif result.returncode != 0:
+                logger.debug("changeCount osascript failed (rc=%d): %s",
+                            result.returncode, result.stderr.decode(errors="replace")[:120])
+        except ValueError:
+            logger.debug("changeCount: non-integer value returned")
+        except Exception:
+            logger.debug("changeCount: subprocess failed", exc_info=True)
+        return -1
 
 
-def create_monitor() -> ClipboardMonitor:
-    return DarwinClipboardMonitor()
+def create_monitor(poll_interval: float = POLL_INTERVAL) -> ClipboardMonitor:
+    return DarwinClipboardMonitor(poll_interval=poll_interval)
 
 
 def create_reader() -> ClipboardReader:

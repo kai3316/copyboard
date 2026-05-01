@@ -5,6 +5,7 @@ Event-driven monitoring via AddClipboardFormatListener — zero CPU when idle.
 
 import ctypes
 import ctypes.wintypes
+import re
 import struct
 import threading
 import time
@@ -160,12 +161,13 @@ class _ClipboardReader(ClipboardReader):
             ptr = kernel32.GlobalLock(handle)
             if not ptr:
                 return b""
-            size = kernel32.GlobalSize(handle)
-            if size < 40:
+            try:
+                size = kernel32.GlobalSize(handle)
+                if size < 40:
+                    return b""
+                dib = ctypes.string_at(ptr, size)
+            finally:
                 kernel32.GlobalUnlock(handle)
-                return b""
-            dib = ctypes.string_at(ptr, size)
-            kernel32.GlobalUnlock(handle)
 
             # Read BITMAPINFOHEADER to calculate the BMP file header
             bi_size = struct.unpack_from("<I", dib, 0)[0]
@@ -243,12 +245,50 @@ class _ClipboardWriter(ClipboardWriter):
             ptr = kernel32.GlobalLock(handle)
             ctypes.memmove(ptr, wide_text, len(wide_text))
             kernel32.GlobalUnlock(handle)
-            user32.SetClipboardData(CF_UNICODETEXT, handle)
+            if not user32.SetClipboardData(CF_UNICODETEXT, handle):
+                logger.warning("SetClipboardData(CF_UNICODETEXT) failed")
 
     def _set_html(self, data: bytes):
-        self._set_custom_format(CF_HTML, data)
-        # Also set plain text as fallback
-        self._set_text(data)
+        cf_html = self._build_cf_html(data)
+        self._set_custom_format(CF_HTML, cf_html)
+        text = re.sub(r'<[^>]*>', '', data.decode('utf-8', errors='replace'))
+        self._set_text(text.encode('utf-8'))
+
+    @staticmethod
+    def _build_cf_html(html_bytes: bytes) -> bytes:
+        """Wrap raw HTML in the CF_HTML envelope Windows expects."""
+        html = html_bytes.decode("utf-8", errors="replace")
+        MARKER = "<!--StartFragment-->"
+        END_MARKER = "<!--EndFragment-->"
+        if MARKER not in html:
+            html = f"{MARKER}{html}{END_MARKER}"
+        header_tmpl = (
+            "Version:0.9\r\n"
+            "StartHTML:{start_html:010d}\r\n"
+            "EndHTML:{end_html:010d}\r\n"
+            "StartFragment:{start_frag:010d}\r\n"
+            "EndFragment:{end_frag:010d}\r\n"
+        )
+        dummy_header = header_tmpl.format(
+            start_html=0, end_html=0, start_frag=0, end_frag=0,
+        )
+        prefix = "<html><body>\r\n"
+        suffix = "\r\n</body></html>"
+        header_len = len(dummy_header.encode("utf-8"))
+        start_html = header_len
+        html_encoded = html.encode("utf-8")
+        prefix_encoded = prefix.encode("utf-8")
+        suffix_encoded = suffix.encode("utf-8")
+        frag_start_idx = html.find(MARKER)
+        frag_end_idx = html.find(END_MARKER)
+        start_frag = header_len + len(prefix_encoded) + len(html[:frag_start_idx].encode("utf-8")) + len(MARKER.encode("utf-8"))
+        end_frag = header_len + len(prefix_encoded) + len(html[:frag_end_idx].encode("utf-8"))
+        end_html = header_len + len(prefix_encoded) + len(html_encoded) + len(suffix_encoded)
+        header = header_tmpl.format(
+            start_html=start_html, end_html=end_html,
+            start_frag=start_frag, end_frag=end_frag,
+        )
+        return (header + prefix + html + suffix).encode("utf-8")
 
     def _set_image(self, data: bytes):
         try:
@@ -268,7 +308,8 @@ class _ClipboardWriter(ClipboardWriter):
                 ptr = kernel32.GlobalLock(handle)
                 ctypes.memmove(ptr, dib_data, len(dib_data))
                 kernel32.GlobalUnlock(handle)
-                user32.SetClipboardData(CF_DIB, handle)
+                if not user32.SetClipboardData(CF_DIB, handle):
+                    logger.warning("SetClipboardData(CF_DIB) failed")
         except Exception:
             logger.debug("Failed to write image to clipboard", exc_info=True)
 
@@ -279,7 +320,8 @@ class _ClipboardWriter(ClipboardWriter):
             ctypes.memmove(ptr, data, len(data))
             ctypes.memset(ptr + len(data), 0, 1)
             kernel32.GlobalUnlock(handle)
-            user32.SetClipboardData(fmt, handle)
+            if not user32.SetClipboardData(fmt, handle):
+                logger.warning("SetClipboardData(%d) failed", fmt)
 
 
 class WindowsClipboardMonitor(ClipboardMonitor):
@@ -357,7 +399,7 @@ class WindowsClipboardMonitor(ClipboardMonitor):
                 try:
                     self._callback()
                 except Exception:
-                    pass
+                    logger.warning("Clipboard change callback failed", exc_info=True)
             return 0
         elif msg == WM_DESTROY:
             user32.PostQuitMessage(0)
@@ -392,7 +434,7 @@ class _MSG(ctypes.Structure):
     ]
 
 
-def create_monitor() -> ClipboardMonitor:
+def create_monitor(poll_interval: float = 0.4) -> ClipboardMonitor:
     return WindowsClipboardMonitor()
 
 
