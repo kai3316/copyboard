@@ -477,15 +477,25 @@ class SettingsWindow:
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
             anchor="w", justify="left",
-        ).pack(anchor="w", padx=20, pady=(0, 8))
+        ).pack(anchor="w", padx=20, pady=(0, 4))
+
+        # Status indicator — password is never loaded from disk (hash only)
+        _pw_status = "Password is set (hash stored)" if cfg.encryption_password_hash else "No password set"
+        self._enc_pw_status = ctk.CTkLabel(
+            card2, text=_pw_status,
+            font=ctk.CTkFont(size=11),
+            text_color="#27AE60" if cfg.encryption_password_hash else ("gray50", "gray60"),
+        )
+        self._enc_pw_status.pack(anchor="w", padx=20, pady=(0, 8))
 
         pw_row = ctk.CTkFrame(card2, fg_color="transparent")
         pw_row.pack(fill="x", padx=16, pady=(0, 14))
-        self._enc_password_var = tk.StringVar(value=cfg.encryption_password)
+        # Password field always starts empty — plaintext never stored on disk
+        self._enc_password_var = tk.StringVar(value="")
         self._enc_password_entry = ctk.CTkEntry(
             pw_row, textvariable=self._enc_password_var,
             height=32, width=240, show="*",
-            placeholder_text="Enter shared password",
+            placeholder_text="Enter new password to set or change",
         )
         self._enc_password_entry.pack(side="left", padx=(0, 8))
         self._show_pw_btn = ctk.CTkButton(

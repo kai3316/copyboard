@@ -130,24 +130,50 @@ def main():
     # ── Content filter ─────────────────────────────────────────
     content_filter = ContentFilter(enabled_categories=cfg.filter_enabled_categories)
 
-    # ── Encryption manager (before identity, so we can decrypt the key) ─
+    # ── Encryption password (prompt if needed, before identity load) ─
     # The certificate is public and stored in plaintext — derive the
     # fingerprint from it to bootstrap decryption of the private key.
+    from internal.security.encryption import verify_password as _verify_password
     from internal.security.pairing import fingerprint_pem as _fingerprint_pem
+
+    _device_fingerprint = ""
+    if cfg.encryption_enabled and cfg.certificate_pem:
+        try:
+            _device_fingerprint = _fingerprint_pem(cfg.certificate_pem)
+        except Exception as exc:
+            logger.warning("Failed to derive fingerprint from cert: %s", exc)
+
+    # If a password hash was persisted, prompt for the password.
+    # The plaintext password is never stored on disk — only a
+    # PBKDF2 verification token that we check here.
+    if (cfg.encryption_enabled and cfg.encryption_password_hash
+            and not cfg.encryption_password):
+        import tkinter as tk
+        from tkinter import simpledialog
+        _tmp_root = tk.Tk()
+        _tmp_root.withdraw()
+        try:
+            _entered = simpledialog.askstring(
+                "Encryption Password",
+                "Enter the pre-shared encryption password:",
+                show="*", parent=_tmp_root,
+            )
+        finally:
+            _tmp_root.destroy()
+        if _entered and _verify_password(
+            _entered, _device_fingerprint, cfg.encryption_password_hash,
+        ):
+            cfg.encryption_password = _entered
+            logger.info("Encryption password verified")
+        elif _entered:
+            logger.warning("Encryption password verification FAILED — wrong password")
+            cfg.encryption_password = _entered  # try to decrypt anyway (will likely fail)
 
     logger.info(
         "Encryption config: enabled=%s, password=%s",
         cfg.encryption_enabled,
         "set" if cfg.encryption_password else "not set",
     )
-
-    _device_fingerprint = ""
-    if cfg.encryption_enabled and cfg.certificate_pem:
-        try:
-            _device_fingerprint = _fingerprint_pem(cfg.certificate_pem)
-            logger.debug("Fingerprint derived from cert: %s", _device_fingerprint[:16] + "...")
-        except Exception as exc:
-            logger.warning("Failed to derive fingerprint from cert: %s", exc)
 
     enc_mgr = EncryptionManager(
         _device_fingerprint,
@@ -186,6 +212,17 @@ def main():
             password=cfg.encryption_password if cfg.encryption_enabled else "",
         )
 
+    # Migrate old plaintext password to verification hash
+    from internal.security.encryption import make_password_hash as _make_password_hash
+    _password_just_migrated = False
+    if (cfg.encryption_enabled and cfg.encryption_password
+            and not cfg.encryption_password_hash):
+        cfg.encryption_password_hash = _make_password_hash(
+            cfg.encryption_password, identity.fingerprint,
+        )
+        _password_just_migrated = True
+        logger.info("Migrated plaintext encryption password to verification hash")
+
     # Save new identity with encryption (now that enc_mgr has correct fingerprint)
     if _is_new_identity:
         save(cfg, enc_mgr if cfg.encryption_enabled else None)
@@ -197,9 +234,18 @@ def main():
     )
 
     def _make_save_enc():
-        """Create an EncryptionManager for saving, using current cfg values."""
+        """Create an EncryptionManager for saving, using current cfg values.
+
+        Also updates the persisted password hash so the plaintext password
+        is never written to disk.
+        """
         if not cfg.encryption_enabled:
             return None
+        if cfg.encryption_password:
+            cfg.encryption_password_hash = _make_password_hash(
+                cfg.encryption_password,
+                pairing_mgr.get_identity().fingerprint,
+            )
         return EncryptionManager(
             pairing_mgr.get_identity().fingerprint,
             password=cfg.encryption_password,

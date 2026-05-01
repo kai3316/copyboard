@@ -23,6 +23,8 @@ _NONCE_LEN = 12  # bytes
 _TAG_LEN = 16    # AES-GCM tag is 16 bytes
 _AES_KEY_LEN = 32
 _PBKDF2_ITERATIONS = 600_000
+_PW_VERIFY_ITERATIONS = 100_000  # for password verification token
+_PW_VERIFY_LEN = 32  # hex chars
 
 # Sentinels for distinguishing encrypted data from plaintext (legacy)
 _ENCRYPTED_PREFIX = b"\x01CBE"  # 4-byte marker: version 1 + "CBE" for CopyBoard Encrypted
@@ -36,6 +38,24 @@ def derive_key(password: str, salt: bytes) -> bytes:
     return hashlib.pbkdf2_hmac(
         "sha256", password.encode("utf-8"), salt, _PBKDF2_ITERATIONS, dklen=_AES_KEY_LEN,
     )
+
+
+def make_password_hash(password: str, fingerprint: str) -> str:
+    """Derive a one-way verification token from (password, fingerprint).
+
+    The password itself is never stored. This hash lets us verify the
+    entered password on startup without keeping the plaintext secret.
+    """
+    salt = fingerprint.encode("ascii")[:16]
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt,
+        _PW_VERIFY_ITERATIONS, dklen=32,
+    ).hex()[:_PW_VERIFY_LEN]
+
+
+def verify_password(password: str, fingerprint: str, stored_hash: str) -> bool:
+    """Check an entered password against a stored verification token."""
+    return make_password_hash(password, fingerprint) == stored_hash
 
 
 def _hkdf_expand(ikm: bytes, info: bytes, length: int = _AES_KEY_LEN) -> bytes:

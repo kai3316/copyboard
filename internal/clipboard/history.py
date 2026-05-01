@@ -188,24 +188,44 @@ class ClipboardHistory:
                 except OSError:
                     pass
 
+    # Fields encrypted at rest — excludes timestamp and content_type
+    # so the file structure is still human-readable for debugging.
+    _ENCRYPTED_FIELDS = ("types", "text_preview", "source_device")
+
     def _encrypt_entry(self, entry: dict) -> dict:
-        """Return a copy of entry with types values encrypted for at-rest storage."""
+        """Return a copy of entry with sensitive fields encrypted for at-rest storage."""
         enc = self._enc_mgr
         if not enc:
             return entry
         e = dict(entry)
-        if "types" in e:
-            e["types"] = {
-                k: enc.encrypt_storage(v) for k, v in e["types"].items()
-            }
+        for field in self._ENCRYPTED_FIELDS:
+            if field in e:
+                if field == "types":
+                    e["types"] = {
+                        k: enc.encrypt_storage(v) for k, v in e["types"].items()
+                    }
+                else:
+                    val = e[field]
+                    if isinstance(val, str):
+                        e[field] = enc.encrypt_storage(val)
         return e
 
     def _decrypt_entry(self, entry: dict) -> None:
-        """Decrypt types values in-place."""
+        """Decrypt sensitive fields in-place. Legacy plaintext is passed through."""
         enc = self._enc_mgr
-        if not enc or "types" not in entry:
+        if not enc:
             return
-        for k, v in list(entry["types"].items()):
-            pt = enc.decrypt_storage(v)
-            if pt is not None:
-                entry["types"][k] = pt
+        for field in self._ENCRYPTED_FIELDS:
+            if field not in entry:
+                continue
+            if field == "types":
+                for k, v in list(entry["types"].items()):
+                    pt = enc.decrypt_storage(v)
+                    if pt is not None:
+                        entry["types"][k] = pt
+            else:
+                val = entry[field]
+                if isinstance(val, str):
+                    pt = enc.decrypt_storage(val)
+                    if pt is not None:
+                        entry[field] = pt

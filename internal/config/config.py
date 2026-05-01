@@ -53,7 +53,8 @@ class Config:
     notifications_enabled: bool = True
     # Security
     encryption_enabled: bool = True
-    encryption_password: str = ""
+    encryption_password: str = ""       # runtime only — never persisted
+    encryption_password_hash: str = ""  # persisted verification token
 
     def add_peer(self, peer: PeerInfo):
         self.peers[peer.device_id] = peer
@@ -109,10 +110,14 @@ def load() -> Config:
             "sync_debounce", "clipboard_poll_interval",
             "max_reconnect_attempts", "transfer_timeout",
             "log_level", "notifications_enabled",
-            "encryption_enabled", "encryption_password",
+            "encryption_enabled",
+            "encryption_password_hash",
         ):
             if key in data:
                 setattr(cfg, key, data[key])
+        # Migrate from old plaintext password (now stored on next save as hash)
+        if "encryption_password" in data and data["encryption_password"]:
+            cfg.encryption_password = data["encryption_password"]
         # Migrate from old filter_sensitive bool
         if "filter_sensitive" in data and not data.get("filter_enabled_categories"):
             if data["filter_sensitive"]:
@@ -163,7 +168,7 @@ def save(cfg: Config, enc_mgr: "EncryptionManager | None" = None):
         "log_level": cfg.log_level,
         "notifications_enabled": cfg.notifications_enabled,
         "encryption_enabled": cfg.encryption_enabled,
-        "encryption_password": cfg.encryption_password,
+        "encryption_password_hash": cfg.encryption_password_hash,
         "peers": [
             {
                 "device_id": p.device_id,
