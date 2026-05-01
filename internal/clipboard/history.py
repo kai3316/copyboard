@@ -162,6 +162,8 @@ class ClipboardHistory:
             if self._enc_mgr:
                 for entry in self._entries:
                     self._decrypt_entry(entry)
+                logger.debug("History load: decrypted %d entries from disk",
+                           len(self._entries))
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -170,6 +172,8 @@ class ClipboardHistory:
             entries_to_save = self._entries
             if self._enc_mgr:
                 entries_to_save = [self._encrypt_entry(e) for e in self._entries]
+                logger.debug("History save: encrypted %d entries for at-rest storage",
+                           len(entries_to_save))
             tmp_fd, tmp_path = tempfile.mkstemp(
                 dir=str(self._path.parent), prefix=".history_tmp_", suffix=".json",
             )

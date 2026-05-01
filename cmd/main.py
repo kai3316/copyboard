@@ -135,12 +135,19 @@ def main():
     # fingerprint from it to bootstrap decryption of the private key.
     from internal.security.pairing import fingerprint_pem as _fingerprint_pem
 
+    logger.info(
+        "Encryption config: enabled=%s, password=%s",
+        cfg.encryption_enabled,
+        "set" if cfg.encryption_password else "not set",
+    )
+
     _device_fingerprint = ""
     if cfg.encryption_enabled and cfg.certificate_pem:
         try:
             _device_fingerprint = _fingerprint_pem(cfg.certificate_pem)
-        except Exception:
-            pass
+            logger.debug("Fingerprint derived from cert: %s", _device_fingerprint[:16] + "...")
+        except Exception as exc:
+            logger.warning("Failed to derive fingerprint from cert: %s", exc)
 
     enc_mgr = EncryptionManager(
         _device_fingerprint,
@@ -152,11 +159,12 @@ def main():
         pt = enc_mgr.decrypt_storage(cfg.private_key_pem)
         if pt is not None:
             if pt != cfg.private_key_pem:
-                logger.info("Decrypted private key from encrypted storage")
+                logger.info("Private key decrypted from encrypted storage (%d chars)",
+                          len(pt))
             cfg.private_key_pem = pt
         else:
             logger.warning(
-                "Private key decryption failed — possibly wrong password "
+                "Private key decryption FAILED — possibly wrong password "
                 "or corrupted data. Trying as plaintext."
             )
 

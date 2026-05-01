@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import Encoding
 
 from internal.protocol.codec import decode_message
+from internal.security.encryption import is_encrypted
 from internal.security.pairing import CertificateChangedError, PairingManager
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,17 @@ class PeerConnection:
         try:
             if self._enc_mgr and self._peer_fingerprint:
                 data = self._enc_mgr.encrypt_frame(data, self._peer_fingerprint)
+                logger.debug(
+                    "[%s] App-layer encrypted frame payload (%d bytes on wire)",
+                    self.device_name, len(data),
+                )
+            else:
+                logger.debug(
+                    "[%s] Sending unencrypted frame (%d bytes) — enc_mgr=%s peer_fp=%s",
+                    self.device_name, len(data),
+                    "set" if self._enc_mgr else "none",
+                    "set" if self._peer_fingerprint else "empty",
+                )
             frame = struct.pack(">I", len(data)) + data
             with self._send_lock:
                 self._sock.sendall(frame)
@@ -134,10 +146,26 @@ class PeerConnection:
                 if self._enc_mgr and self._peer_fingerprint:
                     pt = self._enc_mgr.decrypt_frame(payload, self._peer_fingerprint)
                     if pt is not None:
+                        logger.debug(
+                            "[%s] App-layer decrypted frame payload (%d bytes plaintext)",
+                            self.device_name, len(pt),
+                        )
                         payload = pt
-                    # If decryption returns None with an encrypted prefix,
-                    # it's an auth failure — still try decode_message which
-                    # will likely fail gracefully.
+                    elif is_encrypted(payload):
+                        logger.warning(
+                            "[%s] App-layer decrypt FAILED — auth tag mismatch! "
+                            "Possible tampering or wrong password.", self.device_name,
+                        )
+                    else:
+                        logger.debug(
+                            "[%s] Received unencrypted frame (%d bytes) — passing through",
+                            self.device_name, len(payload),
+                        )
+                else:
+                    logger.debug(
+                        "[%s] Received frame (%d bytes) — no enc_mgr, passing through",
+                        self.device_name, len(payload),
+                    )
 
                 msg = decode_message(payload)
                 if msg and self._on_message:

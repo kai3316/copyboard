@@ -89,7 +89,9 @@ def encrypt(plaintext: bytes, key: bytes) -> bytes:
     nonce = secrets.token_bytes(_NONCE_LEN)
     aesgcm = AESGCM(key)
     ct = aesgcm.encrypt(nonce, plaintext, None)
-    return _ENCRYPTED_PREFIX + nonce + ct
+    result = _ENCRYPTED_PREFIX + nonce + ct
+    logger.debug("Encrypted %d bytes → %d bytes", len(plaintext), len(result))
+    return result
 
 
 def decrypt(data: bytes, key: bytes) -> bytes | None:
@@ -102,8 +104,11 @@ def decrypt(data: bytes, key: bytes) -> bytes | None:
         nonce = body[:_NONCE_LEN]
         ct = body[_NONCE_LEN:]
         aesgcm = AESGCM(key)
-        return aesgcm.decrypt(nonce, ct, None)
-    except Exception:
+        pt = aesgcm.decrypt(nonce, ct, None)
+        logger.debug("Decrypted %d bytes → %d bytes", len(data), len(pt))
+        return pt
+    except Exception as exc:
+        logger.warning("Decryption auth failure: %s", exc)
         return None
 
 
@@ -125,6 +130,11 @@ class EncryptionManager:
         self._password = password
         self._storage_key_cache: bytes | None = None
         self._frame_key_cache: dict[str, bytes] = {}  # peer_fingerprint -> key
+        logger.info(
+            "EncryptionManager initialized (fingerprint=%s, password=%s)",
+            device_fingerprint[:16] + "..." if device_fingerprint else "(none)",
+            "set" if password else "not set",
+        )
 
     @property
     def storage_key(self) -> bytes:
@@ -138,6 +148,10 @@ class EncryptionManager:
         if peer_fingerprint not in self._frame_key_cache:
             self._frame_key_cache[peer_fingerprint] = _compute_frame_key(
                 self._fingerprint, peer_fingerprint, self._password,
+            )
+            logger.debug(
+                "Derived frame key for peer %s (cache size=%d)",
+                peer_fingerprint[:16] + "...", len(self._frame_key_cache),
             )
         return self._frame_key_cache[peer_fingerprint]
 
@@ -172,8 +186,24 @@ class EncryptionManager:
 
     def encrypt_frame(self, plaintext: bytes, peer_fingerprint: str) -> bytes:
         """Encrypt frame payload bytes for app-layer encryption."""
-        return encrypt(plaintext, self.get_frame_key(peer_fingerprint))
+        result = encrypt(plaintext, self.get_frame_key(peer_fingerprint))
+        logger.debug(
+            "App-layer encrypt: %d bytes plain → %d bytes encrypted (peer=%s)",
+            len(plaintext), len(result), peer_fingerprint[:12] + "...",
+        )
+        return result
 
     def decrypt_frame(self, data: bytes, peer_fingerprint: str) -> bytes | None:
         """Decrypt frame payload bytes. Returns None on auth failure."""
-        return decrypt(data, self.get_frame_key(peer_fingerprint))
+        result = decrypt(data, self.get_frame_key(peer_fingerprint))
+        if result is not None:
+            logger.debug(
+                "App-layer decrypt: %d bytes → %d bytes (peer=%s)",
+                len(data), len(result), peer_fingerprint[:12] + "...",
+            )
+        else:
+            logger.warning(
+                "App-layer decrypt failed (auth/format) for peer %s",
+                peer_fingerprint[:12] + "...",
+            )
+        return result

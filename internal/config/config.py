@@ -141,6 +141,7 @@ def save(cfg: Config, enc_mgr: "EncryptionManager | None" = None):
     private_key_to_save = cfg.private_key_pem
     if cfg.encryption_enabled and enc_mgr and cfg.private_key_pem:
         private_key_to_save = enc_mgr.encrypt_storage(cfg.private_key_pem)
+        logger.debug("Config save: private_key_pem encrypted for at-rest storage")
 
     data = {
         "device_id": cfg.device_id,
