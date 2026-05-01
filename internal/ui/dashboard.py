@@ -6,6 +6,9 @@ Settings is a separate window accessed via the sidebar button.
 
 import datetime
 import logging
+import platform
+import socket
+import time
 import tkinter as tk
 from tkinter import messagebox
 from typing import Callable
@@ -54,8 +57,13 @@ class DashboardWindow:
         search_history: Callable | None = None,
         copy_from_history: Callable | None = None,
         clear_history: Callable | None = None,
+        delete_history_item: Callable | None = None,
         # Lifecycle
         on_hidden: Callable | None = None,
+        # Transfers
+        get_transfer_history: Callable | None = None,
+        on_speed_test: Callable | None = None,
+        get_speed_test_result: Callable | None = None,
     ):
         self._root = root
         self._get_config = get_config
@@ -77,7 +85,11 @@ class DashboardWindow:
         self._search_history = search_history
         self._copy_from_history = copy_from_history
         self._clear_history = clear_history
+        self._delete_history_item = delete_history_item
         self._on_hidden = on_hidden
+        self._get_transfer_history = get_transfer_history
+        self._on_speed_test = on_speed_test
+        self._get_speed_test_result = get_speed_test_result
 
         self._window: ctk.CTkToplevel | None = None
         self._dark_mode = False
@@ -99,13 +111,24 @@ class DashboardWindow:
         self._status_dot: ctk.CTkFrame | None = None
         self._status_label: ctk.CTkLabel | None = None
         self._stat_peers: ctk.CTkLabel | None = None
-        self._stat_crypto: ctk.CTkLabel | None = None
+        self._stat_paired: ctk.CTkLabel | None = None
         self._stat_history: ctk.CTkLabel | None = None
+        self._stat_transfers: ctk.CTkLabel | None = None
+        self._sub_peers: ctk.CTkLabel | None = None
+        self._sub_paired: ctk.CTkLabel | None = None
+        self._sub_history: ctk.CTkLabel | None = None
+        self._sub_transfers: ctk.CTkLabel | None = None
+        self._recent_activity: ctk.CTkLabel | None = None
+        self._theme_var: tk.BooleanVar | None = None
+        self._uptime_label: ctk.CTkLabel | None = None
+        self._local_ip_label: ctk.CTkLabel | None = None
+        self._start_time: float = 0.0
         self._device_name_label: ctk.CTkLabel | None = None
         self._device_scroll: ctk.CTkScrollableFrame | None = None
         self._transfer_scroll: ctk.CTkScrollableFrame | None = None
+        self._transfer_history_scroll: ctk.CTkScrollableFrame | None = None
+        self._speed_test_label: ctk.CTkLabel | None = None
         self._history_scroll: ctk.CTkScrollableFrame | None = None
-        self._pending_label: ctk.CTkLabel | None = None
         self._pending_frame: ctk.CTkFrame | None = None
         self._footer_label: ctk.CTkLabel | None = None
         self._status_footer: ctk.CTkLabel | None = None
@@ -138,14 +161,14 @@ class DashboardWindow:
 
         self._window = ctk.CTkToplevel(self._root)
         self._window.title("CopyBoard")
-        self._window.geometry("800x640")
-        self._window.minsize(720, 560)
+        self._window.geometry("900x640")
+        self._window.minsize(780, 560)
         self._window.protocol("WM_DELETE_WINDOW", self._on_hide)
 
         self._window.update_idletasks()
         sw = self._window.winfo_screenwidth()
         sh = self._window.winfo_screenheight()
-        w, h = 800, 640
+        w, h = 900, 640
         self._window.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
         self._build_ui()
@@ -289,7 +312,7 @@ class DashboardWindow:
                 fg_color="transparent",
                 text_color=("gray30", "gray80"),
                 hover_color=("gray85", "gray25"),
-                font=ctk.CTkFont(size=13),
+                font=ctk.CTkFont(size=15),
                 command=lambda k=key: self._switch_panel(k),
             )
             btn.pack(fill="x", pady=1)
@@ -307,7 +330,7 @@ class DashboardWindow:
                 text_color=("gray40", "gray70"),
                 border_color=("gray60", "gray50"),
                 hover_color=("gray85", "gray25"),
-                font=ctk.CTkFont(size=12),
+                font=ctk.CTkFont(size=14),
                 command=self._on_open_settings,
             ).pack(fill="x", pady=(0, 2))
 
@@ -349,156 +372,286 @@ class DashboardWindow:
     # Panel: Overview
     # ═══════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _detect_local_ip() -> str:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0)
+            s.connect(("10.254.254.254", 1))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    @staticmethod
+    def _detect_network_info() -> dict:
+        """Detect current network: WiFi (SSID + signal) or Ethernet. Returns
+        {'type': 'wifi'|'ethernet'|'unknown', 'label': str, 'detail': str}."""
+        import subprocess
+        import re
+
+        # Try WiFi detection via netsh (Windows)
+        try:
+            out = subprocess.check_output(
+                ["netsh", "wlan", "show", "interfaces"],
+                text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            ssid_match = re.search(r"^\s*SSID\s*:\s*(.+)$", out, re.MULTILINE | re.IGNORECASE)
+            signal_match = re.search(r"^\s*Signal\s*:\s*(\d+)%", out, re.MULTILINE | re.IGNORECASE)
+            state_match = re.search(r"^\s*State\s*:\s*connected", out, re.MULTILINE | re.IGNORECASE)
+            if ssid_match and state_match:
+                ssid = ssid_match.group(1).strip()
+                signal = int(signal_match.group(1)) if signal_match else 0
+                bars = "▂▄▆█" if signal >= 75 else "▂▄▆ " if signal >= 50 else "▂▄  " if signal >= 25 else "▂   "
+                return {
+                    "type": "wifi",
+                    "label": f"Wi-Fi · {ssid}",
+                    "detail": f"Signal {signal}%  {bars}",
+                }
+        except Exception:
+            pass
+
+        # Try Ethernet detection (Windows)
+        try:
+            out = subprocess.check_output(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | "
+                 "Where-Object MediaType -eq '802.3' | Select-Object -First 1 "
+                 "-ExpandProperty LinkSpeed"],
+                text=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            out = out.strip()
+            if out:
+                # Convert to human-readable: e.g. "1000000000" → "1 Gbps"
+                speed_bps = int(out)
+                if speed_bps >= 1_000_000_000:
+                    speed_str = f"{speed_bps / 1_000_000_000:.0f} Gbps"
+                elif speed_bps >= 1_000_000:
+                    speed_str = f"{speed_bps / 1_000_000:.0f} Mbps"
+                else:
+                    speed_str = f"{speed_bps / 1_000:.0f} Kbps"
+                return {
+                    "type": "ethernet",
+                    "label": "Ethernet",
+                    "detail": f"Link speed {speed_str}",
+                }
+        except Exception:
+            pass
+
+        return {"type": "unknown", "label": "LAN", "detail": ""}
+
     def _build_overview_panel(self):
         panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
         cfg = self._get_config()
+        net = self._detect_network_info()
+        local_ip = self._detect_local_ip()
 
         ctk.CTkLabel(
             panel, text="System Overview",
             font=ctk.CTkFont(size=18, weight="bold"),
-        ).pack(anchor="w", pady=(0, 16))
+        ).pack(anchor="w", pady=(0, 8))
 
-        # Status card
-        card = ctk.CTkFrame(panel, corner_radius=12)
-        card.pack(fill="x", pady=(0, 12))
+        # ── Top row: 3 equal-height columns ────────────────────────────
+        top = ctk.CTkFrame(panel, fg_color="transparent")
+        top.pack(fill="x")
+        top.rowconfigure(0, weight=1)
+        for c in range(3):
+            top.columnconfigure(c, weight=1, uniform="top3")
 
-        inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="x", padx=16, pady=(14, 14))
+        # ── Col 0: Connection ──────────────────────────────────────────
+        card_s = ctk.CTkFrame(top, corner_radius=12)
+        card_s.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=(0, 8))
+        s_center = ctk.CTkFrame(card_s, fg_color="transparent")
+        s_center.pack(expand=True, fill="x", padx=16)
 
-        status_row = ctk.CTkFrame(inner, fg_color="transparent")
-        status_row.pack(fill="x")
-
-        self._status_dot = ctk.CTkFrame(status_row, width=16, height=16,
-                                        corner_radius=8, fg_color=STATUS_COLOR)
-        self._status_dot.pack(side="left", padx=(0, 12))
-
-        left = ctk.CTkFrame(status_row, fg_color="transparent")
-        left.pack(side="left")
-
+        # Sync status
+        sr = ctk.CTkFrame(s_center, fg_color="transparent")
+        sr.pack(fill="x")
+        self._status_dot = ctk.CTkFrame(sr, width=14, height=14,
+                                        corner_radius=7, fg_color=STATUS_COLOR)
+        self._status_dot.pack(side="left", padx=(0, 8))
         self._status_label = ctk.CTkLabel(
-            left, text="Sync Active",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            sr, text="Sync Active", font=ctk.CTkFont(size=15, weight="bold"),
             text_color=("gray20", "gray90"),
         )
-        self._status_label.pack(anchor="w")
+        self._status_label.pack(side="left")
 
+        # Network info
+        self._net_label = ctk.CTkLabel(
+            s_center, text=net["label"],
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=("gray30", "gray75"),
+        )
+        self._net_label.pack(anchor="w", pady=(10, 0))
+        if net["detail"]:
+            self._net_detail_label = ctk.CTkLabel(
+                s_center, text=net["detail"],
+                font=ctk.CTkFont(size=11),
+                text_color=("gray50", "gray60"),
+            )
+            self._net_detail_label.pack(anchor="w", pady=(2, 0))
+
+        # Local address
+        self._local_ip_label = ctk.CTkLabel(
+            s_center, text=f"Local address  {local_ip}:{cfg.port}",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray60"),
+        )
+        self._local_ip_label.pack(anchor="w", pady=(8, 0))
+
+        # Protocol info
+        proto_row = ctk.CTkFrame(s_center, fg_color="transparent")
+        proto_row.pack(fill="x", pady=(4, 0))
         ctk.CTkLabel(
-            left, text="TLS 1.3 encrypted  •  mDNS auto-discovery",
+            proto_row, text="Encrypted  TLS 1.3",
             font=ctk.CTkFont(size=11),
             text_color=("#27AE60", "#2ECC71"),
-        ).pack(anchor="w")
-
-        # Device info card
-        card2 = ctk.CTkFrame(panel, corner_radius=12)
-        card2.pack(fill="x", pady=(0, 12))
-
+        ).pack(side="left")
         ctk.CTkLabel(
-            card2, text="This Device",
-            font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 6))
+            proto_row, text="Discovery  mDNS",
+            font=ctk.CTkFont(size=11),
+            text_color=("#27AE60", "#2ECC71"),
+        ).pack(side="left", padx=(8, 0))
+        self._start_time = time.time()
+        self._uptime_label = ctk.CTkLabel(
+            proto_row, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray55"),
+        )
+        self._uptime_label.pack(side="right")
 
-        info_grid = ctk.CTkFrame(card2, fg_color="transparent")
-        info_grid.pack(fill="x", padx=16, pady=(0, 12))
+        # ── Col 1: This Device ─────────────────────────────────────────
+        card_d = ctk.CTkFrame(top, corner_radius=12)
+        card_d.grid(row=0, column=1, sticky="nsew", padx=5, pady=(0, 8))
+        ctk.CTkLabel(card_d, text="This Device",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 6))
+        d_grid = ctk.CTkFrame(card_d, fg_color="transparent")
+        d_grid.pack(fill="x", padx=16, pady=(0, 10))
 
-        # Device Name row (editable)
-        name_row = ctk.CTkFrame(info_grid, fg_color="transparent")
-        name_row.pack(fill="x", pady=2)
-        ctk.CTkLabel(name_row, text="Device Name:", width=100, anchor="w",
-                    font=ctk.CTkFont(size=12)).pack(side="left")
+        # Name row (editable)
+        nr = ctk.CTkFrame(d_grid, fg_color="transparent")
+        nr.pack(fill="x", pady=2)
+        ctk.CTkLabel(nr, text="Name:", width=58, anchor="w",
+                    font=ctk.CTkFont(size=11)).pack(side="left")
         self._overview_device_name = ctk.CTkLabel(
-            name_row, text=cfg.device_name,
-            font=ctk.CTkFont(size=12),
+            nr, text=cfg.device_name, font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
         )
         self._overview_device_name.pack(side="left")
         ctk.CTkButton(
-            name_row, text="✎", width=28, height=24,
+            nr, text="✎", width=20, height=18,
             fg_color="transparent", border_width=1,
             text_color=("gray50", "gray60"),
             border_color=("gray65", "gray50"),
             hover_color=("gray85", "gray25"),
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(size=8),
             command=self._edit_device_name,
-        ).pack(side="left", padx=(8, 0))
+        ).pack(side="left", padx=(4, 0))
 
-        rows = [
+        for label, value in [
             ("Device ID", cfg.device_id),
-            ("Port", str(cfg.port)),
-            ("Service", cfg.service_type),
-        ]
-        for label, value in rows:
-            row = ctk.CTkFrame(info_grid, fg_color="transparent")
+            ("Platform", platform.system() + " " + platform.machine()),
+            ("Service", cfg.service_type.replace("_copyboard._tcp.local.", "copyboard")),
+        ]:
+            row = ctk.CTkFrame(d_grid, fg_color="transparent")
             row.pack(fill="x", pady=2)
-            ctk.CTkLabel(row, text=label + ":", width=100, anchor="w",
-                        font=ctk.CTkFont(size=12)).pack(side="left")
-            ctk.CTkLabel(row, text=value,
-                        font=ctk.CTkFont(size=12),
+            ctk.CTkLabel(row, text=label + ":", width=72, anchor="w",
+                        font=ctk.CTkFont(size=11)).pack(side="left")
+            ctk.CTkLabel(row, text=value, font=ctk.CTkFont(size=11),
                         text_color=("gray50", "gray60")).pack(side="left")
 
-        # Stats card
-        card3 = ctk.CTkFrame(panel, corner_radius=12)
-        card3.pack(fill="x", pady=(0, 12))
+        # ── Col 2: Quick Controls ──────────────────────────────────────
+        card_c = ctk.CTkFrame(top, corner_radius=12)
+        card_c.grid(row=0, column=2, sticky="nsew", padx=(5, 0), pady=(0, 8))
+        c_center = ctk.CTkFrame(card_c, fg_color="transparent")
+        c_center.pack(expand=True, fill="x", padx=16)
 
-        ctk.CTkLabel(
-            card3, text="Activity",
-            font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 6))
-
-        stat_row = ctk.CTkFrame(card3, fg_color="transparent")
-        stat_row.pack(fill="x", padx=16, pady=(0, 14))
-
-        stats = [
-            ("Devices", "\U0001F4F1", "0", "_stat_peers"),
-            ("Security", "\U0001F512", "TLS 1.3", "_stat_crypto"),
-            ("History", "\U0001F4CB", "0", "_stat_history"),
-        ]
-        for title, icon, default, ref_name in stats:
-            box = ctk.CTkFrame(stat_row, corner_radius=8,
-                             fg_color=("gray95", "gray17"))
-            box.pack(side="left", fill="x", expand=True, padx=3)
-
-            ctk.CTkLabel(
-                box, text=f"{icon}  {title}",
-                font=ctk.CTkFont(size=11),
-                text_color=("gray50", "gray60"),
-            ).pack(anchor="center", padx=8, pady=(8, 2))
-
-            val = ctk.CTkLabel(
-                box, text=default,
-                font=ctk.CTkFont(size=20, weight="bold"),
-                text_color=("gray20", "gray85"),
-            )
-            val.pack(anchor="center", padx=8, pady=(0, 8))
-
-            if title == "Devices":
-                self._stat_peers = val
-            elif title == "Security":
-                self._stat_crypto = val
-            elif title == "History":
-                self._stat_history = val
-
-        # Quick controls card
-        card4 = ctk.CTkFrame(panel, corner_radius=12)
-        card4.pack(fill="x")
-
-        ctk.CTkLabel(
-            card4, text="Quick Controls",
-            font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 6))
+        ctk.CTkLabel(c_center, text="Settings",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(0, 8))
 
         self._sync_var = tk.BooleanVar(value=self._get_sync())
         ctk.CTkSwitch(
-            card4, text="Enable clipboard sync",
-            variable=self._sync_var, command=self._on_toggle_sync,
-            font=ctk.CTkFont(size=13),
-        ).pack(anchor="w", padx=16, pady=(0, 6))
+            c_center, text="Clipboard sync", variable=self._sync_var,
+            command=self._on_toggle_sync,
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", pady=(0, 6))
 
         self._autostart_var = tk.BooleanVar(value=cfg.auto_start)
         ctk.CTkSwitch(
-            card4, text="Start on login",
-            variable=self._autostart_var, command=self._on_toggle_autostart,
-            font=ctk.CTkFont(size=13),
-        ).pack(anchor="w", padx=16, pady=(0, 10))
+            c_center, text="Start at login", variable=self._autostart_var,
+            command=self._on_toggle_autostart,
+            font=ctk.CTkFont(size=12),
+        ).pack(anchor="w", pady=(0, 6))
+
+        self._theme_var = tk.BooleanVar(value=self._dark_mode)
+
+        ctk.CTkButton(
+            c_center, text="Manage devices →", width=120, height=24,
+            fg_color="transparent", border_width=1,
+            text_color=ACCENT, border_color=ACCENT,
+            hover_color=("#D6EAF8", "#1A3A4A"),
+            font=ctk.CTkFont(size=11),
+            command=lambda: self._switch_panel("devices"),
+        ).pack(anchor="w")
+
+        # ── Bottom: Activity ───────────────────────────────────────────
+        card_a = ctk.CTkFrame(panel, corner_radius=12)
+        card_a.pack(fill="both", expand=True)
+        top_bar = ctk.CTkFrame(card_a, fg_color="transparent")
+        top_bar.pack(fill="x", padx=14, pady=(12, 4))
+        ctk.CTkLabel(top_bar, text="Activity",
+                    font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(side="left")
+        self._recent_activity = ctk.CTkLabel(
+            top_bar, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray55"),
+        )
+        self._recent_activity.pack(side="right")
+
+        stat_row = ctk.CTkFrame(card_a, fg_color="transparent")
+        stat_row.pack(fill="both", expand=True, padx=11, pady=(0, 12))
+        for c in range(4):
+            stat_row.columnconfigure(c, weight=1, uniform="stat")
+
+        stats_def = [
+            ("\U0001F7E2  Connected", "0", "online", "_stat_peers", "_sub_peers"),
+            ("\U0001F4F1  Paired", "0", "trusted devices", "_stat_paired", "_sub_paired"),
+            ("\U0001F4CB  History", "0", "items saved", "_stat_history", "_sub_history"),
+            ("\U0001F4E4  Transfers", "0", "active", "_stat_transfers", "_sub_transfers"),
+        ]
+        for i, (title, default, subtitle, ref_name, sub_ref) in enumerate(stats_def):
+            box = ctk.CTkFrame(stat_row, corner_radius=8,
+                             fg_color=("gray95", "gray17"))
+            box.grid(row=0, column=i, sticky="nsew", padx=3)
+            ctk.CTkLabel(box, text=title,
+                        font=ctk.CTkFont(size=11),
+                        text_color=("gray50", "gray60"),
+            ).pack(anchor="center", padx=6, pady=(14, 2))
+            val = ctk.CTkLabel(box, text=default,
+                              font=ctk.CTkFont(size=26, weight="bold"),
+                              text_color=("gray20", "gray85"))
+            val.pack(anchor="center", padx=6)
+            sub = ctk.CTkLabel(box, text=subtitle,
+                              font=ctk.CTkFont(size=11),
+                              text_color=("gray55", "gray55"))
+            sub.pack(anchor="center", padx=6, pady=(1, 14))
+
+            if ref_name == "_stat_peers":
+                self._stat_peers = val
+                self._sub_peers = sub
+            elif ref_name == "_stat_paired":
+                self._stat_paired = val
+                self._sub_paired = sub
+            elif ref_name == "_stat_history":
+                self._stat_history = val
+                self._sub_history = sub
+            elif ref_name == "_stat_transfers":
+                self._stat_transfers = val
+                self._sub_transfers = sub
 
         return panel
 
@@ -519,30 +672,84 @@ class DashboardWindow:
                                        fg_color=OFFLINE_COLOR)
             self._status_label.configure(text="Sync Paused")
 
+        # Uptime
+        if self._uptime_label and self._start_time:
+            uptime = int(time.time() - self._start_time)
+            if uptime < 120:
+                self._uptime_label.configure(text=f"up {uptime}s")
+            elif uptime < 7200:
+                self._uptime_label.configure(text=f"up {uptime // 60}m")
+            else:
+                self._uptime_label.configure(text=f"up {uptime // 3600}h {uptime % 3600 // 60:02d}m")
+
+        # Peer stats
         try:
             peers = self._get_peers()
             connected = sum(1 for _, _, _, c in peers if c)
-            total = len(peers)
-            if self._stat_peers:
-                if total == 0:
-                    self._stat_peers.configure(text="Searching...")
-                elif connected > 0:
-                    self._stat_peers.configure(text=f"{connected}/{total}")
-                else:
-                    self._stat_peers.configure(text=f"{total}")
-        except Exception:
-            pass
+            paired = sum(1 for _, _, p, _ in peers if p)
+            known = sum(1 for _, _, p, _ in peers if p)  # paired == known
 
-        if self._stat_crypto:
-            self._stat_crypto.configure(text="TLS 1.3")
+            if self._stat_peers:
+                self._stat_peers.configure(text=str(connected))
+            if self._sub_peers:
+                self._sub_peers.configure(text=f"of {len(peers)} visible")
+            if self._stat_paired:
+                self._stat_paired.configure(text=str(paired))
+            if self._sub_paired:
+                self._sub_paired.configure(text="trusted devices")
+        except Exception:
+            if self._stat_peers:
+                self._stat_peers.configure(text="--")
+            if self._sub_peers:
+                self._sub_peers.configure(text="")
+            if self._stat_paired:
+                self._stat_paired.configure(text="--")
+            if self._sub_paired:
+                self._sub_paired.configure(text="")
 
         if self._stat_history:
             try:
                 history = self._get_history() if self._get_history else []
                 count = len(history)
                 self._stat_history.configure(text=str(count))
+                if self._sub_history:
+                    self._sub_history.configure(text="items saved")
             except Exception:
                 self._stat_history.configure(text="--")
+                if self._sub_history:
+                    self._sub_history.configure(text="")
+
+        if self._stat_transfers:
+            try:
+                transfers = self._get_transfers() if self._get_transfers else []
+                count = len(transfers)
+                self._stat_transfers.configure(text=str(count) if count > 0 else "--")
+                if self._sub_transfers:
+                    if count > 0:
+                        self._sub_transfers.configure(text="active")
+                    else:
+                        self._sub_transfers.configure(text="none active")
+            except Exception:
+                self._stat_transfers.configure(text="--")
+                if self._sub_transfers:
+                    self._sub_transfers.configure(text="")
+
+        # Recent activity summary
+        if self._recent_activity:
+            try:
+                parts = []
+                history = self._get_history() if self._get_history else []
+                if history:
+                    parts.append(f"\U0001F4CB {len(history)} clips")
+                transfers = self._get_transfers() if self._get_transfers else []
+                if transfers:
+                    parts.append(f"\U0001F4E4 {len(transfers)} transfers")
+                if parts:
+                    self._recent_activity.configure(text="  ·  ".join(parts))
+                else:
+                    self._recent_activity.configure(text="No recent activity")
+            except Exception:
+                self._recent_activity.configure(text="")
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Devices (with pairing)
@@ -598,13 +805,6 @@ class DashboardWindow:
         self._pending_frame = ctk.CTkFrame(card2, fg_color="transparent")
         self._pending_frame.pack(fill="x", padx=16, pady=(0, 12))
 
-        self._pending_label = ctk.CTkLabel(
-            self._pending_frame, text="",
-            font=ctk.CTkFont(size=11),
-            text_color=("gray40", "gray60"),
-        )
-        self._pending_label.pack(anchor="w")
-
         return panel
 
     def _refresh_devices(self):
@@ -648,12 +848,15 @@ class DashboardWindow:
                 child.destroy()
             pending = self._get_pending() if self._get_pending else []
             if pending:
-                self._pending_label.pack_forget()
                 for peer_id, code, peer_name in pending:
                     self._create_pending_row(peer_id, code, peer_name)
             else:
-                self._pending_label.configure(text="No pending pairing requests.")
-                self._pending_label.pack(anchor="w")
+                empty = ctk.CTkLabel(
+                    self._pending_frame, text="No pending pairing requests.",
+                    font=ctk.CTkFont(size=11),
+                    text_color=("gray40", "gray60"),
+                )
+                empty.pack(anchor="w")
 
     def _add_section_header(self, text: str, count: int):
         header = ctk.CTkFrame(self._device_scroll, fg_color="transparent")
@@ -671,11 +874,11 @@ class DashboardWindow:
 
     def _create_device_row(self, dev_id, dev_name, paired, connected):
         if connected:
-            color, status, icon = STATUS_COLOR, "Connected", "\U0001F7E2"
+            color, status = STATUS_COLOR, "Connected"
         elif paired:
-            color, status, icon = WARN_COLOR, "Paired (offline)", "\U0001F7E1"
+            color, status = WARN_COLOR, "Paired (offline)"
         else:
-            color, status, icon = ACCENT, "Discovered", "\U0001F535"
+            color, status = ACCENT, "Discovered"
 
         display_name = dev_name or dev_id[:12]
         display_id = dev_id[:12] if dev_name else dev_id[:16]
@@ -687,18 +890,26 @@ class DashboardWindow:
         inner = ctk.CTkFrame(row, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=10)
 
-        dot = ctk.CTkFrame(inner, width=10, height=10, corner_radius=5,
+        # ── Row 1: dot + name + device ID ──────────────────────
+        r1 = ctk.CTkFrame(inner, fg_color="transparent")
+        r1.pack(fill="x")
+
+        dot = ctk.CTkFrame(r1, width=10, height=10, corner_radius=5,
                           fg_color=color)
         dot.pack(side="left", padx=(0, 8))
 
-        mid = ctk.CTkFrame(inner, fg_color="transparent")
-        mid.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(
+            r1, text=display_name,
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(side="left")
 
         ctk.CTkLabel(
-            mid, text=display_name,
-            font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w")
+            r1, text=display_id,
+            font=ctk.CTkFont(size=9),
+            text_color=("gray60", "gray50"),
+        ).pack(side="right")
 
+        # ── Row 2: status text ─────────────────────────────────
         detail = status
         if connected:
             detail += "  \U0001F512  TLS 1.3 encrypted"
@@ -706,23 +917,14 @@ class DashboardWindow:
             detail += " — reconnect to sync"
 
         ctk.CTkLabel(
-            mid, text=detail,
+            inner, text=detail,
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(2, 0))
 
-        # Right side: device ID + action buttons
-        right = ctk.CTkFrame(inner, fg_color="transparent")
-        right.pack(side="right")
-
-        ctk.CTkLabel(
-            right, text=display_id,
-            font=ctk.CTkFont(size=9),
-            text_color=("gray60", "gray50"),
-        ).pack(side="bottom", anchor="e")
-
-        btns = ctk.CTkFrame(right, fg_color="transparent")
-        btns.pack(side="bottom", anchor="e", pady=(0, 4))
+        # ── Row 3: action buttons ──────────────────────────────
+        btns = ctk.CTkFrame(inner, fg_color="transparent")
+        btns.pack(fill="x", pady=(6, 0))
 
         if not connected and not paired and self._on_connect_peer:
             ctk.CTkButton(
@@ -791,6 +993,16 @@ class DashboardWindow:
         if messagebox.askyesno("Forget Device", f"Remove this device from known list?\n\n{peer_id}"):
             self._on_remove_peer(peer_id)
             self._refresh_devices()
+
+    def _do_speed_test(self):
+        if not self._on_speed_test:
+            return
+        if self._speed_test_label:
+            self._speed_test_label.configure(
+                text="Speed test running... sending test data.",
+                text_color=WARN_COLOR,
+            )
+        self._on_speed_test()
 
     def _create_pending_row(self, peer_id: str, code: str, peer_name: str):
         row = ctk.CTkFrame(self._pending_frame, fg_color=("gray90", "gray20"),
@@ -883,13 +1095,19 @@ class DashboardWindow:
         search_frame = ctk.CTkFrame(panel, corner_radius=8, fg_color=("gray95", "gray17"))
         search_frame.pack(fill="x", pady=(0, 8))
 
+        ctk.CTkLabel(
+            search_frame, text="🔍",
+            font=ctk.CTkFont(size=14),
+        ).pack(side="left", padx=(12, 0), pady=4)
+
         self._history_search_var = tk.StringVar()
         self._history_search_timer: str | None = None
         search_entry = ctk.CTkEntry(
             search_frame, textvariable=self._history_search_var,
             height=32, placeholder_text="Search history...",
+            fg_color="transparent",
         )
-        search_entry.pack(fill="x", padx=12, pady=8)
+        search_entry.pack(side="left", fill="x", expand=True, padx=(4, 12), pady=8)
         search_entry.bind("<KeyRelease>", self._on_search_keyrelease)
 
         # History list
@@ -905,16 +1123,14 @@ class DashboardWindow:
         if self._history_scroll is None or self._get_history is None:
             return
 
-        for child in self._history_scroll.winfo_children():
-            child.destroy()
-
-        self._last_history_count = 0  # reset, will be updated on next auto-refresh
-
         query = (self._history_search_var.get().strip()
                  if self._history_search_var else "")
 
         entries = (self._search_history(query) if query and self._search_history
                    else self._get_history())
+
+        for child in self._history_scroll.winfo_children():
+            child.destroy()
 
         if not entries:
             ctk.CTkLabel(
@@ -924,17 +1140,34 @@ class DashboardWindow:
                 text_color=("gray50", "gray60"),
                 justify="center",
             ).pack(fill="x", expand=True, pady=40)
-            return
+        else:
+            for i, entry in enumerate(entries):
+                self._create_history_card(i, entry)
 
-        for i, entry in enumerate(entries):
-            self._create_history_card(i, entry)
+    @staticmethod
+    def _sanitize_preview(raw: str, max_len: int = 120) -> str:
+        """Strip control and replacement characters for clean display."""
+        import unicodedata
+        if not raw:
+            return ""
+        cleaned = "".join(
+            ch if (unicodedata.category(ch)[0] != "C"
+                   and ch != "�") or ch in ("\t", "\n", "\r")
+            else " "
+            for ch in raw
+        )
+        cleaned = " ".join(cleaned.split())
+        return cleaned[:max_len]
 
     def _create_history_card(self, index: int, entry: dict):
         timestamp = entry.get("timestamp", 0)
-        content_type = entry.get("content_type", "?")
-        preview = entry.get("text_preview", "")[:120]
+        content_type = entry.get("content_type", "Unknown")
+        preview = self._sanitize_preview(entry.get("text_preview", ""))
 
-        time_str = datetime.datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
+        if timestamp and timestamp > 0:
+            time_str = datetime.datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
+        else:
+            time_str = ""
 
         card = ctk.CTkFrame(self._history_scroll, corner_radius=8,
                            fg_color=("gray95", "gray17"))
@@ -953,11 +1186,12 @@ class DashboardWindow:
             text_color=("#2A82C7", "#5DADE2"),
         ).pack(side="left")
 
-        ctk.CTkLabel(
-            top, text=time_str,
-            font=ctk.CTkFont(size=11),
-            text_color=("gray50", "gray60"),
-        ).pack(side="right")
+        if time_str:
+            ctk.CTkLabel(
+                top, text=time_str,
+                font=ctk.CTkFont(size=11),
+                text_color=("gray50", "gray60"),
+            ).pack(side="right")
 
         if preview:
             ctk.CTkLabel(
@@ -967,12 +1201,22 @@ class DashboardWindow:
                 anchor="w", justify="left",
             ).pack(fill="x", pady=(4, 6))
 
-        copy_btn = ctk.CTkButton(
-            inner, text="Copy to Clipboard", width=130, height=26,
+        btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+        btn_row.pack(fill="x")
+        ctk.CTkButton(
+            btn_row, text="Copy", width=60, height=26,
             font=ctk.CTkFont(size=11),
             command=lambda i=index: self._do_copy_history(i),
-        )
-        copy_btn.pack(anchor="w")
+        ).pack(side="left")
+        ctk.CTkButton(
+            btn_row, text="Delete", width=60, height=26,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#5B2C2C"),
+            font=ctk.CTkFont(size=11),
+            command=lambda i=index: self._on_delete_history_item(i),
+        ).pack(side="left", padx=(6, 0))
 
     def _do_copy_history(self, index: int):
         if self._copy_from_history:
@@ -994,6 +1238,13 @@ class DashboardWindow:
             self._clear_history()
             self._refresh_history_list()
 
+    def _on_delete_history_item(self, index: int):
+        if self._delete_history_item is None:
+            return
+        self._delete_history_item(index)
+        # Defer rebuild so the button animation completes first
+        self._root.after(50, self._refresh_history_list)
+
     # ═══════════════════════════════════════════════════════════════
     # Panel: Transfers
     # ═══════════════════════════════════════════════════════════════
@@ -1002,36 +1253,77 @@ class DashboardWindow:
         panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
 
         header = ctk.CTkFrame(panel, fg_color="transparent")
-        header.pack(fill="x", pady=(0, 12))
+        header.pack(fill="x", pady=(0, 10))
 
         ctk.CTkLabel(
             header, text="File Transfers",
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(side="left")
 
+        btn_row = ctk.CTkFrame(header, fg_color="transparent")
+        btn_row.pack(side="right")
+
         if self._on_send_file:
             ctk.CTkButton(
-                header, text="\U0001F4E4  Send File",
-                width=120, height=32,
+                btn_row, text="Send File", width=90, height=30,
                 command=self._on_send_file,
-            ).pack(side="right")
+            ).pack(side="left", padx=(0, 6))
 
+        # Speed Test button
+        ctk.CTkButton(
+            btn_row, text="Speed Test", width=90, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=ACCENT, border_color=ACCENT,
+            hover_color=("#D6EAF8", "#1A3A4A"),
+            font=ctk.CTkFont(size=12),
+            command=self._do_speed_test,
+        ).pack(side="left")
+
+        # ── Active + History side-by-side ───────────────────────────
         card = ctk.CTkFrame(panel, corner_radius=12)
-        card.pack(fill="both", expand=True)
+        card.pack(fill="x")
+        card.columnconfigure(0, weight=1, uniform="tf_sec")
+        card.columnconfigure(2, weight=1, uniform="tf_sec")
 
-        ctk.CTkLabel(
-            card, text="Active Transfers",
-            font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 8))
+        # Active (left)
+        left = ctk.CTkFrame(card, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(12, 6), pady=(8, 8))
+        ctk.CTkLabel(left, text="Active",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w")
+        self._transfer_scroll = ctk.CTkScrollableFrame(left, fg_color="transparent",
+                                                       height=100)
+        self._transfer_scroll.pack(fill="both", expand=True, pady=(2, 0))
 
-        self._transfer_scroll = ctk.CTkScrollableFrame(card, fg_color="transparent")
-        self._transfer_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        # Separator (vertical)
+        vsep = ctk.CTkFrame(card, width=1, fg_color=("gray80", "gray30"))
+        vsep.grid(row=0, column=1, sticky="ns", pady=12)
+
+        # History (right)
+        right = ctk.CTkFrame(card, fg_color="transparent")
+        right.grid(row=0, column=2, sticky="nsew", padx=(6, 12), pady=(8, 8))
+        ctk.CTkLabel(right, text="History",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w")
+        self._transfer_history_scroll = ctk.CTkScrollableFrame(right, fg_color="transparent",
+                                                                height=100)
+        self._transfer_history_scroll.pack(fill="both", expand=True, pady=(2, 0))
+
+        # Speed test result below the card
+        self._speed_test_label = ctk.CTkLabel(
+            panel, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray55"),
+        )
+        self._speed_test_label.pack(anchor="w", pady=(2, 0))
 
         return panel
 
     def _refresh_transfers(self):
-        if self._transfer_scroll is None:
+        if self._transfer_scroll is None or self._transfer_history_scroll is None:
             return
+
+        # ── Active transfers ───────────────────────────────────────
         for child in self._transfer_scroll.winfo_children():
             child.destroy()
 
@@ -1039,15 +1331,67 @@ class DashboardWindow:
         if not transfers:
             ctk.CTkLabel(
                 self._transfer_scroll,
-                text="No active transfers.\nSend a file to get started.",
+                text="No active transfers.",
                 font=ctk.CTkFont(size=12),
                 text_color=("gray50", "gray60"),
-                justify="center",
-            ).pack(fill="x", expand=True, pady=30)
-            return
+            ).pack(fill="x", pady=8)
+        else:
+            for t in transfers:
+                self._create_transfer_card(t)
 
-        for t in transfers:
-            self._create_transfer_card(t)
+        # ── History ─────────────────────────────────────────────────
+        for child in self._transfer_history_scroll.winfo_children():
+            child.destroy()
+
+        history = self._get_transfer_history() if self._get_transfer_history else []
+        if not history:
+            ctk.CTkLabel(
+                self._transfer_history_scroll,
+                text="No completed transfers yet.",
+                font=ctk.CTkFont(size=12),
+                text_color=("gray50", "gray60"),
+            ).pack(fill="x", pady=8)
+        else:
+            for h in history[:20]:  # show last 20
+                self._create_transfer_history_card(h)
+
+        # ── Speed test result ──────────────────────────────────────
+        if self._speed_test_label and self._get_speed_test_result:
+            st = self._get_speed_test_result()
+            if st:
+                state = st.get("state", "")
+                mbps = st.get("result_mbps", 0)
+                if state == "sending":
+                    sent = st.get("chunks_sent", 0)
+                    total = st.get("total_chunks", 0)
+                    self._speed_test_label.configure(
+                        text=f"Speed test {sent}/{total}",
+                        text_color=WARN_COLOR,
+                    )
+                elif state in ("done", "acknowledged") and mbps > 0:
+                    quality = "fast" if mbps > 10 else "good" if mbps > 2 else "slow"
+                    self._speed_test_label.configure(
+                        text=f"{mbps:.1f} MB/s ({quality})",
+                        text_color=STATUS_COLOR,
+                    )
+
+    def _format_speed(self, bytes_per_sec: float) -> str:
+        if bytes_per_sec < 1024:
+            return f"{bytes_per_sec:.0f} B/s"
+        elif bytes_per_sec < 1024 * 1024:
+            return f"{bytes_per_sec / 1024:.1f} KB/s"
+        else:
+            return f"{bytes_per_sec / (1024 * 1024):.1f} MB/s"
+
+    def _format_eta(self, seconds: float) -> str:
+        if seconds <= 0:
+            return ""
+        if seconds < 60:
+            return f"{int(seconds)}s left"
+        elif seconds < 3600:
+            return f"{int(seconds / 60)}m {int(seconds % 60)}s left"
+        else:
+            return f"{int(seconds / 3600)}h left"
 
     def _create_transfer_card(self, transfer: dict):
         direction = transfer.get("direction", "down")
@@ -1055,6 +1399,8 @@ class DashboardWindow:
         file_size = transfer.get("file_size", 0)
         progress = transfer.get("progress", 0.0)
         state = transfer.get("state", "unknown")
+        speed = transfer.get("speed_bytes_per_sec", 0.0)
+        eta = transfer.get("eta_seconds", 0.0)
 
         arrow = "\U0001F4E4" if direction == "up" else "\U0001F4E5"
         size_str = self._format_size(file_size)
@@ -1066,46 +1412,93 @@ class DashboardWindow:
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=10)
 
+        # Row 1: file name + size
+        r1 = ctk.CTkFrame(inner, fg_color="transparent")
+        r1.pack(fill="x")
         ctk.CTkLabel(
-            inner, text=f"{arrow}  {file_name}",
+            r1, text=f"{arrow}  {file_name}",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w")
+        ).pack(side="left")
+        ctk.CTkLabel(
+            r1, text=size_str,
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        ).pack(side="right")
 
-        info = ctk.CTkFrame(inner, fg_color="transparent")
-        info.pack(fill="x", pady=(4, 0))
-
+        # Row 2: status + speed + ETA
         state_labels = {
             "awaiting_ack": "Waiting for peer...",
             "pending": "Waiting for acceptance...",
-            "receiving": f"Receiving...  {int(progress * 100)}%",
+            "receiving": "Receiving...",
             "sending": "Sending...",
             "cancelled": "Cancelled",
         }
         status_text = state_labels.get(state, state.replace("_", " ").title())
 
+        extras = []
+        if state in ("receiving", "sending"):
+            extras.append(f"{int(progress * 100)}%")
+        if speed > 0:
+            extras.append(self._format_speed(speed))
+        if eta > 0:
+            extras.append(self._format_eta(eta))
+
+        r2 = ctk.CTkFrame(inner, fg_color="transparent")
+        r2.pack(fill="x")
         ctk.CTkLabel(
-            info, text=f"{status_text}  |  {size_str}",
+            r2, text="  |  ".join([status_text] + extras) if extras else status_text,
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
         ).pack(side="left")
 
+        # Progress bar
         if state in ("receiving", "sending") and progress > 0:
             bar = ctk.CTkProgressBar(inner, height=6)
             bar.pack(fill="x", pady=(6, 0))
             bar.set(progress)
 
-        # Cancel button for active transfers
+        # Cancel button
         if self._on_cancel_transfer and state not in ("complete", "failed", "cancelled", "error"):
-            cancel_btn = ctk.CTkButton(
-                inner, text="✕  Cancel", width=70, height=22,
+            ctk.CTkButton(
+                inner, text="Cancel", width=60, height=22,
                 fg_color="transparent", border_width=1,
                 text_color=("#E74C3C", "#C0392B"),
                 border_color=("#E74C3C", "#C0392B"),
                 hover_color=("#FADBD8", "#5B2C2C"),
                 font=ctk.CTkFont(size=10),
                 command=lambda tid=transfer.get("transfer_id", ""): self._on_cancel_transfer(tid),
-            )
-            cancel_btn.pack(anchor="e", pady=(4, 0))
+            ).pack(anchor="e", pady=(4, 0))
+
+    def _create_transfer_history_card(self, entry: dict):
+        direction = entry.get("direction", "down")
+        file_name = entry.get("file_name", "?")
+        file_size = entry.get("file_size", 0)
+        success = entry.get("success", False)
+        timestamp = entry.get("timestamp", 0)
+
+        arrow = "\U0001F4E4" if direction == "up" else "\U0001F4E5"
+        status_icon = "✅" if success else "❌"
+        size_str = self._format_size(file_size)
+        time_str = datetime.datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
+
+        card = ctk.CTkFrame(self._transfer_history_scroll, corner_radius=6,
+                           fg_color=("gray95", "gray17"))
+        card.pack(fill="x", pady=1, padx=2)
+
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="x", padx=12, pady=8)
+
+        r1 = ctk.CTkFrame(inner, fg_color="transparent")
+        r1.pack(fill="x")
+        ctk.CTkLabel(
+            r1, text=f"{status_icon}  {arrow}  {file_name}",
+            font=ctk.CTkFont(size=12),
+        ).pack(side="left")
+        ctk.CTkLabel(
+            r1, text=f"{size_str}  ·  {time_str}",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray50", "gray60"),
+        ).pack(side="right")
 
     @staticmethod
     def _format_size(size: int) -> str:
@@ -1167,3 +1560,5 @@ class DashboardWindow:
         self._theme_btn.configure(
             text="☀  Light" if self._dark_mode else "☾  Dark"
         )
+        if self._theme_var is not None:
+            self._theme_var.set(self._dark_mode)

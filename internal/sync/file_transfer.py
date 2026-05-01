@@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 65536                     # 64 KB per chunk
 TRANSFER_TIMEOUT = 120.0               # seconds -- overall transfer deadline
 COMPLETION_WAIT_TIMEOUT = 60.0         # seconds -- wait for FILE_COMPLETE after last chunk
+SPEED_TEST_CHUNKS = 20                 # number of chunks for speed test (~1.3 MB)
+MAX_HISTORY = 50                       # max completed transfers to remember
 
 _MIME_BY_EXT: dict[str, str] = {
     ".txt": "text/plain",
@@ -133,8 +135,12 @@ class FileTransferManager:
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._transfer_timeout = transfer_timeout
 
-        # transfer_id -> dict (see _init_outgoing / _init_incoming helpers)
+        # transfer_id -> dict (active transfers)
         self._transfers: dict[str, dict[str, Any]] = {}
+        # Completed transfers history: list of dicts (newest first)
+        self._history: list[dict[str, Any]] = []
+        # Speed test state
+        self._speed_test: dict[str, Any] | None = None
         self._lock = threading.Lock()
 
         # ---- UI callbacks ----
@@ -217,6 +223,8 @@ class FileTransferManager:
                 "state": "awaiting_ack",
                 "start_time": time.time(),
                 "acked": False,
+                "_last_progress": 0.0,
+                "_bytes_sent": 0,
             }
 
         self._send_as_frame(
@@ -312,6 +320,7 @@ class FileTransferManager:
         with self._lock:
             self._transfers.pop(transfer_id, None)
 
+        self._add_to_history(transfer, False)
         logger.info("Transfer %s cancelled by user", transfer_id[:8])
         if self._on_transfer_complete is not None:
             self._on_transfer_complete(transfer_id, False)
@@ -364,6 +373,8 @@ class FileTransferManager:
             "file_ack": self._handle_file_ack,
             "file_reject": self._handle_file_reject,
             "file_complete": self._handle_file_complete,
+            "speed_test_data": self.handle_speed_test_data,
+            "speed_test_result": self.handle_speed_test_result,
         }
         handler = handler_map.get(msg_type)
         if handler is None:
@@ -573,6 +584,7 @@ class FileTransferManager:
                 send_fn,
             )
             logger.info("File received successfully: %s -> %s", file_name, dest_path)
+            self._add_to_history(transfer, True)
 
             if self._on_file_received is not None:
                 self._on_file_received(transfer_id, str(dest_path), file_name)
@@ -646,6 +658,7 @@ class FileTransferManager:
 
         if transfer is not None and transfer.get("type") == "outgoing":
             success = status == "success"
+            self._add_to_history(transfer, success)
             logger.info(
                 "File transfer %s %s (%s) -- status=%s",
                 transfer_id[:8],
@@ -700,6 +713,12 @@ class FileTransferManager:
                     self._send_as_frame(file_chunk_payload, broadcast_fn)
 
                     progress = (chunk_index + 1) / total_chunks
+                    bytes_sent = (chunk_index + 1) * self.CHUNK_SIZE
+                    with self._lock:
+                        t = self._transfers.get(transfer_id)
+                        if t:
+                            t["_last_progress"] = progress
+                            t["_bytes_sent"] = min(bytes_sent, t.get("file_size", bytes_sent))
                     if self._on_transfer_progress is not None:
                         self._on_transfer_progress(transfer_id, progress)
 
@@ -749,30 +768,158 @@ class FileTransferManager:
         """Return a snapshot of active transfers for UI display.
 
         Each dict contains:
-          ``transfer_id``, ``file_name``, ``file_size``, ``direction``
-          (``"up"`` or ``"down"``), ``state``, and ``progress`` (0.0–1.0).
+          ``transfer_id``, ``file_name``, ``file_size``, ``direction``,
+          ``state``, ``progress`` (0.0–1.0), ``speed_bytes_per_sec``,
+          ``eta_seconds``.
         """
         result: list[dict] = []
+        now = time.time()
         with self._lock:
             for tid, t in self._transfers.items():
                 direction = "up" if t.get("type") == "outgoing" else "down"
                 state = t.get("state", "unknown")
                 total = max(t.get("total_chunks", 1), 1)
+                file_size = t.get("file_size", 0)
                 if t.get("type") == "incoming":
                     progress = t.get("received_chunks", 0) / total
+                    bytes_done = t.get("received_bytes", 0)
                 elif state == "awaiting_ack":
                     progress = 0.0
+                    bytes_done = 0
                 else:
-                    progress = 0.5  # sending chunks (exact progress not stored)
+                    # outgoing: track last known chunk progress
+                    progress = t.get("_last_progress", 0.0)
+                    bytes_done = int(progress * file_size) if file_size else 0
+                elapsed = now - t.get("start_time", now)
+                speed = bytes_done / elapsed if elapsed > 0.5 and bytes_done > 0 else 0.0
+                remaining = file_size - bytes_done
+                eta = remaining / speed if speed > 0 and remaining > 0 else 0.0
                 result.append({
                     "transfer_id": tid,
                     "file_name": t.get("file_name", "?"),
-                    "file_size": t.get("file_size", 0),
+                    "file_size": file_size,
                     "direction": direction,
                     "state": state,
                     "progress": min(progress, 1.0),
+                    "speed_bytes_per_sec": speed,
+                    "eta_seconds": eta,
                 })
         return result
+
+    def get_history(self) -> list[dict]:
+        """Return completed transfer history (newest first)."""
+        with self._lock:
+            return list(self._history)
+
+    def get_speed_test(self) -> dict | None:
+        """Return current speed test state, if any."""
+        with self._lock:
+            return dict(self._speed_test) if self._speed_test else None
+
+    def _add_to_history(self, transfer: dict, success: bool):
+        """Record a completed transfer in the history list."""
+        entry = {
+            "file_name": transfer.get("file_name", "?"),
+            "file_size": transfer.get("file_size", 0),
+            "direction": "up" if transfer.get("type") == "outgoing" else "down",
+            "success": success,
+            "state": transfer.get("state", "unknown"),
+            "timestamp": time.time(),
+        }
+        with self._lock:
+            self._history.insert(0, entry)
+            if len(self._history) > MAX_HISTORY:
+                self._history = self._history[:MAX_HISTORY]
+
+    # ------------------------------------------------------------------
+    # Speed Test
+    # ------------------------------------------------------------------
+
+    def start_speed_test(self, broadcast_fn: Callable[[bytes], None]) -> str | None:
+        """Start a speed test to measure network throughput between peers.
+
+        Sends a burst of dummy data and measures the time until the peer
+        echoes back a result. Returns a transfer_id for tracking, or None
+        if no peer is connected.
+        """
+        test_id = uuid.uuid4().hex
+        start_time = time.time()
+        with self._lock:
+            self._speed_test = {
+                "test_id": test_id,
+                "state": "sending",
+                "start_time": start_time,
+                "chunks_sent": 0,
+                "total_chunks": SPEED_TEST_CHUNKS,
+                "result_mbps": 0.0,
+            }
+
+        # Send test chunks in a background thread
+        thread = threading.Thread(
+            target=self._run_speed_test,
+            args=(test_id, broadcast_fn),
+            daemon=True,
+            name=f"speed-test-{test_id[:8]}",
+        )
+        thread.start()
+        return test_id
+
+    def _run_speed_test(self, test_id: str, broadcast_fn: Callable[[bytes], None]):
+        import secrets as _secrets
+        dummy = base64.b64encode(_secrets.token_bytes(CHUNK_SIZE)).decode("ascii")
+        total_bytes = SPEED_TEST_CHUNKS * CHUNK_SIZE
+        start = time.time()
+
+        for i in range(SPEED_TEST_CHUNKS):
+            with self._lock:
+                if self._speed_test is None or self._speed_test.get("test_id") != test_id:
+                    return
+            self._send_as_frame(
+                {
+                    "msg_type": "speed_test_data",
+                    "test_id": test_id,
+                    "chunk_index": i,
+                    "total_chunks": SPEED_TEST_CHUNKS,
+                    "data": dummy,
+                },
+                broadcast_fn,
+            )
+            with self._lock:
+                if self._speed_test:
+                    self._speed_test["chunks_sent"] = i + 1
+            time.sleep(0.002)  # minimal delay between chunks
+
+        elapsed = time.time() - start
+        mbps = (total_bytes / (1024 * 1024)) / elapsed if elapsed > 0 else 0.0
+        with self._lock:
+            if self._speed_test:
+                self._speed_test["state"] = "done"
+                self._speed_test["result_mbps"] = round(mbps, 2)
+        logger.info("Speed test %s complete: %.2f MB/s", test_id[:8], mbps)
+
+    def handle_speed_test_data(self, payload: dict, send_fn: Callable[[bytes], None]):
+        """Receiver side: echo back speed test data as result."""
+        test_id = payload.get("test_id", "")
+        chunk_index = payload.get("chunk_index", 0)
+        total_chunks = payload.get("total_chunks", 0)
+        # On the last chunk, send a result back
+        if chunk_index >= total_chunks - 1:
+            self._send_as_frame(
+                {
+                    "msg_type": "speed_test_result",
+                    "test_id": test_id,
+                },
+                send_fn,
+            )
+
+    def handle_speed_test_result(self, payload: dict, _send_fn=None):
+        """Sender side: peer acknowledged speed test."""
+        test_id = payload.get("test_id", "")
+        with self._lock:
+            if self._speed_test and self._speed_test.get("test_id") == test_id:
+                if self._speed_test["state"] == "sending":
+                    # Mark as done; the sending thread will finalize
+                    self._speed_test["state"] = "acknowledged"
 
     # ------------------------------------------------------------------
     # Housekeeping

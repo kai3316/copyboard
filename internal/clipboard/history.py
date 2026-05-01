@@ -123,6 +123,15 @@ class ClipboardHistory:
                 return dict(self._entries[index])
             return None
 
+    def delete(self, index: int) -> bool:
+        """Delete a single entry by index (0 = newest). Returns True if deleted."""
+        with self._lock:
+            if 0 <= index < len(self._entries):
+                self._entries.pop(index)
+                self._save()
+                return True
+            return False
+
     def clear(self) -> None:
         """Delete all history entries and persist the empty state."""
         with self._lock:

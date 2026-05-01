@@ -503,6 +503,9 @@ def main():
     def _clear_history():
         clipboard_history.clear()
 
+    def _delete_history_item(index: int):
+        return clipboard_history.delete(index)
+
     # ── Settings window ──────────────────────────────────────────
     settings_win: SettingsWindow | None = None
 
@@ -566,6 +569,10 @@ def main():
             search_history=_search_history,
             copy_from_history=_copy_from_history,
             clear_history=_clear_history,
+            delete_history_item=_delete_history_item,
+            get_transfer_history=lambda: file_transfer_mgr.get_history(),
+            on_speed_test=lambda: file_transfer_mgr.start_speed_test(transport_mgr.broadcast),
+            get_speed_test_result=lambda: file_transfer_mgr.get_speed_test(),
         )
         dashboard_win.show()
 
