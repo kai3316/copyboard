@@ -53,9 +53,11 @@ class PeerConnection:
         self._running = True
         self._recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
         self._recv_thread.start()
+        logger.debug("[%s] PeerConnection started (conn=%s)", self.device_name, hex(id(self)))
 
     def stop(self):
         self._running = False
+        logger.debug("[%s] PeerConnection stopping (conn=%s)", self.device_name, hex(id(self)))
         try:
             self._sock.shutdown(socket.SHUT_RDWR)
         except Exception:
@@ -114,9 +116,10 @@ class PeerConnection:
                 logger.warning("Error receiving from %s: %s", self.device_name, e)
                 break
 
-        logger.info("Disconnected from %s", self.device_name)
+        logger.info("[%s] recv_loop ended (conn=%s)", self.device_name, hex(id(self)))
         self._running = False
         if self._on_disconnect:
+            logger.debug("[%s] calling on_disconnect callback (conn=%s)", self.device_name, hex(id(self)))
             self._on_disconnect(self.device_id, self)
 
     def _recv_exact(self, n: int) -> bytes | None:
@@ -329,19 +332,27 @@ class TransportManager:
     def connect_to_peer(self, peer_id: str, peer_name: str, address: str, port: int):
         with self._lock:
             if peer_id in self._peers:
+                logger.debug(
+                    "[%s] connect_to_peer: already connected (peer_id=%s), skipping",
+                    peer_name, peer_id[:12],
+                )
                 return  # already connected
             self._peer_addresses[peer_id] = (peer_name, address, port)
+        logger.info("[%s] connecting to %s:%d (peer_id=%s)", peer_name, address, port, peer_id[:12])
 
         def _connect():
             sock = None
             try:
+                logger.debug("[%s] TCP connecting to %s:%d", peer_name, address, port)
                 sock = socket.create_connection((address, port), timeout=10)
+                logger.debug("[%s] TCP connected, starting TLS handshake", peer_name)
 
                 verify_id = peer_id if self._pairing_mgr.is_peer_paired(peer_id) else None
                 ssl_context = self._build_ssl_context(
                     server_side=False, verify_peer_id=verify_id)
 
                 ssl_sock = ssl_context.wrap_socket(sock, server_hostname=peer_id)
+                logger.debug("[%s] TLS handshake complete", peer_name)
 
                 # Extract real device_id from peer certificate CN.
                 # Discovery may pass a hashed ID for privacy; the cert
@@ -360,6 +371,10 @@ class TransportManager:
                         pass
 
                     was_paired = self._pairing_mgr.is_peer_paired(real_peer_id)
+                    logger.debug(
+                        "[%s] cert extracted: real_peer_id=%s, was_paired=%s, peer_id=%s",
+                        peer_name, real_peer_id[:12], was_paired, peer_id[:12],
+                    )
                     self._pairing_mgr.add_peer(
                         real_peer_id, peer_name, peer_cert_pem,
                         paired=was_paired,
@@ -368,7 +383,7 @@ class TransportManager:
                         try:
                             shared_code = self._pairing_mgr.generate_shared_pairing_code(real_peer_id)
                             logger.info(
-                                "Pairing code for %s: %s — verify this code on both devices",
+                                "[%s] pairing code: %s — verify on both devices",
                                 peer_name, shared_code,
                             )
                         except Exception as e:
@@ -381,13 +396,20 @@ class TransportManager:
 
                 with self._lock:
                     if not self._running:
+                        logger.debug("[%s] server stopped, discarding new connection", peer_name)
                         conn.set_on_disconnect(None)
                         conn.stop()
                         return
                     # If discovery used a hashed ID, also clean up under that key
                     if real_peer_id != peer_id:
+                        logger.debug(
+                            "[%s] hash→real mismatch: hash=%s real=%s, cleaning up hash entry",
+                            peer_name, peer_id[:12], real_peer_id[:12],
+                        )
                         old_hash = self._peers.pop(peer_id, None)
                         if old_hash:
+                            logger.debug("[%s] stopping old connection under hash key (conn=%s)",
+                                         peer_name, hex(id(old_hash)))
                             old_hash.set_on_disconnect(None)
                             old_hash.stop()
                         # Re-key address tracking under the real ID
@@ -398,13 +420,21 @@ class TransportManager:
                         self._hash_to_real_id[peer_id] = real_peer_id
                     old = self._peers.pop(real_peer_id, None)
                     if old:
+                        logger.debug(
+                            "[%s] replacing existing connection under real ID (old=%s, new=%s)",
+                            peer_name, hex(id(old)), hex(id(conn)),
+                        )
                         old.set_on_disconnect(None)
                         old.stop()
                     self._peers[real_peer_id] = conn
+                    logger.debug(
+                        "[%s] stored in _peers[%s] (total peers: %d)",
+                        peer_name, real_peer_id[:12], len(self._peers),
+                    )
 
                 self._reconnect_attempts.pop(peer_id, None)
                 self._reconnect_attempts.pop(real_peer_id, None)
-                logger.info("Connected to peer %s [%s] (%s:%d)", peer_name, real_peer_id, address, port)
+                logger.info("[%s] connected [%s] (%s:%d)", peer_name, real_peer_id[:12], address, port)
 
             except CertificateChangedError:
                 logger.error(
@@ -417,7 +447,7 @@ class TransportManager:
                     except Exception:
                         pass
             except Exception as e:
-                logger.warning("Failed to connect to %s: %s", peer_name, e)
+                logger.warning("[%s] connect failed: %s", peer_name, e)
                 if sock:
                     try:
                         sock.close()
@@ -437,6 +467,7 @@ class TransportManager:
         with self._lock:
             conn = self._peers.pop(peer_id, None)
         if conn:
+            logger.info("[%s] manual disconnect", peer_id[:12])
             conn.set_on_disconnect(None)
             conn.stop()
 
@@ -459,22 +490,33 @@ class TransportManager:
         with self._lock:
             current = self._peers.get(peer_id)
             if current is None:
-                pass  # already removed, nothing to do
+                logger.info(
+                    "[%s] disconnect: already removed from _peers (conn=%s)",
+                    peer_id[:12], hex(id(conn)) if conn else "N/A",
+                )
             elif conn is not None and current is not conn:
                 # Disconnect is from a stale connection that was already
                 # replaced by a newer one (e.g. during bidirectional connection
                 # race). Don't delete the good connection.
-                logger.debug(
-                    "Ignoring disconnect from stale connection for %s", peer_id,
+                logger.info(
+                    "[%s] disconnect from STALE connection (old=%s, current=%s) — ignoring",
+                    peer_id[:12], hex(id(conn)), hex(id(current)),
                 )
                 return
             else:
+                logger.info(
+                    "[%s] disconnect from current connection (conn=%s) — removing from _peers",
+                    peer_id[:12], hex(id(conn)) if conn else "N/A",
+                )
                 del self._peers[peer_id]
         self._schedule_reconnect(peer_id)
 
     def _schedule_reconnect(self, peer_id: str):
         with self._lock:
             if peer_id not in self._peer_addresses:
+                logger.debug(
+                    "[%s] reconnect: no saved address, skipping", peer_id[:12],
+                )
                 return
             if not self._running:
                 return
@@ -484,17 +526,22 @@ class TransportManager:
                 self._reconnect_attempts.pop(peer_id, None)
                 if saved:
                     logger.warning(
-                        "Gave up reconnecting to %s (%s:%d) after %d attempts",
-                        peer_id, saved[1], saved[2], self._max_reconnect_attempts,
+                        "[%s] gave up reconnecting to %s:%d after %d attempts",
+                        peer_id[:12], saved[1], saved[2], self._max_reconnect_attempts,
                     )
                 return
             delay = max(MIN_RECONNECT_DELAY, min(2 ** attempts, MAX_RECONNECT_BACKOFF))
             self._reconnect_attempts[peer_id] = attempts + 1
+            logger.debug(
+                "[%s] scheduling reconnect attempt %d/%d in %.0fs",
+                peer_id[:12], attempts + 1, self._max_reconnect_attempts, delay,
+            )
         timer = threading.Timer(delay, self._try_reconnect, args=(peer_id,))
         timer.daemon = True
         with self._lock:
             old = self._reconnect_timers.pop(peer_id, None)
         if old:
+            logger.debug("[%s] cancelled previous reconnect timer", peer_id[:12])
             old.cancel()
         with self._lock:
             self._reconnect_timers[peer_id] = timer
@@ -503,14 +550,23 @@ class TransportManager:
     def _try_reconnect(self, peer_id: str):
         with self._lock:
             if peer_id in self._peers:
+                logger.debug(
+                    "[%s] reconnect timer fired but peer already connected — skipping",
+                    peer_id[:12],
+                )
                 self._reconnect_attempts.pop(peer_id, None)
                 return
             if not self._running:
                 return
             saved = self._peer_addresses.get(peer_id)
             if not saved:
+                logger.debug(
+                    "[%s] reconnect timer fired but no saved address — skipping",
+                    peer_id[:12],
+                )
                 return
             peer_name, address, port = saved
+        logger.info("[%s] reconnect timer fired — reconnecting to %s:%d", peer_id[:12], address, port)
         self.connect_to_peer(peer_id, peer_name, address, port)
 
     def _health_check_loop(self):
@@ -526,7 +582,8 @@ class TransportManager:
 
             if gap > 60:
                 logger.info(
-                    "Sleep/wake detected (gap=%.0fs), recovering connections", gap,
+                    "Sleep/wake detected (gap=%.0fs), recovering %d connections",
+                    gap, len(self._peers),
                 )
                 self._handle_wake()
                 if self._on_wake:
@@ -540,7 +597,7 @@ class TransportManager:
                 for peer_id, conn in peers:
                     if not conn.health_check():
                         logger.warning(
-                            "Health check failed for %s, disconnecting", peer_id,
+                            "[%s] health check FAILED — disconnecting", peer_id[:12],
                         )
                         conn.set_on_disconnect(None)
                         conn.stop()
@@ -557,6 +614,10 @@ class TransportManager:
                 timer.cancel()
             self._reconnect_timers.clear()
             self._reconnect_attempts.clear()
+        logger.info(
+            "Wake recovery: clearing %d stale connections, reconnecting to %d known peers",
+            len(stale_peers), len(saved_addresses),
+        )
         for conn in stale_peers:
             try:
                 conn.set_on_disconnect(None)
@@ -564,7 +625,7 @@ class TransportManager:
             except Exception:
                 pass
         for peer_id, (name, address, port) in saved_addresses.items():
-            logger.info("Reconnecting to %s after wake", name)
+            logger.info("Wake recovery: reconnecting to %s", name)
             self.connect_to_peer(peer_id, name, address, port)
 
     def _accept_loop(self, ssl_context: ssl.SSLContext):
@@ -572,10 +633,13 @@ class TransportManager:
             client_sock = None
             try:
                 client_sock, addr = self._server_sock.accept()
+                logger.debug("TCP accepted from %s:%d", addr[0], addr[1])
                 client_sock.settimeout(15)  # TLS handshake timeout
                 try:
                     ssl_sock = ssl_context.wrap_socket(client_sock, server_side=True)
-                except ssl.SSLError:
+                    logger.debug("TLS handshake OK with %s:%d", addr[0], addr[1])
+                except ssl.SSLError as e:
+                    logger.debug("TLS handshake failed from %s:%d: %s", addr[0], addr[1], e)
                     client_sock.close()
                     continue
 
@@ -601,6 +665,10 @@ class TransportManager:
                     except Exception:
                         pass
 
+                    logger.debug(
+                        "Accepted TLS from %s:%d — peer_id=%s, peer_name=%s",
+                        addr[0], addr[1], peer_id[:12] if peer_id else "N/A", peer_name or "N/A",
+                    )
                     was_paired = self._pairing_mgr.is_peer_paired(peer_id)
                     self._pairing_mgr.add_peer(
                         peer_id, peer_name,
@@ -611,7 +679,7 @@ class TransportManager:
                         try:
                             shared_code = self._pairing_mgr.generate_shared_pairing_code(peer_id)
                             logger.info(
-                                "Pairing code for %s: %s — verify this code on both devices",
+                                "[%s] pairing code: %s — verify on both devices",
                                 peer_name or peer_id, shared_code,
                             )
                         except Exception as e:
@@ -626,12 +694,17 @@ class TransportManager:
                 with self._lock:
                     if not self._running:
                         # Server was stopped during TLS handshake — clean up
+                        logger.debug("Server stopped, discarding accepted connection from %s", addr)
                         conn.set_on_disconnect(None)
                         conn.stop()
                         return
                     if peer_id:
                         old = self._peers.pop(peer_id, None)
                         if old:
+                            logger.debug(
+                                "[%s] accept replacing existing connection (old=%s, new=%s)",
+                                peer_name or peer_id, hex(id(old)), hex(id(conn)),
+                            )
                             old.set_on_disconnect(None)
                             old.stop()
                         self._peers[peer_id] = conn
@@ -639,6 +712,10 @@ class TransportManager:
                         # connection from the peer, no need to reconnect.
                         timer = self._reconnect_timers.pop(peer_id, None)
                         if timer:
+                            logger.debug(
+                                "[%s] cancelled pending reconnect timer for %s",
+                                peer_name or peer_id, peer_id[:12],
+                            )
                             timer.cancel()
                         self._reconnect_attempts.pop(peer_id, None)
                         # Map hashed mDNS IDs to the real peer_id so the UI
@@ -649,13 +726,22 @@ class TransportManager:
                         # port of the accepted connection.
                         for hash_id, (_, h_addr, _) in list(self._peer_addresses.items()):
                             if h_addr == addr[0] and hash_id != peer_id:
+                                logger.debug(
+                                    "Mapping hash_id %s → real_id %s (IP match: %s)",
+                                    hash_id[:12], peer_id[:12], addr[0],
+                                )
                                 self._hash_to_real_id[hash_id] = peer_id
+                        logger.debug(
+                            "[%s] stored in _peers[%s] (total peers: %d)",
+                            peer_name or peer_id, peer_id[:12], len(self._peers),
+                        )
                     else:
                         # Track anonymous connections so they can be cleaned up
                         anon_key = f"__anon__{addr[0]}:{addr[1]}"
                         self._peers[anon_key] = conn
+                        logger.debug("Stored anonymous connection under %s", anon_key)
 
-                logger.info("Accepted connection from %s (peer_id=%s)", addr, peer_id or "N/A")
+                logger.info("Accepted connection from %s:%d [%s]", addr[0], addr[1], peer_id[:12] if peer_id else "N/A")
 
             except socket.timeout:
                 continue
