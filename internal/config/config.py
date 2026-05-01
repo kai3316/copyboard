@@ -13,6 +13,10 @@ import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from internal.security.encryption import EncryptionManager
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,9 @@ class Config:
     transfer_timeout: float = 120.0
     log_level: str = "INFO"
     notifications_enabled: bool = True
+    # Security
+    encryption_enabled: bool = True
+    encryption_password: str = ""
 
     def add_peer(self, peer: PeerInfo):
         self.peers[peer.device_id] = peer
@@ -102,6 +109,7 @@ def load() -> Config:
             "sync_debounce", "clipboard_poll_interval",
             "max_reconnect_attempts", "transfer_timeout",
             "log_level", "notifications_enabled",
+            "encryption_enabled", "encryption_password",
         ):
             if key in data:
                 setattr(cfg, key, data[key])
@@ -124,10 +132,16 @@ def load() -> Config:
     return Config()
 
 
-def save(cfg: Config):
+def save(cfg: Config, enc_mgr: "EncryptionManager | None" = None):
     config_dir = _config_dir()
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = _config_path()
+
+    # Encrypt private key before writing to disk if encryption is enabled
+    private_key_to_save = cfg.private_key_pem
+    if cfg.encryption_enabled and enc_mgr and cfg.private_key_pem:
+        private_key_to_save = enc_mgr.encrypt_storage(cfg.private_key_pem)
+
     data = {
         "device_id": cfg.device_id,
         "device_name": cfg.device_name,
@@ -137,7 +151,7 @@ def save(cfg: Config):
         "auto_start": cfg.auto_start,
         "filter_enabled_categories": cfg.filter_enabled_categories,
         "relay_url": cfg.relay_url,
-        "private_key_pem": cfg.private_key_pem,
+        "private_key_pem": private_key_to_save,
         "certificate_pem": cfg.certificate_pem,
         "history_max_entries": cfg.history_max_entries,
         "file_receive_dir": cfg.file_receive_dir,
@@ -147,6 +161,8 @@ def save(cfg: Config):
         "transfer_timeout": cfg.transfer_timeout,
         "log_level": cfg.log_level,
         "notifications_enabled": cfg.notifications_enabled,
+        "encryption_enabled": cfg.encryption_enabled,
+        "encryption_password": cfg.encryption_password,
         "peers": [
             {
                 "device_id": p.device_id,

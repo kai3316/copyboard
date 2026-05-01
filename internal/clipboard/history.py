@@ -13,9 +13,13 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from internal.clipboard.format import ClipboardContent, ContentType
 from internal.config.config import _config_dir
+
+if TYPE_CHECKING:
+    from internal.security.encryption import EncryptionManager
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,8 @@ def _map_label_to_type(label: str) -> ContentType:
 class ClipboardHistory:
     """Thread-safe clipboard history persisted to a local JSON file."""
 
-    def __init__(self, storage_path: str | None = None, max_entries: int = 50):
+    def __init__(self, storage_path: str | None = None, max_entries: int = 50,
+                 enc_mgr: "EncryptionManager | None" = None):
         if storage_path:
             self._path = Path(storage_path)
         else:
@@ -72,6 +77,7 @@ class ClipboardHistory:
         self.MAX_ENTRIES = max_entries
         self._entries: list[dict] = []
         self._lock = threading.Lock()
+        self._enc_mgr = enc_mgr
         self._load()
 
     # ------------------------------------------------------------------
@@ -153,16 +159,22 @@ class ClipboardHistory:
 
         if isinstance(data, list):
             self._entries = data[: self.MAX_ENTRIES]
+            if self._enc_mgr:
+                for entry in self._entries:
+                    self._decrypt_entry(entry)
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = None
         try:
+            entries_to_save = self._entries
+            if self._enc_mgr:
+                entries_to_save = [self._encrypt_entry(e) for e in self._entries]
             tmp_fd, tmp_path = tempfile.mkstemp(
                 dir=str(self._path.parent), prefix=".history_tmp_", suffix=".json",
             )
             with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                json.dump(self._entries, f, indent=2, ensure_ascii=False)
+                json.dump(entries_to_save, f, indent=2, ensure_ascii=False)
             os.replace(tmp_path, self._path)
         except Exception as exc:
             logger.error("Failed to save history: %s", exc)
@@ -171,3 +183,25 @@ class ClipboardHistory:
                     os.unlink(tmp_path)
                 except OSError:
                     pass
+
+    def _encrypt_entry(self, entry: dict) -> dict:
+        """Return a copy of entry with types values encrypted for at-rest storage."""
+        enc = self._enc_mgr
+        if not enc:
+            return entry
+        e = dict(entry)
+        if "types" in e:
+            e["types"] = {
+                k: enc.encrypt_storage(v) for k, v in e["types"].items()
+            }
+        return e
+
+    def _decrypt_entry(self, entry: dict) -> None:
+        """Decrypt types values in-place."""
+        enc = self._enc_mgr
+        if not enc or "types" not in entry:
+            return
+        for k, v in list(entry["types"].items()):
+            pt = enc.decrypt_storage(v)
+            if pt is not None:
+                entry["types"][k] = pt

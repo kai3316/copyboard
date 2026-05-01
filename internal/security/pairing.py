@@ -162,6 +162,12 @@ class PairingManager:
             peer = self._peers.get(device_id)
             return peer.certificate_pem if peer else None
 
+    def get_peer_fingerprint(self, device_id: str) -> str:
+        """Return the SHA-256 fingerprint of a peer's certificate, or '' if unknown."""
+        with self._lock:
+            peer = self._peers.get(device_id)
+            return peer.fingerprint if peer else ""
+
     def verify_peer_fingerprint(self, device_id: str, fingerprint: str) -> bool:
         """Verify a peer's certificate fingerprint (for out-of-band verification)."""
         with self._lock:

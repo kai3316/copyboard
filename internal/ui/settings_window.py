@@ -6,6 +6,7 @@ filtering preferences, and version information.
 """
 
 import logging
+import os
 import tkinter as tk
 from tkinter import messagebox
 from typing import Callable
@@ -177,6 +178,7 @@ class SettingsWindow:
         # Build panels
         self._panels["network"] = self._build_network_panel()
         self._panels["filter"] = self._build_filter_panel()
+        self._panels["security"] = self._build_security_panel()
         self._panels["advanced"] = self._build_advanced_panel()
         self._panels["logs"] = self._build_logs_panel()
         self._panels["about"] = self._build_about_panel()
@@ -217,6 +219,7 @@ class SettingsWindow:
         nav = [
             ("network", "\U0001F310  Network"),
             ("filter",  "\U0001F6E1  Content Filter"),
+            ("security", "\U0001F512  Security"),
             ("advanced", "⚙  Advanced"),
             ("logs",    "\U0001F4C4  Logs"),
             ("about",   "ℹ️  About"),
@@ -414,6 +417,112 @@ class SettingsWindow:
     # ═══════════════════════════════════════════════════════════════
     # Panel: Advanced
     # ═══════════════════════════════════════════════════════════════
+
+    def _build_security_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        cfg = self._get_config()
+
+        scroll = ctk.CTkScrollableFrame(panel, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            scroll, text="Security",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ctk.CTkLabel(
+            scroll, text="Encryption settings protect your data at rest and in transit.",
+            font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+        ).pack(anchor="w", pady=(0, 14))
+
+        # ── Card 1: Encryption toggle ──────────────────────────────
+        card1 = ctk.CTkFrame(scroll, corner_radius=12)
+        card1.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            card1, text="Data Encryption",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+
+        features = [
+            "Private key encrypted at rest in config file",
+            "Clipboard history encrypted on disk",
+            "App-layer encryption between paired devices (on top of TLS 1.3)",
+        ]
+        for i, desc in enumerate(features):
+            ctk.CTkLabel(
+                card1, text=f"  {i+1}. {desc}",
+                font=ctk.CTkFont(size=11),
+                text_color=("gray40", "gray70"),
+                anchor="w", justify="left",
+            ).pack(anchor="w", padx=20, pady=(2, 0))
+
+        self._enc_enabled_var = tk.BooleanVar(value=cfg.encryption_enabled)
+        ctk.CTkSwitch(
+            card1, text="Enable encryption (all three features)",
+            variable=self._enc_enabled_var,
+            font=ctk.CTkFont(size=13),
+        ).pack(anchor="w", padx=16, pady=(14, 14))
+
+        # ── Card 2: Pre-shared password ────────────────────────────
+        card2 = ctk.CTkFrame(scroll, corner_radius=12)
+        card2.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            card2, text="Pre-Shared Password (Optional)",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(
+            card2,
+            text="Set the same password on both devices for stronger\n"
+                 "app-layer encryption. Leave blank to auto-derive\n"
+                 "keys from device certificates.",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+            anchor="w", justify="left",
+        ).pack(anchor="w", padx=20, pady=(0, 8))
+
+        pw_row = ctk.CTkFrame(card2, fg_color="transparent")
+        pw_row.pack(fill="x", padx=16, pady=(0, 14))
+        self._enc_password_var = tk.StringVar(value=cfg.encryption_password)
+        self._enc_password_entry = ctk.CTkEntry(
+            pw_row, textvariable=self._enc_password_var,
+            height=32, width=240, show="*",
+            placeholder_text="Enter shared password",
+        )
+        self._enc_password_entry.pack(side="left", padx=(0, 8))
+        self._show_pw_btn = ctk.CTkButton(
+            pw_row, text="Show", width=50, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("gray50", "gray60"),
+            border_color=("gray70", "gray40"),
+            font=ctk.CTkFont(size=11),
+            command=self._toggle_password_visibility,
+        )
+        self._show_pw_btn.pack(side="left")
+
+        # ── Save button ──────────────────────────────────────────
+        ctk.CTkButton(
+            scroll, text="Save Security Settings",
+            width=200, height=36, command=self._on_save_security,
+        ).pack(anchor="w", pady=(4, 16))
+
+        return panel
+
+    def _toggle_password_visibility(self):
+        if self._enc_password_entry.cget("show") == "*":
+            self._enc_password_entry.configure(show="")
+            self._show_pw_btn.configure(text="Hide")
+        else:
+            self._enc_password_entry.configure(show="*")
+            self._show_pw_btn.configure(text="Show")
+
+    def _on_save_security(self):
+        cfg = self._get_config()
+        cfg.encryption_enabled = self._enc_enabled_var.get()
+        cfg.encryption_password = self._enc_password_var.get()
+        self._save_config()
+        if self._status_label:
+            self._status_label.configure(
+                text="Security settings saved. Restart required for changes to take effect."
+            )
 
     def _build_advanced_panel(self):
         panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
@@ -748,7 +857,36 @@ class SettingsWindow:
 
         ctk.CTkFrame(feat_card, height=6, fg_color="transparent").pack()
 
+        ctk.CTkFrame(feat_card, height=12, fg_color="transparent").pack()
+
+        ctk.CTkButton(
+            center, text="\U0001F4C2  Show Data Folder", width=200, height=34,
+            fg_color="transparent", border_width=1,
+            border_color=("#3498DB", "#2980B9"),
+            text_color=("#3498DB", "#2980B9"),
+            hover_color=("#D6EAF8", "#1A3A4A"),
+            font=ctk.CTkFont(size=12),
+            command=self._open_data_folder,
+        ).pack(pady=(0, 20))
+
         return panel
+
+    def _open_data_folder(self):
+        """Open the config directory in the system file explorer."""
+        from internal.config.config import _config_dir
+        import platform
+        import subprocess
+        path = str(_config_dir())
+        try:
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(path)
+            elif system == "Darwin":
+                subprocess.run(["open", path], check=False)
+            else:
+                subprocess.run(["xdg-open", path], check=False)
+        except Exception as e:
+            logger.warning("Failed to open data folder: %s", e)
 
     # ═══════════════════════════════════════════════════════════════
     # Theme toggle

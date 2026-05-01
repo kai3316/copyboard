@@ -33,7 +33,8 @@ MIN_RECONNECT_DELAY = 3  # minimum 3s before first reconnect to allow accept_loo
 class PeerConnection:
     """Represents a TLS connection to a single peer."""
 
-    def __init__(self, device_id: str, device_name: str, sock: socket.socket):
+    def __init__(self, device_id: str, device_name: str, sock: socket.socket,
+                 peer_fingerprint: str = "", enc_mgr=None):
         self.device_id = device_id
         self.device_name = device_name
         self._sock = sock
@@ -43,6 +44,8 @@ class PeerConnection:
         self._running = False
         self._on_message: Callable | None = None
         self._on_disconnect: Callable | None = None
+        self._peer_fingerprint = peer_fingerprint
+        self._enc_mgr = enc_mgr
 
     def set_on_message(self, callback: Callable):
         self._on_message = callback
@@ -69,8 +72,14 @@ class PeerConnection:
             pass
 
     def send(self, data: bytes) -> bool:
-        """Send a frame. Returns False if the send failed."""
+        """Send a frame. Returns False if the send failed.
+
+        If app-layer encryption is enabled, the payload is encrypted with
+        a per-peer frame key derived from the paired certificates.
+        """
         try:
+            if self._enc_mgr and self._peer_fingerprint:
+                data = self._enc_mgr.encrypt_frame(data, self._peer_fingerprint)
             frame = struct.pack(">I", len(data)) + data
             with self._send_lock:
                 self._sock.sendall(frame)
@@ -120,6 +129,15 @@ class PeerConnection:
                 if payload is None:
                     end_reason = "payload recv returned None"
                     break
+
+                # App-layer decryption
+                if self._enc_mgr and self._peer_fingerprint:
+                    pt = self._enc_mgr.decrypt_frame(payload, self._peer_fingerprint)
+                    if pt is not None:
+                        payload = pt
+                    # If decryption returns None with an encrypted prefix,
+                    # it's an auth failure — still try decode_message which
+                    # will likely fail gracefully.
 
                 msg = decode_message(payload)
                 if msg and self._on_message:
@@ -186,6 +204,11 @@ class TransportManager:
         self._reconnect_timers: dict[str, threading.Timer] = {}
         self._max_reconnect_attempts = max_reconnect_attempts
         self._hash_to_real_id: dict[str, str] = {}
+        self._enc_mgr = None
+
+    def set_encryption_manager(self, enc_mgr) -> None:
+        """Set the encryption manager for app-layer encryption."""
+        self._enc_mgr = enc_mgr
 
     def set_on_peer_message(self, callback: Callable):
         self._on_peer_message = callback
@@ -454,7 +477,11 @@ class TransportManager:
                         except Exception as e:
                             logger.debug("Could not generate shared pairing code: %s", e)
 
-                conn = PeerConnection(real_peer_id, peer_name, ssl_sock)
+                # Resolve peer fingerprint for app-layer encryption
+                peer_fp = self._pairing_mgr.get_peer_fingerprint(real_peer_id) if real_peer_id else ""
+
+                conn = PeerConnection(real_peer_id, peer_name, ssl_sock,
+                                      peer_fingerprint=peer_fp, enc_mgr=self._enc_mgr)
                 conn.set_on_message(self._on_peer_message)
                 conn.set_on_disconnect(self._on_peer_disconnected)
                 conn.start()
@@ -824,7 +851,9 @@ class TransportManager:
                     logger.warning("No identity frame from %s:%d — anonymous connection", addr[0], addr[1])
 
                 display_id = peer_id or "unknown"
-                conn = PeerConnection(display_id, peer_name or str(addr), ssl_sock)
+                peer_fp2 = self._pairing_mgr.get_peer_fingerprint(peer_id) if peer_id else ""
+                conn = PeerConnection(display_id, peer_name or str(addr), ssl_sock,
+                                      peer_fingerprint=peer_fp2, enc_mgr=self._enc_mgr)
                 conn.set_on_message(self._on_peer_message)
                 conn.set_on_disconnect(self._on_peer_disconnected)
                 conn.start()

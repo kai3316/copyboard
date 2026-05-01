@@ -25,6 +25,7 @@ from internal.config.config import Config, PeerInfo, load, save
 from internal.platform.autostart import enable_autostart, disable_autostart, is_autostart_enabled
 from internal.platform.notify import notification_mgr
 from internal.protocol.codec import FILE_TRANSFER_MSG_TYPES, encode_message
+from internal.security.encryption import EncryptionManager
 from internal.security.pairing import PairingManager
 from internal.sync.file_transfer import FileTransferManager
 from internal.sync.manager import SyncManager
@@ -129,9 +130,6 @@ def main():
     # ── Content filter ─────────────────────────────────────────
     content_filter = ContentFilter(enabled_categories=cfg.filter_enabled_categories)
 
-    # ── Clipboard history ──────────────────────────────────────
-    clipboard_history = ClipboardHistory(max_entries=cfg.history_max_entries)
-
     # ── Pairing / Identity ──────────────────────────────────────
     pairing_mgr = PairingManager(cfg.device_id, cfg.device_name)
     identity = pairing_mgr.load_or_create_identity(
@@ -142,6 +140,29 @@ def main():
         cfg.certificate_pem = identity.certificate_pem
         save(cfg)
     logger.info("Certificate fingerprint: %s", identity.fingerprint_short)
+
+    # ── Encryption manager ──────────────────────────────────────
+    enc_mgr = EncryptionManager(
+        identity.fingerprint,
+        password=cfg.encryption_password if cfg.encryption_enabled else "",
+    )
+
+    # Decrypt private key if it was stored encrypted
+    if cfg.encryption_enabled and cfg.private_key_pem:
+        pt = enc_mgr.decrypt_storage(cfg.private_key_pem)
+        if pt is not None and pt != cfg.private_key_pem:
+            logger.info("Decrypted private key from encrypted storage")
+            cfg.private_key_pem = pt
+
+    # ── Clipboard history ──────────────────────────────────────
+    clipboard_history = ClipboardHistory(
+        max_entries=cfg.history_max_entries,
+        enc_mgr=enc_mgr if cfg.encryption_enabled else None,
+    )
+
+    def _save_cfg_encrypted():
+        """Save config with encryption if enabled."""
+        save(cfg, enc_mgr if cfg.encryption_enabled else None)
 
     for peer in cfg.peers.values():
         try:
@@ -186,6 +207,8 @@ def main():
         cfg.device_id, cfg.device_name, cfg.port, pairing_mgr,
         max_reconnect_attempts=cfg.max_reconnect_attempts,
     )
+    if cfg.encryption_enabled:
+        transport_mgr.set_encryption_manager(enc_mgr)
 
     def on_local_sync(msg):
         # Apply content filter if enabled
@@ -358,7 +381,7 @@ def main():
                     public_key_pem=peer.certificate_pem,
                     paired=peer.paired,
                 )
-        save(cfg)
+        save(cfg, enc_mgr if cfg.encryption_enabled else None)
 
     def get_peers():
         known = []
@@ -421,7 +444,7 @@ def main():
         transport_mgr.disconnect_peer(peer_id)
         if peer_id in cfg.peers:
             cfg.peers[peer_id].paired = False
-        save(cfg)
+        _save_cfg_encrypted()
 
     def on_connect(peer_id):
         info = None
@@ -471,7 +494,7 @@ def main():
         with _discovered_lock:
             _discovered_peers.pop(peer_id, None)
         cfg.peers.pop(peer_id, None)
-        save(cfg)
+        _save_cfg_encrypted()
 
     def _get_history():
         return clipboard_history.get_all()
@@ -584,7 +607,7 @@ def main():
     def on_enable_toggle(enabled: bool):
         sync_mgr.set_enabled(enabled)
         cfg.sync_enabled = enabled
-        save(cfg)
+        _save_cfg_encrypted()
         systray.set_syncing(enabled)
         logger.info("Sync %s", "enabled" if enabled else "paused")
 
@@ -609,7 +632,7 @@ def main():
                     public_key_pem=peer.certificate_pem,
                     paired=peer.paired,
                 )
-        save(cfg)
+        _save_cfg_encrypted()
         root.quit()
 
     systray = SystrayApp(
