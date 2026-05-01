@@ -398,15 +398,39 @@ def main():
         save(cfg)
 
     def on_connect(peer_id):
+        info = None
         with _discovered_lock:
             info = _discovered_peers.get(peer_id)
+        if not info:
+            # peer_id may be a real device_id from the pairing manager,
+            # while _discovered_peers is keyed by hashed mDNS IDs.
+            # Try reverse lookup via the hash→real mapping.
+            resolved = transport_mgr.get_resolved_hashes()
+            hash_id = None
+            for h_id, r_id in resolved.items():
+                if r_id == peer_id:
+                    hash_id = h_id
+                    break
+            if hash_id:
+                with _discovered_lock:
+                    info = _discovered_peers.get(hash_id)
+            if not info:
+                # Fallback: match by device name
+                peers = pairing_mgr.get_known_peers()
+                target = next((p for p in peers if p.device_id == peer_id), None)
+                if target:
+                    with _discovered_lock:
+                        for pid, pinfo in _discovered_peers.items():
+                            if pinfo["name"].lower() == target.device_name.lower():
+                                info = pinfo
+                                break
         if info:
-            logger.info("User initiated pairing with %s (%s)", peer_id, info['name'])
+            logger.info("User initiated pairing with %s (peer_id=%s)", info['name'], peer_id[:12])
             transport_mgr.connect_to_peer(
                 peer_id, info["name"], info["address"], info["port"],
             )
         else:
-            logger.warning("Cannot connect: peer %s not in discovered list", peer_id)
+            logger.warning("Cannot connect: peer %s not in discovered list", peer_id[:12])
 
     def on_remove(peer_id):
         pairing_mgr.remove_peer(peer_id)
