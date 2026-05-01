@@ -152,6 +152,18 @@ def main():
         except Exception as e:
             logger.warning("Skipping peer %s: %s", peer.device_name, e)
 
+    # Callback for new pairing requests: notify the user and auto-open
+    # the dashboard so the pairing code is visible on BOTH devices.
+    def _on_new_pairing(peer_id, code, peer_name):
+        notification_mgr.show(
+            "Pairing Request",
+            f"Device \"{peer_name}\" wants to pair — code: {code}",
+        )
+        # Auto-open the dashboard so the user sees the pairing code entry
+        root.after(0, open_dashboard)
+
+    pairing_mgr.set_on_new_pairing(_on_new_pairing)
+
     # ── Sync Manager ────────────────────────────────────────────
     from internal.clipboard.platform import create_monitor, create_reader, create_writer
     monitor = create_monitor(poll_interval=cfg.clipboard_poll_interval)
@@ -573,10 +585,7 @@ def main():
                 notification_mgr.show("Device Disconnected", f"{name} has disconnected")
             prev_connected = connected_set
 
-            # Notify on new pending pairing codes
             pending = get_pending()
-            if len(pending) > len(prev_pending):
-                notification_mgr.show("Pairing Request", "A device wants to pair — enter the pairing code to confirm")
             prev_pending = pending
 
             # Periodically clean up stale file transfers (~every 30s)

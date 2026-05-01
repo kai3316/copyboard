@@ -116,7 +116,7 @@ class PeerConnection:
         logger.info("Disconnected from %s", self.device_name)
         self._running = False
         if self._on_disconnect:
-            self._on_disconnect(self.device_id)
+            self._on_disconnect(self.device_id, self)
 
     def _recv_exact(self, n: int) -> bytes | None:
         buf = bytearray()
@@ -454,9 +454,20 @@ class TransportManager:
         with self._lock:
             return dict(self._hash_to_real_id)
 
-    def _on_peer_disconnected(self, peer_id: str):
+    def _on_peer_disconnected(self, peer_id: str, conn=None):
         with self._lock:
-            if peer_id in self._peers:
+            current = self._peers.get(peer_id)
+            if current is None:
+                pass  # already removed, nothing to do
+            elif conn is not None and current is not conn:
+                # Disconnect is from a stale connection that was already
+                # replaced by a newer one (e.g. during bidirectional connection
+                # race). Don't delete the good connection.
+                logger.debug(
+                    "Ignoring disconnect from stale connection for %s", peer_id,
+                )
+                return
+            else:
                 del self._peers[peer_id]
         self._schedule_reconnect(peer_id)
 
@@ -623,6 +634,15 @@ class TransportManager:
                             old.set_on_disconnect(None)
                             old.stop()
                         self._peers[peer_id] = conn
+                        # Map hashed mDNS IDs to the real peer_id so the UI
+                        # can deduplicate. Discovery may use a hashed ID for
+                        # privacy, but the TLS cert gives the real ID.
+                        # Compare only IP address — the remote port is the
+                        # peer's server port (mDNS), not the ephemeral source
+                        # port of the accepted connection.
+                        for hash_id, (_, h_addr, _) in list(self._peer_addresses.items()):
+                            if h_addr == addr[0] and hash_id != peer_id:
+                                self._hash_to_real_id[hash_id] = peer_id
                     else:
                         # Track anonymous connections so they can be cleaned up
                         anon_key = f"__anon__{addr[0]}:{addr[1]}"

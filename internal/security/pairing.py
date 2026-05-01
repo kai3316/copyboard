@@ -23,6 +23,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -88,6 +89,15 @@ class PairingManager:
         self._pending_pairings: dict[str, tuple[str, float]] = {}  # peer_id -> (code, timestamp)
         self._pairing_attempts: dict[str, list[float]] = {}  # peer_id -> list of attempt timestamps
         self._lock = threading.Lock()
+        self._on_new_pairing: Callable | None = None  # called when a new pairing code is generated
+
+    def set_on_new_pairing(self, callback: Callable):
+        """Set callback invoked when a new pairing code is generated.
+
+        Called as ``callback(peer_id, code, peer_name)`` so the UI can
+        notify the user and show the pairing dialog on the target device.
+        """
+        self._on_new_pairing = callback
 
     def load_or_create_identity(
         self, private_key_pem: str, certificate_pem: str,
@@ -195,6 +205,12 @@ class PairingManager:
             self._pending_pairings[peer_id] = (code, time.time())
             self._pairing_attempts[peer_id] = []
         logger.info("Shared pairing code for %s: %s (derived from cert fingerprints)", peer_id, code)
+        if self._on_new_pairing:
+            peer_name = peer.device_name
+            try:
+                self._on_new_pairing(peer_id, code, peer_name)
+            except Exception:
+                logger.debug("on_new_pairing callback failed", exc_info=True)
         return code
 
     def confirm_pairing(self, peer_id: str, code: str) -> bool:
