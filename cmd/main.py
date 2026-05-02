@@ -162,7 +162,6 @@ def setup_logging():
 
 def main():
     setup_logging()
-    _hide_dock()
     logger.info("=" * 72)
     logger.info("  CopyBoard v1.0.0 — session start  %s",
                 time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -462,6 +461,7 @@ def main():
 
     # ── Tkinter root (hidden, for settings window) ──────────────
     root = tk.Tk()
+    _hide_dock()  # must be after Tk() — tkinter owns NSApplication init on macOS
     root.title("CopyBoard")  # avoid showing the default "tk" title on macOS
     root.geometry("1x1+0+0")  # minimal size so file-dialog parent is near-invisible
     root.withdraw()  # hide the root window
