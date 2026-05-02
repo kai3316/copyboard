@@ -30,6 +30,12 @@ MAX_RECONNECT_ATTEMPTS = 10
 MAX_RECONNECT_BACKOFF = 30
 MIN_RECONNECT_DELAY = 3  # minimum 3s before first reconnect to allow accept_loop to resolve bidirectional races
 
+# Rejection frame sent after identity exchange when the accepting side
+# refuses the connection (peer in _rejected_peer_ids).  The connecting
+# side reads this before creating a PeerConnection and knows not to
+# schedule a reconnect.
+_REJECT_MARKER = b"\xff\xff\xff\xffRJCT"
+
 
 class PeerConnection:
     """Represents a TLS connection to a single peer."""
@@ -380,6 +386,35 @@ class TransportManager:
         finally:
             sock.settimeout(prev_timeout)
 
+    @staticmethod
+    def _send_rejection(sock: ssl.SSLSocket):
+        """Send a rejection marker so the peer knows not to reconnect."""
+        try:
+            sock.sendall(_REJECT_MARKER)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _check_rejection(sock: ssl.SSLSocket, timeout: float = 2.0) -> bool:
+        """Check if the server sent a rejection marker after identity exchange.
+
+        Returns True if the peer rejected this connection.
+        """
+        prev_timeout = sock.gettimeout()
+        sock.settimeout(timeout)
+        try:
+            data = b""
+            while len(data) < len(_REJECT_MARKER):
+                chunk = sock.recv(len(_REJECT_MARKER) - len(data))
+                if not chunk:
+                    break
+                data += chunk
+            return data == _REJECT_MARKER
+        except Exception:
+            return False
+        finally:
+            sock.settimeout(prev_timeout)
+
     def start_server(self):
         self._cleanup_stale_scratch()
         ssl_context = self._build_ssl_context(server_side=True)
@@ -487,6 +522,22 @@ class TransportManager:
 
                 # Read server's identity frame (cert PEM)
                 server_cert_data = self._recv_identity(ssl_sock)
+
+                # Check if the server rejected us at the application level
+                # (e.g. we were forgotten by this peer).  The server sends
+                # a rejection marker after its identity frame.
+                if self._check_rejection(ssl_sock):
+                    logger.info(
+                        "[%s] peer explicitly rejected this connection — "
+                        "clearing saved address to prevent auto-reconnect",
+                        peer_name,
+                    )
+                    with self._lock:
+                        self._peer_addresses.pop(peer_id, None)
+                        self._reconnect_attempts.pop(peer_id, None)
+                    ssl_sock.close()
+                    return
+
                 real_peer_id = peer_id
                 if server_cert_data:
                     peer_cert_pem = server_cert_data.decode("ascii")
@@ -943,6 +994,7 @@ class TransportManager:
                             "[%s] incoming connection from rejected peer — refusing",
                             peer_id[:12],
                         )
+                        self._send_rejection(ssl_sock)
                         ssl_sock.close()
                         continue
                     was_paired = self._pairing_mgr.is_peer_paired(peer_id)
