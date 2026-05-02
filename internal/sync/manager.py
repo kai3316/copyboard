@@ -48,6 +48,7 @@ class SyncManager:
         self._dedup_ring: list[str] = []
         self._sync_debounce = sync_debounce
         self._pending_timer: threading.Timer | None = None
+        self._suppress_monitor_until: float = 0.0
 
     @property
     def on_send(self) -> Callable | None:
@@ -99,8 +100,18 @@ class SyncManager:
                 self._dedup_ring = self._dedup_ring[-DEDUP_RING_SIZE:]
 
             # Set _last_local_hash so the clipboard monitor ignores the
-            # write we're about to make (prevents re-broadcasting remote content).
+            # write we're about to make (prevents re-broadcasting remote
+            # content).  Also suppress the monitor for a full debounce
+            # window after the write, because writers that set formats
+            # sequentially will trigger multiple change events.
             self._last_local_hash = content_hash
+            self._suppress_monitor_until = time.time() + self._sync_debounce + 0.5
+
+            # Cancel any pending local timer so it doesn't fire with
+            # the remote content we're about to write.
+            if self._pending_timer is not None:
+                self._pending_timer.cancel()
+                self._pending_timer = None
 
         # Record in local clipboard history
         if self._history is not None:
@@ -128,6 +139,11 @@ class SyncManager:
         """
         with self._lock:
             if not self._enabled:
+                return
+
+            # Suppress monitor events caused by our own writes
+            # (remote clipboard writes trigger the local monitor).
+            if time.time() < self._suppress_monitor_until:
                 return
 
             # Reset the coalescing timer — each new change pushes the
