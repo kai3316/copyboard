@@ -1,19 +1,19 @@
 """macOS clipboard implementation.
 
-Uses subprocess to call macOS clipboard commands:
-- pbpaste / pbcopy for text
-- pbpaste -Prefer html / rtf for reading rich formats
-- osascript with temp files for writing rich formats (avoids escaping issues)
-- PIL.ImageGrab for image handling
+Clipboard access via two paths:
+1. pbpaste / pbcopy for text/HTML/RTF (signed Apple binaries, no TCC issues)
+2. ctypes + Objective-C runtime → NSPasteboard for image data (bypasses
+   osascript TCC restrictions on macOS ≥14 Sonoma/Sequoia)
 
-Clipboard monitoring polls NSPasteboard.general.changeCount via osascript,
+Clipboard monitoring polls NSPasteboard.changeCount via the ctypes bridge,
 since macOS provides no event-driven clipboard API.
 """
 
+import ctypes
+import ctypes.util
 import hashlib
 import logging
 import os
-import re
 import subprocess
 import tempfile
 import threading
@@ -27,6 +27,189 @@ logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 0.4
 
+# ---------------------------------------------------------------------------
+# ctypes → Objective-C runtime bridge for NSPasteboard
+# ---------------------------------------------------------------------------
+
+_nspasteboard_objc = None
+_nspasteboard_instance = None
+
+_IMAGE_UTIS = frozenset({
+    b"public.tiff", b"public.png", b"public.jpeg",
+    b"public.jpeg-2000", b"com.apple.pasteboard.image",
+    b"NSTIFFPboardType", b"com.compuserve.gif",
+    b"public.heic", b"public.heif", b"public.avci",
+})
+
+
+def _init_nspasteboard():
+    """Load NSPasteboard via ctypes + libobjc.  Cached on first success."""
+    global _nspasteboard_objc, _nspasteboard_instance
+    if _nspasteboard_instance is not None:
+        return _nspasteboard_objc, _nspasteboard_instance
+
+    try:
+        lib_path = ctypes.util.find_library("objc")
+        if not lib_path:
+            logger.debug("libobjc not found via find_library")
+            return None, None
+
+        objc = ctypes.cdll.LoadLibrary(lib_path)
+        objc.objc_getClass.argtypes = [ctypes.c_char_p]
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = [ctypes.c_char_p]
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+
+        ns_pasteboard = objc.objc_getClass(b"NSPasteboard")
+        sel_general = objc.sel_registerName(b"generalPasteboard")
+        pb = objc.objc_msgSend(ns_pasteboard, sel_general)
+        if not pb:
+            logger.debug("NSPasteboard.generalPasteboard returned nil")
+            return None, None
+
+        _nspasteboard_objc = objc
+        _nspasteboard_instance = pb
+        logger.debug("NSPasteboard bridge initialized via ctypes")
+    except Exception:
+        logger.debug("Failed to init NSPasteboard via ctypes", exc_info=True)
+        return None, None
+
+    return _nspasteboard_objc, _nspasteboard_instance
+
+
+def _pb_types() -> set[bytes]:
+    """Return the set of UTI strings currently on the general pasteboard."""
+    objc, pb = _init_nspasteboard()
+    if not pb:
+        return set()
+
+    try:
+        sel_types = objc.sel_registerName(b"types")
+        types_arr = objc.objc_msgSend(pb, sel_types)
+        if not types_arr:
+            return set()
+
+        sel_count = objc.sel_registerName(b"count")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        count = objc.objc_msgSend(types_arr, sel_count)
+
+        sel_object = objc.sel_registerName(b"objectAtIndex:")
+        sel_utf8 = objc.sel_registerName(b"UTF8String")
+
+        result = set()
+        for i in range(count):
+            objc.objc_msgSend.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong,
+            ]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+            ns_str = objc.objc_msgSend(types_arr, sel_object, i)
+            if ns_str:
+                objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+                objc.objc_msgSend.restype = ctypes.c_void_p
+                c_str = objc.objc_msgSend(ns_str, sel_utf8)
+                if c_str:
+                    result.add(ctypes.c_char_p(c_str).value)
+        return result
+    except Exception:
+        logger.debug("_pb_types failed", exc_info=True)
+        return set()
+
+
+def _pb_data_for_type(uti: bytes) -> bytes | None:
+    """Read raw data for a UTI from the general pasteboard.  Returns None if
+    the type is not available or reading fails."""
+    objc, pb = _init_nspasteboard()
+    if not pb:
+        return None
+
+    try:
+        # Build an NSString for the UTI so we can pass it to dataForType:
+        sel_alloc = objc.sel_registerName(b"alloc")
+        sel_init_utf8 = objc.sel_registerName(b"initWithUTF8String:")
+
+        ns_string_cls = objc.objc_getClass(b"NSString")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        ns_str_alloc = objc.objc_msgSend(ns_string_cls, sel_alloc)
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        ns_uti = objc.objc_msgSend(ns_str_alloc, sel_init_utf8, uti)
+        if not ns_uti:
+            return None
+
+        sel_data = objc.sel_registerName(b"dataForType:")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        ns_data = objc.objc_msgSend(pb, sel_data, ns_uti)
+        if not ns_data:
+            return None
+
+        sel_length = objc.sel_registerName(b"length")
+        sel_bytes = objc.sel_registerName(b"bytes")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+
+        length = objc.objc_msgSend(ns_data, sel_length)
+        if not length:
+            return None
+
+        ptr = objc.objc_msgSend(ns_data, sel_bytes)
+        if not ptr:
+            return None
+
+        return ctypes.string_at(ptr, length)
+    except Exception:
+        logger.debug("_pb_data_for_type(%s) failed", uti, exc_info=True)
+        return None
+
+
+def _pb_has_image() -> bool:
+    """Check whether any image UTI is present on the pasteboard."""
+    types = _pb_types()
+    return bool(types & _IMAGE_UTIS)
+
+
+def _pb_change_count() -> int | None:
+    """Read NSPasteboard.changeCount via KVC.  Returns None on failure."""
+    objc, pb = _init_nspasteboard()
+    if not pb:
+        return None
+
+    try:
+        # Build @"changeCount" NSString
+        sel_alloc = objc.sel_registerName(b"alloc")
+        sel_init_utf8 = objc.sel_registerName(b"initWithUTF8String:")
+
+        ns_string_cls = objc.objc_getClass(b"NSString")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        alloc_str = objc.objc_msgSend(ns_string_cls, sel_alloc)
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        key = objc.objc_msgSend(alloc_str, sel_init_utf8, b"changeCount")
+
+        sel_value = objc.sel_registerName(b"valueForKey:")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_void_p
+        ns_number = objc.objc_msgSend(pb, sel_value, key)
+        if not ns_number:
+            return None
+
+        sel_int = objc.sel_registerName(b"integerValue")
+        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        objc.objc_msgSend.restype = ctypes.c_long
+        return objc.objc_msgSend(ns_number, sel_int)
+    except Exception:
+        logger.debug("_pb_change_count failed", exc_info=True)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Clipboard reader
+# ---------------------------------------------------------------------------
 
 class _ClipboardReader(ClipboardReader):
     def read(self) -> ClipboardContent:
@@ -50,6 +233,8 @@ class _ClipboardReader(ClipboardReader):
 
         return content
 
+    # -- text / html / rtf via pbpaste (no TCC issues) ---------------------
+
     def _get_text(self) -> bytes:
         try:
             result = subprocess.run(
@@ -63,7 +248,7 @@ class _ClipboardReader(ClipboardReader):
         return b""
 
     def _get_html(self) -> bytes:
-        # Method 1: pbpaste -Prefer html (fast, works on most macOS versions)
+        # Method 1: pbpaste -Prefer html
         try:
             result = subprocess.run(
                 ["pbpaste", "-Prefer", "html"],
@@ -76,15 +261,16 @@ class _ClipboardReader(ClipboardReader):
         except Exception:
             logger.debug("pbpaste html read failed", exc_info=True)
 
-        # Method 2: NSPasteboard via osascript (bypasses pbpaste limitations)
-        return self._get_html_via_nspasteboard()
+        # Method 2: ctypes NSPasteboard (no TCC issues)
+        data = _pb_data_for_type(b"public.html")
+        if data and b"<" in data and b">" in data:
+            logger.debug("Read HTML via ctypes NSPasteboard (%d bytes)", len(data))
+            return data
 
-    def _get_html_via_nspasteboard(self) -> bytes:
-        """Read HTML from NSPasteboard via AppleScript-ObjC bridge.
+        # Method 3: osascript NSPasteboard (legacy fallback, may need TCC)
+        return self._get_html_via_osascript()
 
-        This is more reliable than pbpaste -Prefer html because it
-        accesses the pasteboard directly and reads the public.html UTI.
-        """
+    def _get_html_via_osascript(self) -> bytes:
         try:
             script = (
                 'use framework "AppKit"\n'
@@ -107,10 +293,10 @@ class _ClipboardReader(ClipboardReader):
             if result.returncode == 0 and result.stdout:
                 data = result.stdout
                 if data != b"COPYBOARD_NO_HTML" and b"<" in data and b">" in data:
-                    logger.debug("Read HTML via NSPasteboard fallback (%d bytes)", len(data))
+                    logger.debug("Read HTML via osascript fallback (%d bytes)", len(data))
                     return data
         except Exception:
-            logger.debug("NSPasteboard html read failed", exc_info=True)
+            logger.debug("osascript html read failed", exc_info=True)
         return b""
 
     def _get_rtf(self) -> bytes:
@@ -121,8 +307,6 @@ class _ClipboardReader(ClipboardReader):
             )
             if result.returncode == 0 and result.stdout.strip():
                 data = result.stdout
-                # Some apps emit RTF with a leading BOM or whitespace.
-                # Check for \rtf anywhere in the first 200 bytes.
                 head = data[:200]
                 if b"\\rtf" in head or b"{\\rtf" in head:
                     return data
@@ -130,9 +314,11 @@ class _ClipboardReader(ClipboardReader):
             logger.debug("pbpaste rtf read failed", exc_info=True)
         return b""
 
+    # -- image via ctypes NSPasteboard ------------------------------------
+
     def _get_image(self) -> bytes:
-        # Method 1: Plain AppleScript (no AppKit — avoids TCC permissions)
-        data = self._get_image_via_applescript()
+        # Method 1: ctypes NSPasteboard (primary — no TCC issues)
+        data = self._get_image_via_ctypes()
         if data:
             return data
 
@@ -152,8 +338,40 @@ class _ClipboardReader(ClipboardReader):
         except Exception:
             logger.debug("ImageGrab read failed", exc_info=True)
 
-        # Method 3: NSPasteboard via AppleScript-ObjC (may need permissions)
+        # Method 3: plain AppleScript (no AppKit)
+        data = self._get_image_via_applescript()
+        if data:
+            return data
+
+        # Method 4: NSPasteboard via AppleScript-ObjC (may need TCC)
         return self._get_image_via_nspasteboard()
+
+    @staticmethod
+    def _get_image_via_ctypes() -> bytes:
+        """Read clipboard image via ctypes NSPasteboard → PIL conversion.
+
+        Tries public.tiff first (the canonical clipboard image format on
+        macOS), then public.png as a fallback.
+        """
+        try:
+            from PIL import Image
+        except ImportError:
+            return b""
+
+        for uti in [b"public.tiff", b"public.png"]:
+            raw = _pb_data_for_type(uti)
+            if not raw:
+                continue
+            try:
+                img = Image.open(BytesIO(raw))
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                logger.info("Read image via ctypes NSPasteboard (%s, %d bytes)",
+                           uti.decode(), buf.tell())
+                return buf.getvalue()
+            except Exception:
+                logger.debug("PIL failed to open %s data", uti.decode(), exc_info=True)
+        return b""
 
     @staticmethod
     def _get_image_via_applescript() -> bytes:
@@ -161,8 +379,6 @@ class _ClipboardReader(ClipboardReader):
 
         This avoids macOS TCC (Transparency, Consent, and Control)
         permission issues that ``use framework "AppKit"`` can trigger.
-        Writes the pasteboard TIFF data to a temp file, then converts
-        to PNG via PIL.
         """
         try:
             from PIL import Image
@@ -220,9 +436,8 @@ class _ClipboardReader(ClipboardReader):
     def _get_image_via_nspasteboard() -> bytes:
         """Read image from NSPasteboard via AppleScript-ObjC bridge.
 
-        Uses readObjectsForClasses: to get an NSImage directly, then
-        converts to PNG via NSBitmapImageRep.  May require macOS
-        Accessibility permissions for the terminal / Python launcher.
+        May require macOS Accessibility permissions for the terminal /
+        Python launcher on macOS ≥14.
         """
         try:
             from PIL import Image
@@ -281,7 +496,7 @@ class _ClipboardReader(ClipboardReader):
             img = Image.open(tmp_path)
             buf = BytesIO()
             img.save(buf, format="PNG")
-            logger.info("Read image via NSPasteboard (%d bytes)", buf.tell())
+            logger.info("Read image via NSPasteboard osascript (%d bytes)", buf.tell())
             return buf.getvalue()
         except Exception:
             logger.warning("NSPasteboard image read exception", exc_info=True)
@@ -294,10 +509,12 @@ class _ClipboardReader(ClipboardReader):
                     pass
 
 
+# ---------------------------------------------------------------------------
+# Clipboard writer
+# ---------------------------------------------------------------------------
+
 class _ClipboardWriter(ClipboardWriter):
     def write(self, content: ClipboardContent):
-        # Write ALL available formats so the receiving application
-        # can choose the richest one it supports.
         for fmt_type, data in content.types.items():
             if fmt_type == ContentType.TEXT:
                 self._set_text(data)
@@ -307,7 +524,6 @@ class _ClipboardWriter(ClipboardWriter):
                 self._set_rtf(data)
             elif fmt_type == ContentType.IMAGE_PNG:
                 self._set_image(data)
-            # IMAGE_EMF is Windows-only, skip on macOS
 
     def _set_text(self, data: bytes):
         try:
@@ -341,7 +557,7 @@ class _ClipboardWriter(ClipboardWriter):
                 try:
                     os.unlink(tmp_path)
                 except OSError:
-                    logger.debug("Failed to remove temp file: %s", tmp_path, exc_info=True)
+                    pass
 
     def _set_rtf(self, data: bytes):
         tmp_path = None
@@ -367,7 +583,7 @@ class _ClipboardWriter(ClipboardWriter):
                 try:
                     os.unlink(tmp_path)
                 except OSError:
-                    logger.debug("Failed to remove temp file: %s", tmp_path, exc_info=True)
+                    pass
 
     def _set_image(self, data: bytes):
         tmp_path = None
@@ -396,18 +612,19 @@ class _ClipboardWriter(ClipboardWriter):
                 try:
                     os.unlink(tmp_path)
                 except OSError:
-                    logger.debug("Failed to remove temp file: %s", tmp_path, exc_info=True)
+                    pass
 
+
+# ---------------------------------------------------------------------------
+# Clipboard monitor
+# ---------------------------------------------------------------------------
 
 class DarwinClipboardMonitor(ClipboardMonitor):
     """Poll-based clipboard monitor for macOS.
 
-    Uses content hashing (like the Linux implementation) rather than
-    AppleScript change-count polling.  AppleScript ``«class ccnt»`` is
-    unreliable on macOS ≥14 (Sonoma) where osascript clipboard access
-    may fail silently or require entitlements the bundled app lacks.
-    Hashing ``pbpaste`` output is fast for text, has no permission
-    requirements, and has been battle-tested on Linux.
+    Uses NSPasteboard.changeCount via the ctypes bridge as the primary
+    change-detection mechanism.  Falls back to content hashing (pbpaste)
+    if the ctypes bridge fails to initialise.
     """
 
     def __init__(self, poll_interval: float = POLL_INTERVAL):
@@ -427,26 +644,55 @@ class DarwinClipboardMonitor(ClipboardMonitor):
         logger.info("Clipboard monitor stopped")
         self._running = False
 
+    # -- poll loop --------------------------------------------------------
+
     def _poll_loop(self):
+        # Prefer ctypes changeCount (detects all content types, no TCC issues)
+        last_cc = _pb_change_count()
+        if last_cc is not None:
+            logger.debug("Monitor using ctypes NSPasteboard.changeCount")
+            self._poll_change_count(last_cc)
+        else:
+            logger.debug(
+                "Monitor falling back to content hashing "
+                "(ctypes bridge unavailable)"
+            )
+            self._poll_hash()
+
+    def _poll_change_count(self, last_cc: int):
+        while self._running:
+            time.sleep(self._poll_interval)
+            current = _pb_change_count()
+            if current is not None and current != last_cc:
+                last_cc = current
+                self._fire_callback()
+
+    def _poll_hash(self):
         last_hash = self._get_content_hash()
         while self._running:
             time.sleep(self._poll_interval)
             current = self._get_content_hash()
             if current and last_hash and current != last_hash:
                 last_hash = current
-                if self._callback:
-                    try:
-                        self._callback()
-                    except Exception:
-                        logger.warning("Clipboard change callback failed", exc_info=True)
+                self._fire_callback()
             elif current and not last_hash:
                 last_hash = current
+
+    def _fire_callback(self):
+        if self._callback:
+            try:
+                self._callback()
+            except Exception:
+                logger.warning(
+                    "Clipboard change callback failed", exc_info=True,
+                )
+
+    # -- fallback content hash --------------------------------------------
 
     def _get_content_hash(self) -> str:
         """Hash text + HTML pasteboard content for change detection.
 
-        Falls back to osascript for image detection when no text/HTML
-        is on the pasteboard, so image-only copies are not missed.
+        Also checks for image-only content so image copies are not missed.
         """
         try:
             text = subprocess.run(
@@ -463,29 +709,17 @@ class DarwinClipboardMonitor(ClipboardMonitor):
             if combined:
                 return hashlib.sha256(combined).hexdigest()
 
-            # No text — check for image-only content so image copies
-            # are detected.  Uses plain AppleScript (no AppKit)
-            # to avoid macOS TCC permission issues.
-            try:
-                img_check = subprocess.run(
-                    ["osascript", "-e",
-                     'try\n'
-                     '    set imgData to (the clipboard as «class TIFF»)\n'
-                     '    if imgData is not missing value and length of imgData > 0 then\n'
-                     '        return "1"\n'
-                     '    end if\n'
-                     'end try\n'
-                     'return "0"'],
-                    capture_output=True, timeout=2,
-                )
-                if img_check.returncode == 0 and img_check.stdout.strip() == b"1":
-                    return hashlib.sha256(str(time.time()).encode()).hexdigest()
-            except Exception:
-                pass
+            # No text/HTML — check for image-only content.
+            if _pb_has_image():
+                return hashlib.sha256(str(time.time()).encode()).hexdigest()
         except Exception:
             pass
         return ""
 
+
+# ---------------------------------------------------------------------------
+# Factory helpers
+# ---------------------------------------------------------------------------
 
 def create_monitor(poll_interval: float = POLL_INTERVAL) -> ClipboardMonitor:
     return DarwinClipboardMonitor(poll_interval=poll_interval)
