@@ -44,8 +44,21 @@
     .nav-links { display: flex; gap: 2rem; list-style: none; }
     .nav-links a { color: #a1a1aa; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
     .nav-links a:hover { color: #fff; }
-    .nav-lang { color: #a1a1aa; text-decoration: none; font-size: 0.85rem; margin-left: 1.5rem; }
-    .nav-lang:hover { color: #fff; }
+    .lang-switch {
+      display: inline-flex; align-items: center; gap: 0;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; overflow: hidden; margin-right: 0.75rem;
+    }
+    .lang-switch a {
+      padding: 0.35rem 0.65rem; font-size: 0.8rem; font-weight: 600;
+      text-decoration: none; color: #71717a; transition: all 0.2s;
+    }
+    .lang-switch a.active {
+      background: rgba(52,152,219,0.2); color: #3498DB;
+    }
+    .lang-switch a:not(.active):hover {
+      background: rgba(255,255,255,0.05); color: #a1a1aa;
+    }
     .nav-cta {
       background: linear-gradient(135deg, #3498DB, #2980B9);
       color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 8px;
@@ -207,7 +220,10 @@
         <li><a href="#how-it-works">工作原理</a></li>
         <li><a href="#download">下载</a></li>
       </ul>
-      <a href="index.html" class="nav-lang">EN</a>
+      <div class="lang-switch">
+        <a href="index.html">EN</a>
+        <a href="index_zh.html" class="active">中文</a>
+      </div>
       <a href="https://github.com/kai3316/copyboard" class="nav-cta">GitHub</a>
     </div>
   </nav>
