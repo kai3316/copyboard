@@ -62,7 +62,7 @@ CopyBoard syncs your clipboard across devices on the same local network. Copy te
 │  ┌───────────────────────────────────────────────┐  │
 │  │  AES-256-GCM (per-frame, per-peer)            │  │
 │  │  Keys derived via HKDF from sorted cert       │  │
-│  │  fingerprints + optional pre-shared password   │  │
+│  │  fingerprints + optional pre-shared password  │  │
 │  └───────────────────────────────────────────────┘  │
 │                        │                            │
 │  ┌───────────────────────────────────────────────┐  │
@@ -179,12 +179,12 @@ Device A                              Device B
    ├─ 3. Identity exchange ─────────────►│  Ed25519 cert fingerprints
    │                                     │
    ├─ 4. Pairing (first time) ◄─────────►│  8-digit code confirmation
-   │     Certificate pinned               │  Certificate pinned
+   │     Certificate pinned              │  Certificate pinned
    │                                     │
-   ├─ 5. Clipboard change detected ──────►│  Hash → dedup → encrypt → send
-   │     AES-256-GCM encrypted frame      │  Decrypt → write to clipboard
+   ├─ 5. Clipboard change detected──────►│  Hash → dedup → encrypt → send
+   │     AES-256-GCM encrypted frame     │  Decrypt → write to clipboard
    │                                     │
-   ├─ 6. Trusted on reconnect ───────────►│  Pinned cert verified, auto-connect
+   ├─ 6. Trusted on reconnect ──────────►│  Pinned cert verified, auto-connect
 ```
 
 1. **Discovery** — mDNS/Zeroconf broadcasts device presence on the LAN. The service type `_copyboard._tcp.local` enables automatic peer detection without IP configuration.
