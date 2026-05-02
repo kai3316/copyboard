@@ -76,6 +76,7 @@ def _has_wl_copy() -> bool:
 class _ClipboardReader(ClipboardReader):
     def read(self) -> ClipboardContent:
         content = ClipboardContent(timestamp=time.time())
+        self._image_fmt = ""
 
         text = self._get_text()
         if text:
@@ -92,6 +93,7 @@ class _ClipboardReader(ClipboardReader):
         img = self._get_image()
         if img:
             content.types[ContentType.IMAGE_PNG] = img
+            content.image_fmt = self._image_fmt
 
         logger.debug("Read %d format(s) from clipboard", len(content.types))
         return content
@@ -172,6 +174,7 @@ class _ClipboardReader(ClipboardReader):
                 if img:
                     buf = BytesIO()
                     img.save(buf, format="PNG")
+                    self._image_fmt = "png"
                     return buf.getvalue()
             except Exception:
                 logger.debug("ImageGrab.grabclipboard failed")
@@ -192,6 +195,7 @@ class _ClipboardReader(ClipboardReader):
                 return b""
             if result.returncode == 0 and result.stdout:
                 if result.stdout[:8] == b"\x89PNG\r\n\x1a\n":
+                    self._image_fmt = "png"
                     return result.stdout
         except Exception:
             logger.debug("Failed to read image from clipboard via %s", _BACKEND)
@@ -212,7 +216,7 @@ class _ClipboardWriter(ClipboardWriter):
             elif fmt_type == ContentType.RTF:
                 self._set_rtf(data)
             elif fmt_type == ContentType.IMAGE_PNG:
-                self._set_image(data)
+                self._set_image(data, content.image_fmt)
             # IMAGE_EMF is Windows-only, skip on Linux
 
     def _set_text(self, data: bytes):
@@ -257,17 +261,30 @@ class _ClipboardWriter(ClipboardWriter):
         except Exception:
             logger.debug("Failed to write RTF to clipboard via %s", _BACKEND)
 
-    def _set_image(self, data: bytes):
+    def _set_image(self, data: bytes, image_fmt: str = ""):
+        png_data = data
+        if image_fmt in ("bmp", "tiff"):
+            # Convert non-PNG formats to PNG for Linux clipboard
+            try:
+                from PIL import Image
+                img = Image.open(BytesIO(data))
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                png_data = buf.getvalue()
+            except Exception:
+                logger.debug("Failed to convert %s image to PNG for Linux", image_fmt)
+                return
+
         try:
             if _BACKEND == "x11" and _has_xclip():
                 subprocess.run(
                     ["xclip", "-selection", "clipboard", "-in", "-t", "image/png"],
-                    input=data, timeout=2,
+                    input=png_data, timeout=2,
                 )
             elif _BACKEND == "wayland" and _has_wl_copy():
                 subprocess.run(
                     ["wl-copy", "--type", "image/png"],
-                    input=data, timeout=2,
+                    input=png_data, timeout=2,
                 )
         except Exception:
             logger.debug("Failed to write image to clipboard")

@@ -39,6 +39,7 @@ import json
 import logging
 import struct
 import uuid
+import zlib
 from io import BytesIO
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ logger = logging.getLogger(__name__)
 from internal.clipboard.format import ClipboardContent, ContentType, SyncMessage
 
 MAGIC = 0x4342  # "CB" for CopyBoard
-VERSION = 1
+VERSION = 2
 HEADER_FMT = ">H B I"  # magic, version, payload_length
 HEADER_SIZE = 7
 
@@ -107,11 +108,17 @@ def encode_message(msg: SyncMessage, msg_type: str = "clipboard") -> bytes:
         "timestamp": msg.content.timestamp,
     }
 
+    if msg.content.image_fmt:
+        payload["image_fmt"] = msg.content.image_fmt
+
     for content_type, data in msg.content.types.items():
         name = _TYPE_NAME_MAP.get(content_type)
         if name is None:
             logger.debug("Skipping unregistered content type: %s", content_type)
             continue
+        # zlib compress non-PNG raster images to reduce wire size
+        if content_type == ContentType.IMAGE_PNG and msg.content.image_fmt not in ("", "png"):
+            data = zlib.compress(data, level=1)
         payload["types"][name] = base64.b64encode(data).decode("ascii")
 
     return encode_frame(payload, msg.msg_id, msg.source_device)
@@ -137,8 +144,8 @@ def decode_message(data: bytes) -> SyncMessage | None:
     if magic != MAGIC:
         logger.debug("Frame magic mismatch: expected 0x%04x, got 0x%04x", MAGIC, magic)
         return None
-    if version != VERSION:
-        logger.debug("Frame version mismatch: expected %d, got %d", VERSION, version)
+    if version < 1 or version > VERSION:
+        logger.debug("Frame version out of range: got %d, accepted [1, %d]", version, VERSION)
         return None
 
     offset = HEADER_SIZE
@@ -178,18 +185,27 @@ def decode_message(data: bytes) -> SyncMessage | None:
     except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         return None
 
-    # --- Extract message type (backward-compatible) ---
+    # --- Extract message type and image format (backward-compatible) ---
     msg_type = payload.get("msg_type", "clipboard")
+    image_fmt = payload.get("image_fmt", "")
 
     content = ClipboardContent(
         timestamp=payload.get("timestamp", 0.0),
+        image_fmt=image_fmt,
     )
 
     for name, b64_data in payload.get("types", {}).items():
         content_type = _NAME_TYPE_MAP.get(name)
         if content_type:
             try:
-                content.types[content_type] = base64.b64decode(b64_data)
+                decoded = base64.b64decode(b64_data)
+                # zlib decompress non-PNG raster images
+                if content_type == ContentType.IMAGE_PNG and image_fmt not in ("", "png"):
+                    try:
+                        decoded = zlib.decompress(decoded)
+                    except zlib.error:
+                        pass  # legacy uncompressed data
+                content.types[content_type] = decoded
             except Exception:
                 logger.debug("Invalid base64 for content type %s", name)
                 continue

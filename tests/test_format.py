@@ -216,5 +216,36 @@ class TestContentTypeEnum:
         assert ContentType(4) == ContentType.IMAGE_PNG
 
 
+class TestImageFmt:
+    """image_fmt field on ClipboardContent."""
+
+    def test_default_is_empty_string(self):
+        content = ClipboardContent()
+        assert content.image_fmt == ""
+
+    def test_set_png(self):
+        content = ClipboardContent(image_fmt="png")
+        assert content.image_fmt == "png"
+
+    def test_set_tiff(self):
+        content = ClipboardContent(image_fmt="tiff")
+        assert content.image_fmt == "tiff"
+
+    def test_set_bmp(self):
+        content = ClipboardContent(image_fmt="bmp")
+        assert content.image_fmt == "bmp"
+
+    def test_hash_key_ignores_image_fmt(self):
+        c1 = ClipboardContent(types={ContentType.IMAGE_PNG: b"data"},
+                              image_fmt="png")
+        c2 = ClipboardContent(types={ContentType.IMAGE_PNG: b"data"},
+                              image_fmt="bmp")
+        assert c1.hash_key() == c2.hash_key()
+
+    def test_is_empty_ignores_image_fmt(self):
+        content = ClipboardContent(image_fmt="tiff")
+        assert content.is_empty()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

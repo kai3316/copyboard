@@ -2,8 +2,10 @@
 
 import base64
 import json
+import struct
 import sys
 import os
+from io import BytesIO
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -204,6 +206,125 @@ class TestDecodeErrors:
         assert result.msg_id == "abc"
         assert result.source_device == "dev"
         assert len(result.content.types) == 0  # bad base64 skipped
+
+
+class TestProtocolVersionCompat:
+    """Version 2 accepts v1 frames; version >2 is rejected."""
+
+    def test_decode_version_1_frame(self):
+        """VERSION=2 decoders must accept legacy v1 frames."""
+        msg_id = b"v1test"
+        src = b"dev"
+        payload = json.dumps({
+            "msg_type": "clipboard",
+            "types": {"TEXT": base64.b64encode(b"hello").decode("ascii")},
+            "timestamp": 1.0,
+        }).encode("utf-8")
+
+        buf = BytesIO()
+        buf.write(struct.pack(">H B I", MAGIC, 1, len(payload)))  # version 1
+        buf.write(struct.pack(">I", len(msg_id)))
+        buf.write(msg_id)
+        buf.write(struct.pack(">B", len(src)))
+        buf.write(src)
+        buf.write(payload)
+
+        result = decode_message(buf.getvalue())
+        assert result is not None
+        assert result.msg_id == "v1test"
+        assert result.content.types[ContentType.TEXT] == b"hello"
+
+    def test_decode_rejects_version_3(self):
+        """Versions beyond VERSION=2 must be rejected."""
+        import struct
+        msg_id = b"v3test"
+        src = b"dev"
+        payload = json.dumps({
+            "msg_type": "clipboard",
+            "types": {"TEXT": base64.b64encode(b"hello").decode("ascii")},
+        }).encode("utf-8")
+
+        buf = BytesIO()
+        buf.write(struct.pack(">H B I", MAGIC, 3, len(payload)))  # version 3
+        buf.write(struct.pack(">I", len(msg_id)))
+        buf.write(msg_id)
+        buf.write(struct.pack(">B", len(src)))
+        buf.write(src)
+        buf.write(payload)
+
+        assert decode_message(buf.getvalue()) is None
+
+
+class TestImageFmtCodec:
+    """image_fmt roundtrip through encode/decode."""
+
+    def test_roundtrip_with_image_fmt(self):
+        content = ClipboardContent(
+            types={ContentType.IMAGE_PNG: b"\x89PNG\r\n\x1a\n" + b"\x00" * 50},
+            image_fmt="tiff",
+        )
+        msg = SyncMessage(content=content, msg_id="img-fmt", source_device="mac")
+        decoded = decode_message(encode_message(msg))
+        assert decoded is not None
+        assert decoded.content.image_fmt == "tiff"
+        assert decoded.content.types[ContentType.IMAGE_PNG] == content.types[ContentType.IMAGE_PNG]
+
+    def test_legacy_no_image_fmt(self):
+        """Old payloads without image_fmt default to ''."""
+        content = ClipboardContent(types={ContentType.IMAGE_PNG: b"pngdata"})
+        msg = SyncMessage(content=content, msg_id="legacy", source_device="old")
+        decoded = decode_message(encode_message(msg))
+        assert decoded is not None
+        assert decoded.content.image_fmt == ""
+
+    def test_image_fmt_empty_not_in_json(self):
+        """When image_fmt is empty, the key should not appear in JSON."""
+        content = ClipboardContent(
+            types={ContentType.IMAGE_PNG: b"\x89PNG\r\n\x1a\n" + b"\x00" * 10},
+            image_fmt="",
+        )
+        msg = SyncMessage(content=content, msg_id="no-fmt", source_device="a")
+        wire = encode_message(msg)
+        assert b'"image_fmt"' not in wire
+
+    def test_zlib_compression_roundtrip(self):
+        """Non-PNG image formats are zlib compressed on wire."""
+        # Simulate a BMP image payload (image_fmt="bmp" triggers zlib)
+        bmp_data = b"BM" + b"\x00" * 500  # fake BMP
+        content = ClipboardContent(
+            types={ContentType.IMAGE_PNG: bmp_data},
+            image_fmt="bmp",
+        )
+        msg = SyncMessage(content=content, msg_id="zlib", source_device="win")
+        decoded = decode_message(encode_message(msg))
+        assert decoded is not None
+        assert decoded.content.image_fmt == "bmp"
+        assert decoded.content.types[ContentType.IMAGE_PNG] == bmp_data
+
+    def test_legacy_uncompressed_tiff_tolerated(self):
+        """Legacy uncompressed data (bad zlib) is passed through."""
+        import struct
+        tiff_data = b"II" + b"\x00" * 100  # fake little-endian TIFF header
+        payload = json.dumps({
+            "msg_type": "clipboard",
+            "image_fmt": "tiff",
+            "types": {"IMAGE_PNG": base64.b64encode(tiff_data).decode("ascii")},
+            "timestamp": 0.0,
+        }).encode("utf-8")
+
+        msg_id = b"legacy"
+        src = b"dev"
+        buf = BytesIO()
+        buf.write(struct.pack(">H B I", MAGIC, VERSION, len(payload)))
+        buf.write(struct.pack(">I", len(msg_id)))
+        buf.write(msg_id)
+        buf.write(struct.pack(">B", len(src)))
+        buf.write(src)
+        buf.write(payload)
+
+        result = decode_message(buf.getvalue())
+        assert result is not None
+        assert result.content.types[ContentType.IMAGE_PNG] == tiff_data
 
 
 class TestClipboardContent:

@@ -105,6 +105,7 @@ WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_longlong, ctypes.c_void_p, ctypes.c_uint, 
 class _ClipboardReader(ClipboardReader):
     def read(self) -> ClipboardContent:
         content = ClipboardContent(timestamp=time.time())
+        self._image_fmt = ""
         if not user32.OpenClipboard(None):
             return content
 
@@ -121,6 +122,8 @@ class _ClipboardReader(ClipboardReader):
                         if content_type == ContentType.TEXT and fmt == CF_TEXT and ContentType.TEXT in content.types:
                             continue  # prefer CF_UNICODETEXT already read, skip ANSI
                         content.types[content_type] = data
+                        if content_type == ContentType.IMAGE_PNG:
+                            content.image_fmt = self._image_fmt
         finally:
             user32.CloseClipboard()
 
@@ -159,16 +162,12 @@ class _ClipboardReader(ClipboardReader):
             kernel32.GlobalUnlock(handle)
 
     def _read_dib_handle(self, handle) -> bytes:
-        """Read DIB from global memory handle and convert to PNG bytes.
+        """Read DIB from global memory handle and return raw BMP bytes.
 
-        Avoids ImageGrab.grabclipboard() which would try to open the clipboard
-        while it's already open from read().
+        Builds a complete BMP file (14-byte header + DIB) so the bytes
+        form a valid standalone image.  No PIL re-encoding — the raw
+        BMP is passed through for zero-loss same-platform transfer.
         """
-        try:
-            from PIL import Image
-        except ImportError:
-            return b""
-
         try:
             ptr = kernel32.GlobalLock(handle)
             if not ptr:
@@ -200,12 +199,9 @@ class _ClipboardReader(ClipboardReader):
             buf = BytesIO()
             buf.write(struct.pack("<HIHHI", 0x4D42, bf_size, 0, 0, bf_off_bits))
             buf.write(dib)
-            buf.seek(0)
 
-            img = Image.open(buf)
-            out = BytesIO()
-            img.save(out, format="PNG")
-            return out.getvalue()
+            self._image_fmt = "bmp"
+            return buf.getvalue()
         except Exception:
             logger.debug("Failed to read DIB from clipboard", exc_info=True)
             return b""
@@ -262,7 +258,7 @@ class _ClipboardWriter(ClipboardWriter):
                 elif fmt_type == ContentType.RTF:
                     self._set_custom_format(CF_RTF, data)
                 elif fmt_type == ContentType.IMAGE_PNG:
-                    self._set_image(data)
+                    self._set_image(data, content.image_fmt)
                 elif fmt_type == ContentType.IMAGE_EMF:
                     self._set_emf(data)
         finally:
@@ -319,19 +315,37 @@ class _ClipboardWriter(ClipboardWriter):
         )
         return (header + prefix + html + suffix).encode("utf-8")
 
-    def _set_image(self, data: bytes):
+    def _set_image(self, data: bytes, image_fmt: str = ""):
+        if image_fmt == "bmp" and data[:2] == b"BM":
+            # BMP passthrough: strip 14-byte header → DIB (zero conversion)
+            dib_data = data[14:]
+            handle = kernel32.GlobalAlloc(0x0002, len(dib_data))
+            if handle:
+                ptr = kernel32.GlobalLock(handle)
+                ctypes.memmove(ptr, dib_data, len(dib_data))
+                kernel32.GlobalUnlock(handle)
+                if not user32.SetClipboardData(CF_DIB, handle):
+                    logger.warning("SetClipboardData(CF_DIB) failed")
+            return
+
         try:
             from PIL import Image
         except ImportError:
             return
         try:
             img = Image.open(BytesIO(data))
-            from io import BytesIO as Bio
-            dib = Bio()
-            img.convert("RGB").save(dib, format="BMP")
+            # Smart mode handling: composite RGBA on white, pass RGB through
+            if img.mode == "RGBA":
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[3])
+                img = bg
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
+            dib = BytesIO()
+            img.save(dib, format="BMP")
             dib_data = dib.getvalue()
-            # Skip BMP header (14 bytes) to get DIB
-            dib_data = dib_data[14:]
+            dib_data = dib_data[14:]  # strip BMP header → DIB
             handle = kernel32.GlobalAlloc(0x0002, len(dib_data))
             if handle:
                 ptr = kernel32.GlobalLock(handle)

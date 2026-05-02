@@ -21,6 +21,7 @@ class ClipboardContent:
     types: dict[ContentType, bytes] = field(default_factory=dict)
     source_device: str = ""
     timestamp: float = 0.0
+    image_fmt: str = ""  # "png", "tiff", "bmp", "" = legacy/unknown
 
     def hash_key(self) -> str:
         """Content-based dedup key."""

@@ -212,6 +212,7 @@ def _pb_change_count() -> int | None:
 class _ClipboardReader(ClipboardReader):
     def read(self) -> ClipboardContent:
         content = ClipboardContent(timestamp=time.time())
+        self._image_fmt = ""
 
         text = self._get_text()
         if text:
@@ -228,6 +229,7 @@ class _ClipboardReader(ClipboardReader):
         img = self._get_image()
         if img:
             content.types[ContentType.IMAGE_PNG] = img
+            content.image_fmt = self._image_fmt
 
         return content
 
@@ -315,6 +317,8 @@ class _ClipboardReader(ClipboardReader):
     # -- image via ctypes NSPasteboard ------------------------------------
 
     def _get_image(self) -> bytes:
+        self._image_fmt = ""
+
         # Method 1: ctypes NSPasteboard (primary — no TCC issues)
         data = self._get_image_via_ctypes()
         if data:
@@ -327,6 +331,7 @@ class _ClipboardReader(ClipboardReader):
             if img is not None:
                 buf = BytesIO()
                 img.save(buf, format="PNG")
+                self._image_fmt = "png"
                 logger.info("Read image via ImageGrab.grabclipboard (%d bytes)", buf.tell())
                 return buf.getvalue()
         except NotImplementedError:
@@ -344,31 +349,24 @@ class _ClipboardReader(ClipboardReader):
         # Method 4: NSPasteboard via AppleScript-ObjC (may need TCC)
         return self._get_image_via_nspasteboard()
 
-    @staticmethod
-    def _get_image_via_ctypes() -> bytes:
-        """Read clipboard image via ctypes NSPasteboard → PIL conversion.
+    def _get_image_via_ctypes(self) -> bytes:
+        """Read raw image data from NSPasteboard via ctypes.
 
-        Tries public.tiff first (the canonical clipboard image format on
-        macOS), then public.png as a fallback.
+        Tries public.png first (passthrough, no re-encoding), then
+        public.tiff (native macOS clipboard format).  Returns raw bytes
+        without PIL decode/encode — the caller sets the format tag.
         """
-        try:
-            from PIL import Image
-        except ImportError:
-            return b""
-
-        for uti in [b"public.tiff", b"public.png"]:
+        for uti in [b"public.png", b"public.tiff"]:
             raw = _pb_data_for_type(uti)
             if not raw:
                 continue
-            try:
-                img = Image.open(BytesIO(raw))
-                buf = BytesIO()
-                img.save(buf, format="PNG")
-                logger.info("Read image via ctypes NSPasteboard (%s, %d bytes)",
-                           uti.decode(), buf.tell())
-                return buf.getvalue()
-            except Exception:
-                logger.debug("PIL failed to open %s data", uti.decode(), exc_info=True)
+            fmt = "png" if uti == b"public.png" else "tiff"
+            if fmt == "png" and raw[:8] != b'\x89PNG\r\n\x1a\n':
+                continue  # not valid PNG, try next UTI
+            self._image_fmt = fmt
+            logger.info("Read raw %s image via ctypes NSPasteboard (%d bytes)",
+                       fmt, len(raw))
+            return raw
         return b""
 
     @staticmethod
@@ -417,6 +415,7 @@ class _ClipboardReader(ClipboardReader):
             img = Image.open(tmp_path)
             buf = BytesIO()
             img.save(buf, format="PNG")
+            self._image_fmt = "png"
             logger.info("Read image via plain AppleScript (%d bytes)", buf.tell())
             return buf.getvalue()
         except Exception:
@@ -429,8 +428,7 @@ class _ClipboardReader(ClipboardReader):
                 except OSError:
                     pass
 
-    @staticmethod
-    def _get_image_via_nspasteboard() -> bytes:
+    def _get_image_via_nspasteboard(self) -> bytes:
         """Read image from NSPasteboard via AppleScript-ObjC bridge.
 
         May require macOS Accessibility permissions for the terminal /
@@ -492,6 +490,7 @@ class _ClipboardReader(ClipboardReader):
             img = Image.open(tmp_path)
             buf = BytesIO()
             img.save(buf, format="PNG")
+            self._image_fmt = "png"
             logger.info("Read image via NSPasteboard osascript (%d bytes)", buf.tell())
             return buf.getvalue()
         except Exception:
@@ -519,7 +518,7 @@ class _ClipboardWriter(ClipboardWriter):
             elif fmt_type == ContentType.RTF:
                 self._set_rtf(data)
             elif fmt_type == ContentType.IMAGE_PNG:
-                self._set_image(data)
+                self._set_image(data, content.image_fmt)
 
     def _set_text(self, data: bytes):
         try:
@@ -581,22 +580,46 @@ class _ClipboardWriter(ClipboardWriter):
                 except OSError:
                     pass
 
-    def _set_image(self, data: bytes):
+    def _set_image(self, data: bytes, image_fmt: str = ""):
         tmp_path = None
         try:
-            from PIL import Image
-            Image.open(BytesIO(data))
-
-            with tempfile.NamedTemporaryFile(
-                suffix=".png", delete=False,
-            ) as f:
-                f.write(data)
-                tmp_path = f.name
-
-            script = (
-                f'set the clipboard to (read (POSIX file "{tmp_path}") '
-                f'as «class PNGf»)'
-            )
+            if image_fmt == "tiff":
+                # TIFF passthrough: write natively via «class TIFF» (zero loss)
+                with tempfile.NamedTemporaryFile(
+                    suffix=".tiff", delete=False,
+                ) as f:
+                    f.write(data)
+                    tmp_path = f.name
+                script = (
+                    f'set the clipboard to (read (POSIX file "{tmp_path}") '
+                    f'as «class TIFF»)'
+                )
+            elif image_fmt == "bmp":
+                # BMP → PNG conversion for macOS pasteboard
+                from PIL import Image
+                img = Image.open(BytesIO(data))
+                with tempfile.NamedTemporaryFile(
+                    suffix=".png", delete=False,
+                ) as f:
+                    img.save(f, format="PNG")
+                    tmp_path = f.name
+                script = (
+                    f'set the clipboard to (read (POSIX file "{tmp_path}") '
+                    f'as «class PNGf»)'
+                )
+            else:
+                # PNG or legacy: write raw bytes directly (PIL validation only)
+                from PIL import Image
+                Image.open(BytesIO(data))
+                with tempfile.NamedTemporaryFile(
+                    suffix=".png", delete=False,
+                ) as f:
+                    f.write(data)
+                    tmp_path = f.name
+                script = (
+                    f'set the clipboard to (read (POSIX file "{tmp_path}") '
+                    f'as «class PNGf»)'
+                )
             subprocess.run(
                 ["osascript", "-e", script],
                 capture_output=True, timeout=3,
