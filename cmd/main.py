@@ -39,6 +39,20 @@ from internal.ui.systray import SystrayApp
 logger = logging.getLogger(__name__)
 
 
+def _mask_file_name(file_name: str) -> str:
+    """Return a privacy-safe file name: only the extension is preserved."""
+    if not file_name or file_name == "?":
+        return file_name
+    ext = os.path.splitext(file_name)[1]
+    return f"*{ext}" if ext else "*"
+
+
+def _mask_path(path: str) -> str:
+    """Return a privacy-safe path: only the parent directory name is shown."""
+    parent = os.path.basename(os.path.dirname(path))
+    return f"{parent}/***" if parent else "***"
+
+
 def _get_log_dir():
     """Return the platform-specific log directory."""
     import platform
@@ -331,7 +345,7 @@ def main():
             notification_mgr.show("File Transfer", "File transfer failed")
 
     def on_file_received(transfer_id: str, saved_path: str, file_name: str):
-        logger.info("File received: %s -> %s", file_name, saved_path)
+        logger.info("File received: %s -> %s", _mask_file_name(file_name), _mask_path(saved_path))
         notification_mgr.show("File Received", f"Received: {file_name}")
 
     def on_transfer_request(transfer_id: str, file_name: str, file_size: int,
