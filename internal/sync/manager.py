@@ -20,8 +20,12 @@ from internal.clipboard.platform import create_monitor, create_reader, create_wr
 
 logger = logging.getLogger(__name__)
 
-# Minimum interval between outgoing syncs (debounce)
-SYNC_DEBOUNCE = 0.3
+# Minimum interval between outgoing syncs (debounce).
+# Set to 0.5 s so multi-step clipboard writes (TEXT → HTML → RTF / image)
+# are coalesced into a single read.  Applications that write formats
+# sequentially typically finish within 200–400 ms; 500 ms covers the
+# vast majority of cases without feeling sluggish.
+SYNC_DEBOUNCE = 0.5
 # Hash ring size for recently-synced content dedup
 DEDUP_RING_SIZE = 64
 

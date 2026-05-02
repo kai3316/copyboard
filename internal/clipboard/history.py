@@ -5,6 +5,7 @@ Stores up to 50 most recent clipboard entries in
 """
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,36 @@ def _strip_html(text: str) -> str:
     return plain.strip()
 
 
+def _make_dedup_key(content: ClipboardContent) -> str:
+    """Build a stable dedup key from the 'primary' content.
+
+    Uses the text body (when available) rather than hashing all types,
+    so multi-step clipboard writes (TEXT → HTML → RTF) that produce
+    different ``hash_key()`` values are still recognised as the same
+    user action.  Falls back to image-data hashes for image-only copies.
+    """
+    if ContentType.TEXT in content.types:
+        text = content.types[ContentType.TEXT].decode("utf-8", errors="replace")
+        return "text:" + text[:500]
+    if ContentType.IMAGE_PNG in content.types:
+        return "png:" + hashlib.sha256(
+            content.types[ContentType.IMAGE_PNG]
+        ).hexdigest()
+    if ContentType.IMAGE_EMF in content.types:
+        return "emf:" + hashlib.sha256(
+            content.types[ContentType.IMAGE_EMF]
+        ).hexdigest()
+    if ContentType.HTML in content.types:
+        return "html:" + hashlib.sha256(
+            content.types[ContentType.HTML]
+        ).hexdigest()
+    if ContentType.RTF in content.types:
+        return "rtf:" + hashlib.sha256(
+            content.types[ContentType.RTF]
+        ).hexdigest()
+    return "other:" + str(time.time())
+
+
 def _build_preview(types: dict[ContentType, bytes]) -> str:
     """Build a human-readable preview from clipboard content."""
     if ContentType.TEXT in types:
@@ -71,6 +102,12 @@ def _map_label_to_type(label: str) -> ContentType:
 class ClipboardHistory:
     """Thread-safe clipboard history persisted to a local JSON file."""
 
+    # Minimum interval (seconds) between entries with identical primary content.
+    # Multi-step clipboard writes (TEXT → HTML → RTF) can trigger multiple
+    # monitor events that each produce a read with slightly different format
+    # sets.  This dedup window coalesces them into one entry.
+    DEDUP_WINDOW = 2.0
+
     def __init__(self, storage_path: str | None = None, max_entries: int = 50,
                  enc_mgr: "EncryptionManager | None" = None):
         if storage_path:
@@ -81,6 +118,8 @@ class ClipboardHistory:
         self._entries: list[dict] = []
         self._lock = threading.Lock()
         self._enc_mgr = enc_mgr
+        self._last_dedup_key: str = ""
+        self._last_dedup_time: float = 0.0
         self._load()
 
     # ------------------------------------------------------------------
@@ -88,7 +127,13 @@ class ClipboardHistory:
     # ------------------------------------------------------------------
 
     def add(self, content: ClipboardContent) -> None:
-        """Add a clipboard entry. Silently ignores empty content."""
+        """Add a clipboard entry. Silently ignores empty content.
+
+        Deduplicates: entries with the same primary content (text body or
+        image bytes) within a short window are coalesced into one record.
+        This handles multi-step clipboard writes where each format triggers
+        a separate monitor event.
+        """
         if content.is_empty():
             return
         best = content.best_format()
@@ -96,19 +141,29 @@ class ClipboardHistory:
             return
         best_type, _best_data = best
 
-        preview = _build_preview(content.types)
-        entry: dict = {
-            "timestamp": content.timestamp or time.time(),
-            "content_type": _map_type_to_label(best_type),
-            "text_preview": preview,
-            "types": {
-                _map_type_to_label(t): base64.b64encode(data).decode("ascii")
-                for t, data in content.types.items()
-            },
-            "source_device": content.source_device,
-        }
+        # -- dedup ---------------------------------------------------
+        dedup_key = _make_dedup_key(content)
+        now = content.timestamp or time.time()
 
         with self._lock:
+            if dedup_key == self._last_dedup_key:
+                if now - self._last_dedup_time < self.DEDUP_WINDOW:
+                    return  # same primary content within window — coalesce
+            self._last_dedup_key = dedup_key
+            self._last_dedup_time = now
+
+            preview = _build_preview(content.types)
+            entry: dict = {
+                "timestamp": now,
+                "content_type": _map_type_to_label(best_type),
+                "text_preview": preview,
+                "types": {
+                    _map_type_to_label(t): base64.b64encode(data).decode("ascii")
+                    for t, data in content.types.items()
+                },
+                "source_device": content.source_device,
+            }
+
             self._entries.insert(0, entry)
             if len(self._entries) > self.MAX_ENTRIES:
                 self._entries = self._entries[: self.MAX_ENTRIES]
