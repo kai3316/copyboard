@@ -1365,29 +1365,31 @@ class DashboardWindow:
         # ── Active + History stacked vertically ──────────────────────
         card = ctk.CTkFrame(panel, corner_radius=12)
         card.pack(fill="both", expand=True)
-        card.columnconfigure(0, weight=1)
-        card.rowconfigure(0, weight=1)  # active section expands
 
-        # Active (top)
-        top = ctk.CTkFrame(card, fg_color="transparent")
-        top.grid(row=0, column=0, sticky="nsew", padx=12, pady=(8, 4))
-        ctk.CTkLabel(top, text="Active",
-                    font=ctk.CTkFont(size=12, weight="bold"),
+        # Active section — expandable, takes all extra space
+        active_section = ctk.CTkFrame(card, fg_color="transparent")
+        active_section.pack(fill="both", expand=True, padx=12, pady=(8, 4))
+
+        ctk.CTkLabel(active_section, text="Active",
+                     font=ctk.CTkFont(size=12, weight="bold"),
         ).pack(anchor="w")
-        self._transfer_scroll = ctk.CTkScrollableFrame(top, fg_color="transparent")
-        self._transfer_scroll.pack(fill="x", expand=True, pady=(2, 0))
+        self._transfer_scroll = ctk.CTkScrollableFrame(
+            active_section, fg_color="transparent",
+        )
+        self._transfer_scroll.pack(fill="both", expand=True, pady=(2, 0))
 
-        # Separator (horizontal)
+        # Separator
         hsep = ctk.CTkFrame(card, height=1, fg_color=("gray80", "gray30"))
-        hsep.grid(row=1, column=0, sticky="ew", padx=12)
+        hsep.pack(fill="x", padx=12)
 
-        # History (bottom)
-        bottom = ctk.CTkFrame(card, fg_color="transparent")
-        bottom.grid(row=2, column=0, sticky="nsew", padx=12, pady=(4, 8))
-        history_header = ctk.CTkFrame(bottom, fg_color="transparent")
+        # History section — compact, fixed height
+        history_section = ctk.CTkFrame(card, fg_color="transparent")
+        history_section.pack(fill="x", padx=12, pady=(4, 8))
+
+        history_header = ctk.CTkFrame(history_section, fg_color="transparent")
         history_header.pack(fill="x")
         ctk.CTkLabel(history_header, text="History",
-                    font=ctk.CTkFont(size=12, weight="bold"),
+                     font=ctk.CTkFont(size=12, weight="bold"),
         ).pack(side="left")
         if self._clear_transfer_history:
             ctk.CTkButton(
@@ -1400,12 +1402,14 @@ class DashboardWindow:
                 command=self._on_clear_transfer_history,
             ).pack(side="right")
         self._transfer_history_stats = ctk.CTkLabel(
-            bottom, text="",
+            history_section, text="",
             font=ctk.CTkFont(size=10),
             text_color=("gray55", "gray55"),
         )
         self._transfer_history_stats.pack(anchor="w", pady=(1, 0))
-        self._transfer_history_scroll = ctk.CTkScrollableFrame(bottom, height=80, fg_color="transparent")
+        self._transfer_history_scroll = ctk.CTkScrollableFrame(
+            history_section, height=80, fg_color="transparent",
+        )
         self._transfer_history_scroll.pack(fill="x", expand=False, pady=(2, 0))
 
         # Speed test result below the card
