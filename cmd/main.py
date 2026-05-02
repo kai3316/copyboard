@@ -29,7 +29,7 @@ from internal.security.encryption import EncryptionManager
 from internal.security.pairing import PairingManager
 from internal.sync.file_transfer import FileTransferManager
 from internal.sync.manager import SyncManager
-from internal.transport.connection import TransportManager
+from internal.transport.connection import MAX_FRAME_SIZE, TransportManager
 from internal.transport.discovery import Discovery
 from internal.ui.dashboard import DashboardWindow
 from internal.ui.dialogs import show_error, show_info, show_warning
@@ -321,6 +321,17 @@ def main():
             logger.info("Filtering sensitive content: %s", sensitivity)
             msg.content = content_filter.filter_content(msg.content)
         data = encode_message(msg)
+        if len(data) > MAX_FRAME_SIZE:
+            size_mb = len(data) / (1024 * 1024)
+            logger.warning(
+                "Clipboard content too large to sync: %.1f MB (limit: %d MB)",
+                size_mb, MAX_FRAME_SIZE // (1024 * 1024),
+            )
+            notification_mgr.show(
+                "Sync Skipped",
+                f"剪贴板内容过大（{size_mb:.1f} MB），跳过同步",
+            )
+            return
         transport_mgr.broadcast(data)
 
     sync_mgr.on_send = on_local_sync

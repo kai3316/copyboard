@@ -1270,6 +1270,25 @@ class DashboardWindow:
                 text_color=("gray50", "gray60"),
             ).pack(side="right")
 
+        # Source device indicator
+        source_device = entry.get("source_device", "")
+        cfg = self._get_config()
+        if source_device and source_device != cfg.device_id:
+            peer_name = source_device[:12]
+            for peer in self._get_peers():
+                if peer[0] == source_device:
+                    peer_name = peer[1]
+                    break
+            source_label = f"从 {peer_name} 同步"
+        else:
+            source_label = "本机"
+        ctk.CTkLabel(
+            inner, text=source_label,
+            font=ctk.CTkFont(size=10),
+            text_color=("#3498DB", "#5DADE2"),
+            anchor="w",
+        ).pack(fill="x", pady=(2, 0))
+
         if preview:
             ctk.CTkLabel(
                 inner, text=preview,
