@@ -84,7 +84,10 @@ class _ClipboardReader(ClipboardReader):
             )
             if result.returncode == 0 and result.stdout.strip():
                 data = result.stdout
-                if data.startswith(b"{\\rtf"):
+                # Some apps emit RTF with a leading BOM or whitespace.
+                # Check for \rtf anywhere in the first 200 bytes.
+                head = data[:200]
+                if b"\\rtf" in head or b"{\\rtf" in head:
                     return data
         except Exception:
             logger.debug("pbpaste rtf read failed", exc_info=True)
@@ -111,19 +114,18 @@ class _ClipboardReader(ClipboardReader):
 
 class _ClipboardWriter(ClipboardWriter):
     def write(self, content: ClipboardContent):
-        best = content.best_format()
-        if best is None:
-            return
-        fmt_type, data = best
-
-        if fmt_type == ContentType.TEXT:
-            self._set_text(data)
-        elif fmt_type == ContentType.HTML:
-            self._set_html(data)
-        elif fmt_type == ContentType.RTF:
-            self._set_rtf(data)
-        elif fmt_type == ContentType.IMAGE_PNG:
-            self._set_image(data)
+        # Write ALL available formats so the receiving application
+        # can choose the richest one it supports.
+        for fmt_type, data in content.types.items():
+            if fmt_type == ContentType.TEXT:
+                self._set_text(data)
+            elif fmt_type == ContentType.HTML:
+                self._set_html(data)
+            elif fmt_type == ContentType.RTF:
+                self._set_rtf(data)
+            elif fmt_type == ContentType.IMAGE_PNG:
+                self._set_image(data)
+            # IMAGE_EMF is Windows-only, skip on macOS
 
     def _set_text(self, data: bytes):
         try:
@@ -151,10 +153,7 @@ class _ClipboardWriter(ClipboardWriter):
                 capture_output=True, timeout=3,
             )
         except Exception:
-            logger.debug("osascript html write failed, falling back to text", exc_info=True)
-            # Strip HTML tags before setting as plain text
-            text = re.sub(r'<[^>]*>', '', data.decode('utf-8', errors='replace'))
-            self._set_text(text.encode('utf-8'))
+            logger.debug("osascript html write failed", exc_info=True)
         finally:
             if tmp_path:
                 try:

@@ -258,7 +258,7 @@ class TestCrossPlatformContentParity:
         assert c1.hash_key() == c2.hash_key()
 
     def test_format_priority_consistent(self):
-        """HTML > IMAGE_PNG > RTF > TEXT priority is platform-independent."""
+        """HTML > RTF > TEXT > IMAGE_PNG priority is platform-independent."""
         from internal.clipboard.format import ClipboardContent, ContentType
 
         c = ClipboardContent(types={
@@ -270,20 +270,20 @@ class TestCrossPlatformContentParity:
         fmt, data = c.best_format()
         assert fmt == ContentType.HTML
 
-        # Remove HTML, IMAGE_PNG should be best
+        # Remove HTML → RTF wins (above TEXT and IMAGE_PNG)
         del c.types[ContentType.HTML]
-        fmt, data = c.best_format()
-        assert fmt == ContentType.IMAGE_PNG
-
-        # Remove IMAGE_PNG, RTF should be best
-        del c.types[ContentType.IMAGE_PNG]
         fmt, data = c.best_format()
         assert fmt == ContentType.RTF
 
-        # Remove RTF, TEXT should be best
+        # Remove RTF → TEXT wins (above IMAGE_PNG)
         del c.types[ContentType.RTF]
         fmt, data = c.best_format()
         assert fmt == ContentType.TEXT
+
+        # Remove TEXT → IMAGE_PNG last resort
+        del c.types[ContentType.TEXT]
+        fmt, data = c.best_format()
+        assert fmt == ContentType.IMAGE_PNG
 
 
 class TestPlatformAvailability:

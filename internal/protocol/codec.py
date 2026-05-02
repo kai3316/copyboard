@@ -55,6 +55,7 @@ _TYPE_NAME_MAP = {
     ContentType.HTML: "HTML",
     ContentType.RTF: "RTF",
     ContentType.IMAGE_PNG: "IMAGE_PNG",
+    ContentType.IMAGE_EMF: "IMAGE_EMF",
 }
 _NAME_TYPE_MAP = {v: k for k, v in _TYPE_NAME_MAP.items()}
 

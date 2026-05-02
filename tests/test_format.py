@@ -125,15 +125,24 @@ class TestBestFormat:
         assert ClipboardContent().best_format() is None
 
     def test_fallback_to_image_png(self):
-        """IMAGE_PNG over RTF and TEXT."""
+        """TEXT/RTF rank above IMAGE_PNG (editable formats preferred)."""
         c = ClipboardContent(types={
             ContentType.IMAGE_PNG: b"png",
-            ContentType.RTF: b"rtf",
             ContentType.TEXT: b"text",
         })
         fmt, data = c.best_format()
-        assert fmt == ContentType.IMAGE_PNG
-        assert data == b"png"
+        assert fmt == ContentType.TEXT
+        assert data == b"text"
+
+    def test_rtf_over_image(self):
+        """RTF ranks above IMAGE_PNG."""
+        c = ClipboardContent(types={
+            ContentType.IMAGE_PNG: b"png",
+            ContentType.RTF: b"rtf",
+        })
+        fmt, data = c.best_format()
+        assert fmt == ContentType.RTF
+        assert data == b"rtf"
 
     def test_fallback_to_rtf(self):
         """RTF over TEXT."""

@@ -11,6 +11,7 @@ class ContentType(enum.Enum):
     HTML = 2
     RTF = 3
     IMAGE_PNG = 4
+    IMAGE_EMF = 5  # Windows Enhanced Metafile (vector)
 
 
 @dataclass
@@ -33,8 +34,15 @@ class ClipboardContent:
         return len(self.types) == 0
 
     def best_format(self) -> tuple[ContentType, bytes] | None:
-        """Return the best available format: HTML > IMAGE_PNG > RTF > TEXT."""
-        for fmt in (ContentType.HTML, ContentType.IMAGE_PNG, ContentType.RTF, ContentType.TEXT):
+        """Return the best available format.
+
+        Priority: HTML > EMF (vector) > RTF > TEXT > IMAGE_PNG (raster)
+        Text-based formats rank above raster images so editable content
+        is preferred for paste. EMF sits between HTML and RTF because
+        it preserves editable vector shapes.
+        """
+        for fmt in (ContentType.HTML, ContentType.IMAGE_EMF, ContentType.RTF,
+                    ContentType.TEXT, ContentType.IMAGE_PNG):
             if fmt in self.types:
                 return fmt, self.types[fmt]
         return None

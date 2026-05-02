@@ -20,6 +20,15 @@ logger = logging.getLogger(__name__)
 # Win32 API bindings
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
+gdi32 = ctypes.windll.gdi32
+
+# GDI32 EMF functions
+gdi32.SetEnhMetaFileBits.argtypes = [ctypes.c_uint, ctypes.c_char_p]
+gdi32.SetEnhMetaFileBits.restype = ctypes.c_void_p
+gdi32.DeleteEnhMetaFile.argtypes = [ctypes.c_void_p]
+gdi32.DeleteEnhMetaFile.restype = ctypes.c_int
+gdi32.GetEnhMetaFileBits.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_char_p]
+gdi32.GetEnhMetaFileBits.restype = ctypes.c_uint
 
 # Set up function signatures
 kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
@@ -80,6 +89,7 @@ CF_BITMAP = 2
 CF_DIB = 8
 CF_UNICODETEXT = 13
 CF_HDROP = 15
+CF_ENHMETAFILE = 14
 
 # Registered format for HTML
 CF_HTML = user32.RegisterClipboardFormatW("HTML Format")
@@ -130,6 +140,8 @@ class _ClipboardReader(ClipboardReader):
             return self._read_text_handle(handle, wide=False)
         elif fmt == CF_DIB:
             return self._read_dib_handle(handle)
+        elif fmt == CF_ENHMETAFILE:
+            return self._read_emf_handle(handle)
         return None
 
     def _read_text_handle(self, handle, wide: bool) -> bytes:
@@ -198,11 +210,25 @@ class _ClipboardReader(ClipboardReader):
             logger.debug("Failed to read DIB from clipboard", exc_info=True)
             return b""
 
+    def _read_emf_handle(self, handle) -> bytes:
+        """Read EMF from global memory handle (HENHMETAFILE cast to HGLOBAL)."""
+        try:
+            size = gdi32.GetEnhMetaFileBits(handle, 0, None)
+            if size == 0:
+                return b""
+            buf = ctypes.create_string_buffer(size)
+            written = gdi32.GetEnhMetaFileBits(handle, size, buf)
+            if written == 0:
+                return b""
+            return buf.raw[:written]
+        except Exception:
+            logger.debug("Failed to read EMF from clipboard", exc_info=True)
+            return b""
+
     def _map_format(self, fmt: int) -> ContentType | None:
         if fmt == CF_UNICODETEXT:
             return ContentType.TEXT
         elif fmt == CF_TEXT:
-            # Only use CF_TEXT as fallback if no CF_UNICODETEXT was present
             return ContentType.TEXT
         elif fmt == CF_HTML:
             return ContentType.HTML
@@ -210,6 +236,8 @@ class _ClipboardReader(ClipboardReader):
             return ContentType.RTF
         elif fmt == CF_DIB:
             return ContentType.IMAGE_PNG
+        elif fmt == CF_ENHMETAFILE:
+            return ContentType.IMAGE_EMF
         return None
 
 
@@ -220,20 +248,23 @@ class _ClipboardWriter(ClipboardWriter):
         try:
             user32.EmptyClipboard()
 
-            best = content.best_format()
-            if best is None:
-                return
-            fmt_type, data = best
-
-            logger.debug("Writing %s to clipboard", fmt_type.name)
-            if fmt_type == ContentType.TEXT:
-                self._set_text(data)
-            elif fmt_type == ContentType.HTML:
-                self._set_html(data)
-            elif fmt_type == ContentType.RTF:
-                self._set_custom_format(CF_RTF, data)
-            elif fmt_type == ContentType.IMAGE_PNG:
-                self._set_image(data)
+            # Write ALL available formats so the receiving application
+            # can choose the richest one it supports.  This fixes:
+            #   - PowerPoint shapes appearing as images (EMF preserved)
+            #   - Formatted text losing RTF/HTML
+            #   - No plain-text fallback for RTF-only paste
+            for fmt_type, data in content.types.items():
+                logger.debug("Writing %s to clipboard (%d bytes)", fmt_type.name, len(data))
+                if fmt_type == ContentType.TEXT:
+                    self._set_text(data)
+                elif fmt_type == ContentType.HTML:
+                    self._set_html(data)
+                elif fmt_type == ContentType.RTF:
+                    self._set_custom_format(CF_RTF, data)
+                elif fmt_type == ContentType.IMAGE_PNG:
+                    self._set_image(data)
+                elif fmt_type == ContentType.IMAGE_EMF:
+                    self._set_emf(data)
         finally:
             user32.CloseClipboard()
 
@@ -251,8 +282,6 @@ class _ClipboardWriter(ClipboardWriter):
     def _set_html(self, data: bytes):
         cf_html = self._build_cf_html(data)
         self._set_custom_format(CF_HTML, cf_html)
-        text = re.sub(r'<[^>]*>', '', data.decode('utf-8', errors='replace'))
-        self._set_text(text.encode('utf-8'))
 
     @staticmethod
     def _build_cf_html(html_bytes: bytes) -> bytes:
@@ -312,6 +341,17 @@ class _ClipboardWriter(ClipboardWriter):
                     logger.warning("SetClipboardData(CF_DIB) failed")
         except Exception:
             logger.debug("Failed to write image to clipboard", exc_info=True)
+
+    def _set_emf(self, data: bytes):
+        """Write EMF (Enhanced Metafile) to clipboard. Preserves editable
+        vector shapes for PowerPoint, Visio, etc. (Windows only)."""
+        enh_meta_file = gdi32.SetEnhMetaFileBits(len(data), data)
+        if enh_meta_file:
+            if not user32.SetClipboardData(CF_ENHMETAFILE, enh_meta_file):
+                logger.warning("SetClipboardData(CF_ENHMETAFILE) failed")
+                gdi32.DeleteEnhMetaFile(enh_meta_file)
+        else:
+            logger.warning("SetEnhMetaFileBits failed — EMF data may be corrupt")
 
     def _set_custom_format(self, fmt: int, data: bytes):
         handle = kernel32.GlobalAlloc(0x0002, len(data) + 1)
