@@ -47,8 +47,10 @@ hiddenimports += [
     "internal.transport.connection",
     "internal.transport.discovery",
     "internal.ui.dashboard",
+    "internal.ui.dialogs",
     "internal.ui.settings_window",
     "internal.ui.systray",
+    "internal.security.encryption",
 ]
 
 if sys.platform == "darwin":
