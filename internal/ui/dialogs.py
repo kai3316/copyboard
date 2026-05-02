@@ -65,12 +65,19 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
     btn_row.pack(fill="x", padx=24, pady=(0, 20))
 
     for i, (label, color) in enumerate(buttons):
+        if isinstance(color, tuple):
+            # Tuple (light, dark) — use slightly darker variants for hover
+            hover = color
+        elif color == "transparent":
+            hover = ("gray85", "gray25")
+        elif color.startswith("#"):
+            hover = _darken(color, 0.15)
+        else:
+            hover = color
         btn = ctk.CTkButton(
             btn_row, text=label, width=90, height=32,
             fg_color=color,
-            hover_color=(
-                _darken(color, 0.15) if color != "transparent" else ("gray85", "gray25")
-            ),
+            hover_color=hover,
             font=ctk.CTkFont(size=12),
             command=lambda v=i: _close(v),
         )
@@ -117,4 +124,4 @@ def show_error(parent, title, message):
 def ask_yesno(parent, title, message):
     """Show a confirmation dialog with Yes/No buttons. Returns True if Yes."""
     return _dialog(parent, title, message, _WARN_ICON, _WARN_COLOR,
-                   [("Yes", _INFO_COLOR), ("No", "transparent")])
+                   [("Yes", _INFO_COLOR), ("No", ("gray65", "gray45"))])
