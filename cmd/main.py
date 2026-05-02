@@ -71,6 +71,18 @@ def _get_log_path():
     return _get_log_dir() / "copyboard.log"
 
 
+def _hide_dock():
+    """Hide the app from the macOS Dock, keeping only the menu bar icon."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from rubicon.objc import ObjCClass
+        NSApp = ObjCClass('NSApplication').sharedApplication()
+        NSApp.setActivationPolicy_(2)  # NSApplicationActivationPolicyAccessory
+    except Exception:
+        pass
+
+
 def setup_logging():
     import logging.handlers
 
@@ -122,6 +134,7 @@ def setup_logging():
 
 def main():
     setup_logging()
+    _hide_dock()
     logger.info("=" * 72)
     logger.info("  CopyBoard v1.0.0 — session start  %s",
                 time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -876,6 +889,7 @@ def _run_tray(device_name: str, pipe):
     Must be at module level so it is picklable for multiprocessing with 'spawn'.
     """
     setup_logging()
+    _hide_dock()
     child_systray = SystrayApp(
         device_name=device_name,
         on_enable_toggle=lambda v: pipe.send(("toggle_sync", v)),

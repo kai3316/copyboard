@@ -466,9 +466,18 @@ class DashboardWindow:
         # ── Col 0: Connection ──────────────────────────────────────────
         card_s = ctk.CTkFrame(top, corner_radius=12)
         card_s.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=(0, 8))
-        ctk.CTkLabel(card_s, text="Connection",
+        title_row = ctk.CTkFrame(card_s, fg_color="transparent")
+        title_row.pack(fill="x", padx=16, pady=(12, 6))
+        ctk.CTkLabel(title_row, text="Connection",
                     font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(12, 6))
+        ).pack(side="left")
+        self._start_time = time.time()
+        self._uptime_label = ctk.CTkLabel(
+            title_row, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray55"),
+        )
+        self._uptime_label.pack(side="right")
         s_center = ctk.CTkFrame(card_s, fg_color="transparent")
         s_center.pack(fill="x", padx=16)
 
@@ -520,13 +529,6 @@ class DashboardWindow:
             font=ctk.CTkFont(size=11),
             text_color=("#27AE60", "#2ECC71"),
         ).pack(side="left", padx=(8, 0))
-        self._start_time = time.time()
-        self._uptime_label = ctk.CTkLabel(
-            proto_row, text="",
-            font=ctk.CTkFont(size=11),
-            text_color=("gray55", "gray55"),
-        )
-        self._uptime_label.pack(side="right")
 
         # ── Col 1: This Device ─────────────────────────────────────────
         card_d = ctk.CTkFrame(top, corner_radius=12)

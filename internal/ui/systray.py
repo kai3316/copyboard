@@ -160,6 +160,11 @@ class SystrayApp:
             menu,
         )
 
+        # macOS: mark NSStatusItem image as template so the system tints
+        # it for dark/light mode instead of rendering it as a white square.
+        if sys.platform == "darwin":
+            self._set_mac_template()
+
         # Register a custom message handler so set_peers() can safely
         # trigger menu updates from the peer updater thread.  The
         # handler runs on the pystray thread (via the Windows message
@@ -176,6 +181,25 @@ class SystrayApp:
     def stop(self):
         if self._tray:
             self._tray.stop()
+
+    def _set_mac_template(self):
+        """Mark the pystray NSStatusItem image as a template.
+
+        Without this, coloured icons render as solid white squares in the
+        macOS menu bar — only template images get dark/light mode tinting.
+        """
+        try:
+            status_item = getattr(self._tray, '_status_item', None)
+            if status_item is None:
+                return
+            button = status_item.button()
+            if button is None:
+                return
+            image = button.image()
+            if image is not None:
+                image.setTemplate_(True)
+        except Exception:
+            logger.debug("Failed to set macOS template flag", exc_info=True)
 
     def _build_peer_menu(self):
         """Build submenu for connected peers."""
