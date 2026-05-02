@@ -24,9 +24,18 @@ logger = logging.getLogger(__name__)
 
 
 def _create_icon_image(size: int = 32) -> Image.Image:
-    """Create a simple clipboard icon."""
+    """Create a clipboard icon.
+
+    macOS menu bar uses template images — the system tints black pixels
+    for dark/light mode.  Blue or coloured icons render as white squares.
+    """
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+
+    is_mac = sys.platform == "darwin"
+    body_fill = (0, 0, 0, 255) if is_mac else (80, 140, 220)
+    bar_fill = (0, 0, 0, 255) if is_mac else (60, 110, 180)
+    line_color = (0, 0, 0, 180) if is_mac else (220, 230, 245)
 
     margin = size // 8
     padding = size // 5
@@ -36,7 +45,7 @@ def _create_icon_image(size: int = 32) -> Image.Image:
     y0 = margin + size // 6
     x1 = size - margin
     y1 = size - margin
-    draw.rounded_rectangle([x0, y0, x1, y1], radius=size // 8, fill=(80, 140, 220))
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=size // 8, fill=body_fill)
 
     # Clipboard top bar
     bar_width = size // 3
@@ -46,11 +55,10 @@ def _create_icon_image(size: int = 32) -> Image.Image:
     bar_y1 = y0 + padding // 2
     draw.rounded_rectangle(
         [bar_x0, bar_y0, bar_x1, bar_y1],
-        radius=size // 12, fill=(60, 110, 180),
+        radius=size // 12, fill=bar_fill,
     )
 
     # Paper lines
-    line_color = (220, 230, 245)
     line_margin = size // 4
     line_spacing = size // 8
     for i in range(3):
