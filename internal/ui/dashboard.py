@@ -1475,27 +1475,26 @@ class DashboardWindow:
                             peer_map: dict[str, str] | None = None):
         # ── Lazy-init cached objects (first call only) ───────────
         if self._card_font_bold is None:
-            self._card_font_bold = ctk.CTkFont(size=13, weight="bold")
+            self._card_font_bold = ctk.CTkFont(size=11, weight="bold")
             self._card_font = ctk.CTkFont(size=11)
             self._card_font_small = ctk.CTkFont(size=10)
-            self._card_font_btn = ctk.CTkFont(size=11)
+            self._card_font_btn = ctk.CTkFont(size=10)
             self._card_type_labels = {
                 "TEXT": T("history.type_text"),
                 "HTML": T("history.type_html"),
                 "IMAGE": T("history.type_image"),
                 "RTF": T("history.type_rich_text"),
             }
+            self._card_type_icons = {"TEXT": "▤", "HTML": "</>", "IMAGE": "▣", "RTF": "¶"}
             self._cached_device_id = self._get_config().device_id
 
         timestamp = entry.get("timestamp", 0)
         content_type = entry.get("content_type", "Unknown")
         preview = self._sanitize_preview(entry.get("text_preview", ""))
+        type_icon = self._card_type_icons.get(content_type, "·")
         type_color = self._TYPE_COLORS.get(content_type, ("#7F8C8D", "#95A5A6"))
-
-        # Relative time
         time_str = self._format_relative_time(timestamp)
 
-        # Source device
         source_device = entry.get("source_device", "")
         if source_device and source_device != self._cached_device_id:
             peer_name = peer_map.get(source_device) if peer_map else None
@@ -1508,62 +1507,66 @@ class DashboardWindow:
         type_label = self._card_type_labels.get(content_type, content_type)
         meta = f"{type_label}  ·  {source_label}"
 
-        card = ctk.CTkFrame(self._history_scroll, corner_radius=10,
+        card = ctk.CTkFrame(self._history_scroll, corner_radius=8,
                            fg_color=("gray95", "gray17"))
-        card.pack(fill="x", pady=3, padx=2)
+        card.pack(fill="x", pady=2, padx=2)
 
         inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="x", padx=14, pady=10)
+        inner.pack(fill="x", padx=12, pady=8)
 
-        # ── Left: colored accent bar ─────────────────────────────
-        accent = ctk.CTkFrame(inner, width=4, fg_color=type_color)
-        accent.pack(side="left", fill="y", padx=(0, 12))
+        # ── Row 1: icon + preview + time ─────────────────────────
+        r1 = ctk.CTkFrame(inner, fg_color="transparent")
+        r1.pack(fill="x")
 
-        # ── Right column ─────────────────────────────────────────
-        right = ctk.CTkFrame(inner, fg_color="transparent")
-        right.pack(side="left", fill="x", expand=True)
-
-        # Preview text
         ctk.CTkLabel(
-            right, text=preview or "[No preview]",
+            r1, text=type_icon,
+            font=ctk.CTkFont(size=14),
+            text_color=type_color,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkLabel(
+            r1, text=preview or "[No preview]",
             font=self._card_font_bold,
             text_color=("gray20", "gray85"),
-            anchor="w", justify="left",
-        ).pack(fill="x")
+            anchor="w",
+        ).pack(side="left")
 
-        # Type · source
         ctk.CTkLabel(
-            right, text=meta,
+            r1, text=time_str,
+            font=self._card_font_small,
+            text_color=("gray60", "gray55"),
+        ).pack(side="right")
+
+        # ── Row 2: meta ──────────────────────────────────────────
+        r2 = ctk.CTkFrame(inner, fg_color="transparent")
+        r2.pack(fill="x", pady=(2, 0))
+
+        ctk.CTkLabel(
+            r2, text=meta,
             font=self._card_font_small,
             text_color=("gray55", "gray55"),
             anchor="w",
-        ).pack(fill="x", pady=(2, 4))
-
-        # ── Bottom row: time + buttons ───────────────────────────
-        bottom = ctk.CTkFrame(right, fg_color="transparent")
-        bottom.pack(fill="x")
-
-        ctk.CTkLabel(
-            bottom, text=time_str,
-            font=self._card_font_small,
-            text_color=("gray60", "gray55"),
         ).pack(side="left")
 
-        ctk.CTkButton(
-            bottom, text=T("ui.copy"), width=52, height=24,
-            fg_color=("#27AE60", "#2ECC71"),
-            font=ctk.CTkFont(size=10),
-            command=lambda i=index: self._do_copy_history(i),
-        ).pack(side="right", padx=(4, 0))
-        ctk.CTkButton(
-            bottom, text=T("ui.delete"), width=52, height=24,
-            fg_color="transparent", border_width=1,
-            text_color=("#E74C3C", "#C0392B"),
-            border_color=("#E74C3C", "#C0392B"),
-            hover_color=("#FADBD8", "#5B2C2C"),
-            font=ctk.CTkFont(size=10),
-            command=lambda i=index: self._on_delete_history_item(i),
-        ).pack(side="right")
+        # ── Row 3: buttons ───────────────────────────────────────
+        if preview:
+            btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+            btn_row.pack(fill="x", pady=(4, 0))
+            ctk.CTkButton(
+                btn_row, text=T("ui.copy"), width=56, height=24,
+                fg_color=("#27AE60", "#2ECC71"),
+                font=self._card_font_btn,
+                command=lambda i=index: self._do_copy_history(i),
+            ).pack(side="left")
+            ctk.CTkButton(
+                btn_row, text=T("ui.delete"), width=56, height=24,
+                fg_color="transparent", border_width=1,
+                text_color=("#E74C3C", "#C0392B"),
+                border_color=("#E74C3C", "#C0392B"),
+                hover_color=("#FADBD8", "#5B2C2C"),
+                font=self._card_font_btn,
+                command=lambda i=index: self._on_delete_history_item(i),
+            ).pack(side="left", padx=(6, 0))
 
     def _do_copy_history(self, index: int):
         if self._copy_from_history:
