@@ -1333,7 +1333,9 @@ class DashboardWindow:
     # ═══════════════════════════════════════════════════════════════
 
     def _build_transfers_panel(self):
-        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        wrapper = ctk.CTkScrollableFrame(self._content_frame, fg_color="transparent")
+        panel = ctk.CTkFrame(wrapper, fg_color="transparent")
+        panel.pack(fill="both", expand=True)
 
         header = ctk.CTkFrame(panel, fg_color="transparent")
         header.pack(fill="x", pady=(0, 10))
@@ -1370,7 +1372,7 @@ class DashboardWindow:
                      font=ctk.CTkFont(size=12, weight="bold"),
         ).pack(anchor="w", padx=12, pady=(8, 2))
         self._transfer_scroll = ctk.CTkScrollableFrame(
-            active_card, height=200, fg_color="transparent",
+            active_card, height=180, fg_color="transparent",
         )
         self._transfer_scroll.pack(fill="x", padx=8, pady=(0, 8))
 
@@ -1412,7 +1414,7 @@ class DashboardWindow:
         )
         self._speed_test_label.pack(anchor="w", pady=(8, 0))
 
-        return panel
+        return wrapper
 
     def _refresh_transfers(self):
         if self._transfer_scroll is None or self._transfer_history_scroll is None:
