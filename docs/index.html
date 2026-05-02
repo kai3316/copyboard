@@ -535,8 +535,32 @@
     .stat-label { color: #71717a; font-size: 0.85rem; margin-top: 0.35rem; }
     @media (max-width: 768px) { .stats-grid { gap: 2rem; } .stat-text { font-size: 1rem; } }
 
+    /* ── Download Grid ────────────────────────────────────── */
+    .download-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
+      max-width: 900px; margin: 0 auto;
+    }
+    @media (max-width: 768px) { .download-grid { grid-template-columns: 1fr; max-width: 360px; } }
+    .download-card {
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px; padding: 2rem; text-align: center;
+      transition: border-color 0.3s, transform 0.3s;
+      display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+    }
+    .download-card:hover {
+      border-color: rgba(52,152,219,0.3); transform: translateY(-4px);
+    }
+    .download-icon { font-size: 2.5rem; }
+    .download-card h4 { font-size: 1.1rem; color: #e4e4e8; }
+    .download-card p { color: #71717a; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .download-card code {
+      background: rgba(52,152,219,0.12); color: #5DADE2;
+      padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
+    }
+
     /* ── CTA Section ─────────────────────────────────────── */
     .cta { background: #0d0d14; text-align: center; }
+    .cta .hero-buttons { justify-content: center; }
     .cta-box {
       background: linear-gradient(135deg, rgba(52,152,219,0.08), rgba(46,204,113,0.05));
       border: 1px solid rgba(52,152,219,0.15); border-radius: 24px;
@@ -1136,18 +1160,38 @@
     </div>
   </section>
 
-  <!-- Download CTA -->
+  <!-- Download -->
   <section class="cta" id="download">
     <div class="section-inner">
-      <div class="cta-box reveal">
+      <div class="section-header reveal">
         <div class="section-label">Download</div>
         <h2>Ready to Try?</h2>
-        <p>Download for Windows, macOS, or Linux. No install needed — just run and sync.</p>
-        <div class="hero-buttons">
-          <a href="https://github.com/kai3316/clipsync/releases/latest" class="btn btn-primary">&#8595; Download Latest Release</a>
-          <a href="https://github.com/kai3316/clipsync#install-from-source" class="btn btn-secondary">&#9000; Build from Source</a>
+        <p>Download for your platform. No install needed — just run and sync.</p>
+      </div>
+      <div class="download-grid stagger-reveal">
+        <div class="download-card">
+          <div class="download-icon">&#128187;</div>
+          <h4>Windows</h4>
+          <p>Portable <code>.exe</code></p>
+          <a href="https://github.com/kai3316/clipsync/releases/latest/download/clipsync-windows.zip" class="btn btn-primary" style="width:100%;justify-content:center;">&#8595; Download</a>
+        </div>
+        <div class="download-card">
+          <div class="download-icon">&#127822;</div>
+          <h4>macOS</h4>
+          <p>Universal <code>.app</code> bundle</p>
+          <a href="https://github.com/kai3316/clipsync/releases/latest/download/clipsync-macos.zip" class="btn btn-primary" style="width:100%;justify-content:center;">&#8595; Download</a>
+        </div>
+        <div class="download-card">
+          <div class="download-icon">&#128018;</div>
+          <h4>Linux</h4>
+          <p>Binary <code>tar.gz</code></p>
+          <a href="https://github.com/kai3316/clipsync/releases/latest/download/clipsync-linux.tar.gz" class="btn btn-primary" style="width:100%;justify-content:center;">&#8595; Download</a>
         </div>
       </div>
+      <p style="margin-top:2rem;font-size:0.9rem;color:#71717a;">
+        Or <a href="https://github.com/kai3316/clipsync/releases/latest" style="color:#3498DB;">view all releases</a> &middot;
+        <a href="https://github.com/kai3316/clipsync#install-from-source" style="color:#3498DB;">build from source</a>
+      </p>
     </div>
   </section>
 
