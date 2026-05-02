@@ -228,6 +228,7 @@ _EN: dict[str, str] = {
     "history.type_text": "Text",
     "history.type_html": "HTML",
     "history.type_image": "Image",
+    "history.type_vector_image": "Vector Image",
     "history.type_rich_text": "Rich Text",
     # Transfers panel
     "transfers.title": "File Transfers",
@@ -520,6 +521,7 @@ _ZH: dict[str, str] = {
     "history.type_text": "文本",
     "history.type_html": "HTML",
     "history.type_image": "图片",
+    "history.type_vector_image": "矢量图",
     "history.type_rich_text": "富文本",
     "transfers.title": "文件传输",
     "transfers.active": "进行中",

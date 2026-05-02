@@ -41,6 +41,7 @@ class DashboardWindow:
         "TEXT": ("#27AE60", "#2ECC71"),
         "HTML": ("#E67E22", "#F39C12"),
         "IMAGE": ("#8E44AD", "#9B59B6"),
+        "IMAGE_EMF": ("#3498DB", "#5DADE2"),
         "RTF": ("#7F8C8D", "#95A5A6"),
     }
 
@@ -1483,9 +1484,13 @@ class DashboardWindow:
                 "TEXT": T("history.type_text"),
                 "HTML": T("history.type_html"),
                 "IMAGE": T("history.type_image"),
+                "IMAGE_EMF": T("history.type_vector_image"),
                 "RTF": T("history.type_rich_text"),
             }
-            self._card_type_icons = {"TEXT": "▤", "HTML": "</>", "IMAGE": "▣", "RTF": "¶"}
+            self._card_type_icons = {
+                "TEXT": "📝", "HTML": "🌐", "IMAGE": "🖼️",
+                "IMAGE_EMF": "🎨", "RTF": "📋",
+            }
             self._cached_device_id = self._get_config().device_id
 
         timestamp = entry.get("timestamp", 0)
