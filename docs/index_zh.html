@@ -3,22 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="CopyBoard — 跨设备剪贴板即时同步，局域网内加密传输，无需配置">
-  <title>CopyBoard — 跨设备剪贴板同步</title>
+  <title>CopyBoard — 跨设备剪贴板同步 | 局域网加密传输，零配置</title>
+  <meta name="description" content="CopyBoard 在局域网内自动同步多台设备的剪贴板，支持 Windows、macOS、Linux。端到端加密，无需云端、无需账号。免费开源。">
+  <meta name="keywords" content="剪贴板同步,跨设备剪贴板,局域网剪贴板,剪贴板共享,复制粘贴同步,加密剪贴板,mDNS,零配置,开源,Windows,macOS,Linux">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://kai3316.github.io/copyboard/index_zh.html">
+  <link rel="alternate" hreflang="zh" href="https://kai3316.github.io/copyboard/index_zh.html">
+  <link rel="alternate" hreflang="en" href="https://kai3316.github.io/copyboard/index.html">
+  <link rel="alternate" hreflang="x-default" href="https://kai3316.github.io/copyboard/">
   <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://kai3316.github.io/copyboard/index_zh.html">
+  <meta property="og:title" content="CopyBoard — 跨设备剪贴板同步">
+  <meta property="og:description" content="一台复制，另一台粘贴。端到端加密，纯局域网传输。无需云端，无需账号，零配置。免费开源。">
+  <meta property="og:image" content="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg">
+  <meta property="og:site_name" content="CopyBoard">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="CopyBoard — 跨设备剪贴板同步">
+  <meta name="twitter:description" content="一台复制，另一台粘贴。端到端加密，纯局域网传输。免费开源。">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "CopyBoard",
+    "description": "跨设备剪贴板即时同步工具，局域网内加密传输，无需配置",
+    "operatingSystem": "Windows, macOS, Linux",
+    "applicationCategory": "UtilitiesApplication",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://kai3316.github.io/copyboard/",
+    "downloadUrl": "https://github.com/kai3316/copyboard/releases/latest",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "kai3316"
+    }
+  }
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
       background: #0a0a0f;
       color: #e4e4e8;
-      line-height: 1.6;
+      line-height: 1.8;
       overflow-x: hidden;
     }
-    h1, h2, h3 { font-weight: 700; letter-spacing: -0.02em; }
+    h1, h2, h3 { font-weight: 700; letter-spacing: normal; }
     h2 { font-size: 2.5rem; margin-bottom: 1rem; }
-    @media (max-width: 768px) { h2 { font-size: 1.8rem; } }
 
     .gradient-text {
       background: linear-gradient(135deg, #3498DB, #2ECC71);
@@ -66,14 +109,49 @@
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(52,152,219,0.4); }
-    @media (max-width: 768px) { .nav-links { display: none; } }
+
+    .hamburger {
+      display: none; flex-direction: column; gap: 5px;
+      background: none; border: none; cursor: pointer; padding: 4px;
+      z-index: 1001;
+    }
+    .hamburger span {
+      display: block; width: 24px; height: 2px;
+      background: #e4e4e8; border-radius: 2px;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+    .hamburger.open span:nth-child(2) { opacity: 0; }
+    .hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+    .mobile-menu {
+      display: none; position: fixed; top: 64px; left: 0; right: 0;
+      background: rgba(10,10,15,0.95); backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 1.5rem 2rem; z-index: 999;
+      flex-direction: column; gap: 1rem;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a { color: #a1a1aa; text-decoration: none; font-size: 1.05rem; font-weight: 500; }
+    .mobile-menu a:hover { color: #fff; }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-cta { display: none; }
+      .hamburger { display: flex; }
+    }
+
+    @media (min-width: 769px) {
+      .mobile-menu.open { display: none !important; }
+    }
 
     .hero {
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      text-align: center; padding: 6rem 2rem 4rem;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 7rem 2rem 2rem;
       background:
-        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(52,152,219,0.15), transparent),
-        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(46,204,113,0.08), transparent),
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(52,152,219,0.18), transparent),
+        radial-gradient(ellipse 60% 50% at 85% 85%, rgba(46,204,113,0.1), transparent),
+        radial-gradient(ellipse 40% 40% at 15% 80%, rgba(155,89,182,0.06), transparent),
         #0a0a0f;
       position: relative; overflow: hidden;
     }
@@ -82,29 +160,105 @@
       background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     }
     .hero-content { position: relative; z-index: 1; max-width: 800px; }
-    .hero-icon { width: 88px; height: 88px; margin-bottom: 1.5rem; filter: drop-shadow(0 0 30px rgba(52,152,219,0.3)); }
-    .hero h1 { font-size: 3.5rem; margin-bottom: 0.5rem; line-height: 1.15; }
-    .hero h1 span { display: block; font-size: 2rem; color: #a1a1aa; font-weight: 500; margin-top: 0.25rem; }
-    .hero p { font-size: 1.15rem; color: #71717a; max-width: 560px; margin: 1.5rem auto 2rem; }
+
+    .hero-icon-wrapper {
+      position: relative; display: inline-block; margin-bottom: 2.5rem;
+    }
+    .hero-glow-ring {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      border: 2px solid rgba(52,152,219,0.2);
+      animation: ringPulse 3s ease-in-out infinite, ringSpin 20s linear infinite;
+    }
+    .hero-glow-ring::after {
+      content: ''; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #3498DB; box-shadow: 0 0 20px #3498DB, 0 0 40px #3498DB;
+    }
+    @keyframes ringPulse {
+      0%, 100% { width: 140px; height: 140px; opacity: 0.6; }
+      50% { width: 160px; height: 160px; opacity: 1; }
+    }
+    @keyframes ringSpin {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .hero-icon { width: 88px; height: 88px; position: relative; z-index: 1; }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 0.35rem 1rem;
+      border-radius: 20px;
+      background: rgba(52,152,219,0.1);
+      border: 1px solid rgba(52,152,219,0.2);
+      color: #5DADE2;
+      font-size: 0.85rem; font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero h1 {
+      font-size: 4.5rem; font-weight: 800; letter-spacing: -0.03em;
+      line-height: 1; margin-bottom: 2.25rem;
+      background: linear-gradient(135deg, #fff 0%, #e4e4e8 40%, #3498DB 70%, #2ECC71 100%);
+      background-size: 300% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: heroShimmer 6s ease-in-out infinite;
+    }
+    @keyframes heroShimmer {
+      0%, 100% { background-position: 0% center; }
+      50% { background-position: 100% center; }
+    }
+
+    .hero-divider {
+      width: 60px; height: 3px; border-radius: 2px;
+      background: linear-gradient(90deg, #3498DB, #2ECC71);
+      margin: 0 auto 2rem; opacity: 0.6;
+    }
+
+    .hero p {
+      font-size: 1.2rem; color: #71717a; max-width: 600px;
+      margin: 0 auto 2.5rem; line-height: 1.7;
+    }
+
     .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
-      padding: 0.75rem 1.75rem; border-radius: 10px; font-size: 1rem;
+      padding: 0.85rem 2rem; border-radius: 12px; font-size: 1rem;
       font-weight: 600; text-decoration: none; cursor: pointer; border: none;
       transition: transform 0.2s, box-shadow 0.2s;
     }
     .btn:hover { transform: translateY(-2px); }
-    .btn-primary { background: linear-gradient(135deg, #3498DB, #2980B9); color: #fff; box-shadow: 0 4px 24px rgba(52,152,219,0.3); }
-    .btn-primary:hover { box-shadow: 0 6px 32px rgba(52,152,219,0.45); }
-    .btn-secondary { background: rgba(255,255,255,0.06); color: #e4e4e8; border: 1px solid rgba(255,255,255,0.1); }
-    .btn-secondary:hover { background: rgba(255,255,255,0.1); }
-    @media (max-width: 768px) { .hero h1 { font-size: 2.2rem; } .hero h1 span { font-size: 1.3rem; } }
+    .btn-primary { background: linear-gradient(135deg, #3498DB, #2980B9); color: #fff; box-shadow: 0 4px 30px rgba(52,152,219,0.35); }
+    .btn-primary:hover { box-shadow: 0 8px 40px rgba(52,152,219,0.5); }
+    .btn-secondary { background: rgba(255,255,255,0.05); color: #e4e4e8; border: 1px solid rgba(255,255,255,0.12); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+
+    .scroll-indicator {
+      position: absolute; bottom: 2.5rem; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      opacity: 0.5;
+    }
+    .scroll-indicator span {
+      display: block; width: 20px; height: 20px;
+      border-right: 2px solid #71717a; border-bottom: 2px solid #71717a;
+      transform: rotate(45deg);
+      animation: scrollBounce 2s ease-in-out infinite;
+    }
+    .scroll-indicator span:nth-child(2) { animation-delay: 0.15s; margin-top: -4px; }
+    @keyframes scrollBounce {
+      0%, 100% { opacity: 0.3; transform: rotate(45deg) translate(0, 0); }
+      50% { opacity: 1; transform: rotate(45deg) translate(4px, 4px); }
+    }
 
     section { padding: 6rem 2rem; }
     .section-inner { max-width: 1100px; margin: 0 auto; }
     .section-label {
-      display: inline-block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.08em; color: #3498DB; margin-bottom: 0.75rem;
+      display: inline-block; font-size: 0.85rem; font-weight: 600;
+      letter-spacing: 0.05em; color: #3498DB; margin-bottom: 0.75rem;
     }
     .section-header { text-align: center; margin-bottom: 4rem; }
     .section-header p { color: #71717a; font-size: 1.1rem; max-width: 500px; margin: 0 auto; }
@@ -113,7 +267,6 @@
     .feature-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
     }
-    @media (max-width: 768px) { .feature-grid { grid-template-columns: 1fr; } }
     .feature-card {
       background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
       border-radius: 16px; padding: 2rem; transition: border-color 0.3s, transform 0.3s;
@@ -133,23 +286,152 @@
     .feature-card p { color: #71717a; font-size: 0.9rem; }
 
     .security { background: #0a0a0f; }
-    .security-diagram {
-      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 20px; padding: 3rem; max-width: 700px; margin: 0 auto;
-      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.85rem;
-      line-height: 2;
+    .security-cards {
+      display: flex; align-items: stretch; justify-content: center;
+      gap: 0; max-width: 1000px; margin: 0 auto;
     }
-    .security-diagram .layer { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0; }
-    .security-diagram .layer .badge {
-      padding: 2px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+    .sec-card {
+      flex: 1; background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px; padding: 2.25rem 2rem;
+      transition: border-color 0.4s, box-shadow 0.4s, transform 0.4s;
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column;
     }
-    .badge-app { background: rgba(52,152,219,0.2); color: #3498DB; }
-    .badge-transport { background: rgba(46,204,113,0.2); color: #2ECC71; }
-    .badge-rest { background: rgba(243,156,18,0.2); color: #F39C12; }
+    .sec-card:hover {
+      transform: translateY(-6px); z-index: 2;
+    }
+    .sec-card:nth-child(1):hover {
+      border-color: rgba(52,152,219,0.5); box-shadow: 0 12px 40px rgba(52,152,219,0.12);
+    }
+    .sec-card:nth-child(3):hover {
+      border-color: rgba(46,204,113,0.5); box-shadow: 0 12px 40px rgba(46,204,113,0.12);
+    }
+    .sec-card:nth-child(5):hover {
+      border-color: rgba(243,156,18,0.5); box-shadow: 0 12px 40px rgba(243,156,18,0.12);
+    }
+    .sec-card-header {
+      display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;
+    }
+    .sec-card-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; flex-shrink: 0;
+    }
+    .sec-card-icon.app  { background: rgba(52,152,219,0.15); }
+    .sec-card-icon.transport { background: rgba(46,204,113,0.15); }
+    .sec-card-icon.rest  { background: rgba(243,156,18,0.15); }
+    .sec-card-badge {
+      padding: 3px 12px; border-radius: 6px;
+      font-size: 0.8rem; font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .badge-app { background: rgba(52,152,219,0.18); color: #3498DB; }
+    .badge-transport { background: rgba(46,204,113,0.18); color: #2ECC71; }
+    .badge-rest { background: rgba(243,156,18,0.18); color: #F39C12; }
+    .sec-card h4 { font-size: 1.05rem; margin-bottom: 0.6rem; }
+    .sec-card-details {
+      list-style: none; padding: 0; margin: 0;
+      color: #71717a; font-size: 0.85rem; line-height: 1.9;
+      flex: 1;
+    }
+    .sec-card-details li { padding: 0.2rem 0; padding-left: 1rem; position: relative; }
+    .sec-card-details li::before {
+      content: ''; position: absolute; left: 0; top: 0.75em;
+      width: 5px; height: 5px; border-radius: 50%;
+    }
+    .sec-card:nth-child(1) .sec-card-details li::before { background: #3498DB; }
+    .sec-card:nth-child(3) .sec-card-details li::before { background: #2ECC71; }
+    .sec-card:nth-child(5) .sec-card-details li::before { background: #F39C12; }
+    .sec-arrow {
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 0.5rem; color: #3a3a40; font-size: 1.5rem;
+      flex-shrink: 0; user-select: none;
+    }
+    @media (max-width: 768px) {
+      .security-cards { flex-direction: column; gap: 0; }
+      .sec-card { padding: 1.75rem 1.5rem; }
+      .sec-arrow { transform: rotate(90deg); padding: 0.25rem 0; font-size: 1.2rem; }
+    }
+
+    /* Use Cases */
+    .usecases { background: #0a0a0f; }
+    .usecase-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
+    }
+    @media (max-width: 768px) { .usecase-grid { grid-template-columns: 1fr; } }
+    .usecase-card {
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px; padding: 2rem; text-align: center;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .usecase-card:hover {
+      border-color: rgba(255,255,255,0.12); transform: translateY(-4px);
+    }
+    .usecase-emoji { font-size: 2.5rem; margin-bottom: 0.75rem; }
+    .usecase-card h4 { font-size: 1rem; margin-bottom: 0.4rem; }
+    .usecase-card p { color: #71717a; font-size: 0.85rem; line-height: 1.7; }
+
+    /* Comparison */
+    .compare { background: #0a0a0f; }
+    .compare-table {
+      display: grid; grid-template-columns: 1.3fr 1fr 1fr;
+      gap: 0; max-width: 900px; margin: 0 auto;
+      border: 1px solid rgba(255,255,255,0.06); border-radius: 16px;
+      overflow: hidden;
+    }
+    @media (max-width: 640px) { .compare-table { grid-template-columns: 1fr; } }
+    .compare-row { display: contents; }
+    .compare-cell {
+      padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.9rem;
+    }
+    .compare-cell:first-child {
+      font-weight: 600; color: #e4e4e8; justify-content: flex-start;
+    }
+    .compare-cell:not(:first-child) {
+      justify-content: center; text-align: center;
+    }
+    .compare-head {
+      background: rgba(255,255,255,0.03); font-weight: 700; font-size: 0.95rem;
+      color: #e4e4e8; padding: 1.15rem 1.5rem;
+    }
+    .compare-head.highlight {
+      background: rgba(52,152,219,0.08); color: #3498DB;
+    }
+    .compare-cell .check { color: #2ECC71; font-weight: 700; }
+    .compare-cell .cross { color: #52525b; }
+    .compare-cell .partial { color: #F39C12; }
+
+    /* FAQ */
+    .faq { background: #0d0d14; }
+    .faq-list { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.75rem; }
+    .faq-item {
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 14px; overflow: hidden;
+      transition: border-color 0.3s;
+    }
+    .faq-item:hover { border-color: rgba(255,255,255,0.1); }
+    .faq-q {
+      width: 100%; background: none; border: none; color: #e4e4e8;
+      padding: 1.25rem 1.5rem; font-size: 0.95rem; font-weight: 600;
+      text-align: left; cursor: pointer; display: flex; align-items: center;
+      justify-content: space-between; gap: 1rem; font-family: inherit;
+    }
+    .faq-q::after {
+      content: '+'; font-size: 1.3rem; font-weight: 300; color: #52525b;
+      transition: transform 0.3s; flex-shrink: 0;
+    }
+    .faq-item.open .faq-q::after { content: '\2212'; transform: rotate(180deg); }
+    .faq-a {
+      max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease;
+      padding: 0 1.5rem; color: #71717a; font-size: 0.9rem; line-height: 1.8;
+    }
+    .faq-item.open .faq-a { max-height: 300px; padding: 0 1.5rem 1.25rem; }
 
     .how { background: #0d0d14; }
     .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
-    @media (max-width: 768px) { .steps { grid-template-columns: 1fr 1fr; } }
     .step {
       text-align: center; position: relative;
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
@@ -177,7 +459,6 @@
       background: rgba(52,152,219,0.12); color: #5DADE2;
       padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
     }
-    @media (max-width: 768px) { table { font-size: 0.85rem; } th, td { padding: 0.75rem 1rem; } }
 
     .stats {
       padding: 4rem 2rem; background: linear-gradient(135deg, rgba(52,152,219,0.08), rgba(46,204,113,0.06));
@@ -185,9 +466,10 @@
     }
     .stats-grid { display: flex; justify-content: center; gap: 4rem; flex-wrap: wrap; }
     .stat { text-align: center; }
-    .stat-num { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #3498DB, #2ECC71); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .stat-label { color: #71717a; font-size: 0.9rem; margin-top: 0.25rem; }
-    @media (max-width: 768px) { .stats-grid { gap: 2rem; } .stat-num { font-size: 1.8rem; } }
+    .stat-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .stat-text { font-size: 1.15rem; font-weight: 700; color: #e4e4e8; }
+    .stat-label { color: #71717a; font-size: 0.85rem; margin-top: 0.35rem; }
+    @media (max-width: 768px) { .stats-grid { gap: 2rem; } .stat-text { font-size: 1rem; } }
 
     .cta { background: #0d0d14; text-align: center; }
     .cta-box {
@@ -204,9 +486,206 @@
     }
     footer a { color: #71717a; text-decoration: none; }
     footer a:hover { color: #a1a1aa; }
+
+    /* ── 📱 Responsive ────────────────────────────────────── */
+
+    @media (max-width: 1024px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps { grid-template-columns: repeat(2, 1fr); }
+      .hero h1 { font-size: 2.8rem; }
+      
+      section { padding: 4.5rem 1.5rem; }
+      .stats-grid { gap: 2.5rem; }
+      .stat-text { font-size: 1.05rem; }
+    }
+
+    @media (max-width: 640px) {
+      .feature-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .hero { min-height: auto; padding: 7rem 1.25rem 4rem; }
+      .hero h1 { font-size: 2rem; }
+      .hero h1 span { font-size: 1.15rem; }
+      .hero p { font-size: 0.95rem; }
+      .hero-icon { width: 64px; height: 64px; }
+      .hero-buttons { flex-direction: column; align-items: center; }
+      .btn { width: 100%; justify-content: center; max-width: 300px; }
+      section { padding: 3rem 1rem; }
+      .section-header { margin-bottom: 2.5rem; }
+      .section-header h2 { font-size: 1.6rem; }
+      .stats-grid { gap: 1.5rem; flex-direction: column; align-items: center; }
+      .stat-text { font-size: 1rem; }
+      .cta-box { padding: 2.5rem 1.5rem; }
+      .nav-inner { padding: 0 1rem; }
+      table { font-size: 0.8rem; display: block; overflow-x: auto; }
+      th, td { padding: 0.6rem 0.75rem; white-space: nowrap; }
+      .orb { opacity: 0.06; }
+      .feature-card { padding: 1.5rem; }
+      .step { padding: 1.5rem 1rem; }
+    }
+
+    @media (max-width: 400px) {
+      .hero h1 { font-size: 1.7rem; }
+      .hero h1 span { font-size: 1rem; }
+      .mobile-menu { padding: 1rem 1.25rem; }
+      .mobile-menu a { font-size: 0.95rem; }
+      .cta-box { padding: 2rem 1rem; }
+      table { font-size: 0.75rem; }
+      th, td { padding: 0.5rem 0.6rem; }
+    }
+
+    /* ── ✨ Animations & Effects ──────────────────────────── */
+
+    .orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.12;
+      animation: floatOrb 20s ease-in-out infinite;
+    }
+    .orb:nth-child(1) {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, #3498DB, transparent);
+      top: -200px; left: -100px;
+      animation-delay: 0s;
+    }
+    .orb:nth-child(2) {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, #2ECC71, transparent);
+      bottom: -150px; right: -100px;
+      animation-delay: -5s;
+    }
+    .orb:nth-child(3) {
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, #9B59B6, transparent);
+      top: 50%; left: 50%;
+      animation-delay: -10s;
+      animation-duration: 25s;
+    }
+    .orb:nth-child(4) {
+      width: 350px; height: 350px;
+      background: radial-gradient(circle, #F39C12, transparent);
+      top: 30%; right: 10%;
+      animation-delay: -15s;
+      animation-duration: 22s;
+    }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25%  { transform: translate(80px, -60px) scale(1.08); }
+      50%  { transform: translate(-40px, -100px) scale(0.92); }
+      75%  { transform: translate(-90px, 40px) scale(1.05); }
+    }
+
+    .hero-icon {
+      animation: floatIcon 6s ease-in-out infinite;
+    }
+    @keyframes floatIcon {
+      0%, 100% { transform: translateY(0); }
+      50%  { transform: translateY(-12px); }
+    }
+
+    .gradient-text-anim {
+      background: linear-gradient(135deg, #3498DB, #2ECC71, #3498DB);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradientShift 4s ease-in-out infinite;
+    }
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% center; }
+      50%  { background-position: 200% center; }
+    }
+
+    .btn-primary {
+      position: relative; overflow: hidden;
+    }
+    .btn-primary::after {
+      content: '';
+      position: absolute; top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0% { left: -100%; }
+      50%, 100% { left: 100%; }
+    }
+
+    .feature-card:hover {
+      border-color: rgba(52,152,219,0.4) !important;
+      box-shadow: 0 0 30px rgba(52,152,219,0.1), 0 8px 32px rgba(0,0,0,0.3);
+      transform: translateY(-6px);
+    }
+
+    .step {
+      transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+    }
+    .step:hover {
+      border-color: rgba(46,204,113,0.3);
+      box-shadow: 0 0 25px rgba(46,204,113,0.08);
+      transform: translateY(-4px);
+    }
+
+    .step-num {
+      animation: pulse 3s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(52,152,219,0.4); }
+      50%  { box-shadow: 0 0 0 12px rgba(52,152,219,0); }
+    }
+
+    .cta-box {
+      transition: border-color 0.4s, box-shadow 0.4s;
+    }
+    .cta-box:hover {
+      border-color: rgba(52,152,219,0.35);
+      box-shadow: 0 0 50px rgba(52,152,219,0.08);
+    }
+
+    .reveal {
+      opacity: 0; transform: translateY(30px);
+      transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    .stagger-reveal > * {
+      opacity: 0; transform: translateY(24px);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .stagger-reveal.visible > *:nth-child(1) { transition-delay: 0s; opacity: 1; transform: translateY(0); }
+    .stagger-reveal.visible > *:nth-child(2) { transition-delay: 0.1s; opacity: 1; transform: translateY(0); }
+    .stagger-reveal.visible > *:nth-child(3) { transition-delay: 0.2s; opacity: 1; transform: translateY(0); }
+    .stagger-reveal.visible > *:nth-child(4) { transition-delay: 0.3s; opacity: 1; transform: translateY(0); }
+    .stagger-reveal.visible > *:nth-child(5) { transition-delay: 0.35s; opacity: 1; transform: translateY(0); }
+    .stagger-reveal.visible > *:nth-child(6) { transition-delay: 0.4s; opacity: 1; transform: translateY(0); }
+
+    tbody tr { transition: background 0.2s; }
+    tbody tr:hover { background: rgba(52,152,219,0.06); }
+
+    .nav-links a {
+      position: relative;
+    }
+    .nav-links a::after {
+      content: '';
+      position: absolute; bottom: -4px; left: 0;
+      width: 0; height: 2px;
+      background: linear-gradient(90deg, #3498DB, #2ECC71);
+      border-radius: 1px;
+      transition: width 0.3s ease;
+    }
+    .nav-links a:hover::after { width: 100%; }
+
+    .stat:nth-child(1) .stat-icon { animation: floatIcon 4s ease-in-out infinite; }
+    .stat:nth-child(2) .stat-icon { animation: floatIcon 4s ease-in-out infinite; animation-delay: -1.3s; }
+    .stat:nth-child(3) .stat-icon { animation: floatIcon 4s ease-in-out infinite; animation-delay: -2.6s; }
   </style>
 </head>
 <body>
+
+  <div class="orbs">
+    <div class="orb"></div><div class="orb"></div><div class="orb"></div><div class="orb"></div>
+  </div>
 
   <nav>
     <div class="nav-inner">
@@ -225,44 +704,63 @@
         <a href="index_zh.html" class="active">中文</a>
       </div>
       <a href="https://github.com/kai3316/copyboard" class="nav-cta">GitHub</a>
+      <button class="hamburger" aria-label="菜单" onclick="document.querySelector('.mobile-menu').classList.toggle('open');this.classList.toggle('open')">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="mobile-menu">
+      <a href="#features" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">功能特性</a>
+      <a href="#security" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">安全架构</a>
+      <a href="#how-it-works" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">工作原理</a>
+      <a href="#download" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">下载</a>
+      <a href="index.html">English</a>
+      <a href="https://github.com/kai3316/copyboard" style="color:#3498DB">GitHub</a>
     </div>
   </nav>
 
   <!-- Hero -->
   <section class="hero">
     <div class="hero-content">
-      <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="" class="hero-icon">
-      <h1>CopyBoard <span>跨设备剪贴板同步</span></h1>
-      <p>一台设备复制，另一台即刻粘贴 — 安全、加密、局域网内传输。无需云端，无需账号，开箱即用。</p>
+      <div class="hero-icon-wrapper">
+        <div class="hero-glow-ring"></div>
+        <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="" class="hero-icon">
+      </div>
+      <div class="hero-badge">跨设备剪贴板同步</div>
+      <h1>CopyBoard</h1>
+      <div class="hero-divider"></div>
+      <p>复制文字、图片、富文本、文件 — 在另一台设备上直接粘贴。端到端加密，纯局域网传输。不经过云端，不需要账号，完整保留格式。</p>
       <div class="hero-buttons">
         <a href="https://github.com/kai3316/copyboard/releases/latest" class="btn btn-primary">&#8595; 下载最新版</a>
         <a href="https://github.com/kai3316/copyboard" class="btn btn-secondary">&#8594; 查看源码</a>
       </div>
+    </div>
+    <div class="scroll-indicator">
+      <span></span><span></span>
     </div>
   </section>
 
   <!-- Stats -->
   <div class="stats">
     <div class="stats-grid">
-      <div class="stat"><div class="stat-num">Windows &middot; macOS &middot; Linux</div><div class="stat-label">全平台支持</div></div>
-      <div class="stat"><div class="stat-num">TLS 1.3 + AES-256</div><div class="stat-label">双层加密</div></div>
-      <div class="stat"><div class="stat-num">零配置</div><div class="stat-label">mDNS 自动发现</div></div>
+      <div class="stat"><div class="stat-icon">&#128187;</div><div class="stat-text">全平台支持</div><div class="stat-label">Windows &middot; macOS &middot; Linux</div></div>
+      <div class="stat"><div class="stat-icon">&#128274;</div><div class="stat-text">双层加密</div><div class="stat-label">TLS 1.3 + AES-256-GCM</div></div>
+      <div class="stat"><div class="stat-icon">&#9889;</div><div class="stat-text">零配置</div><div class="stat-label">mDNS 自动发现</div></div>
     </div>
   </div>
 
   <!-- Features -->
   <section class="features" id="features">
     <div class="section-inner">
-      <div class="section-header">
+      <div class="section-header reveal">
         <div class="section-label">功能特性</div>
-        <h2>你需要的，我们都有</h2>
-        <p>快速、安全、无需配置的剪贴板同步方案。</p>
+        <h2>简洁强大，开箱即用</h2>
+        <p>快速、安全、零配置的跨设备剪贴板同步。</p>
       </div>
-      <div class="feature-grid">
+      <div class="feature-grid stagger-reveal">
         <div class="feature-card">
           <div class="feature-icon blue">&#9889;</div>
           <h3>即时同步</h3>
-          <p>亚秒级剪贴板同步，智能防抖避免回声和重复粘贴。</p>
+          <p>亚秒级响应，智能去重，杜绝重复粘贴与同步回环。</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon green">&#128274;</div>
@@ -272,7 +770,7 @@
         <div class="feature-card">
           <div class="feature-icon purple">&#128295;</div>
           <h3>零配置</h3>
-          <p>mDNS 自动发现局域网内的设备。无需配置 IP、无需设置，启动即用。</p>
+          <p>mDNS 自动发现局域网内设备，无需配 IP、无需任何设置，启动即用。</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon orange">&#128196;</div>
@@ -287,7 +785,93 @@
         <div class="feature-card">
           <div class="feature-icon red">&#128065;</div>
           <h3>隐私优先</h3>
-          <p>所有数据不经过云端，仅在局域网内传输。剪贴板历史静态加密存储。</p>
+          <p>数据仅限局域网内传输，永不触碰云端。剪贴板历史落盘加密。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Use Cases -->
+  <section class="usecases">
+    <div class="section-inner">
+      <div class="section-header reveal">
+        <div class="section-label">使用场景</div>
+        <h2>随时随地，无缝衔接</h2>
+        <p>无论是写代码、做设计、还是日常办公，CopyBoard 都能让你的效率翻倍。</p>
+      </div>
+      <div class="usecase-grid stagger-reveal">
+        <div class="usecase-card">
+          <div class="usecase-emoji">&#128187;</div>
+          <h4>多设备办公</h4>
+          <p>台式机写文档时复制一段文字，拿起笔记本继续编辑直接粘贴。无需通过微信或邮件中转。</p>
+        </div>
+        <div class="usecase-card">
+          <div class="usecase-emoji">&#128736;</div>
+          <h4>开发调试</h4>
+          <p>Windows 上复制报错日志，MacBook 上粘贴进终端排查。代码片段、API 响应一秒同步。</p>
+        </div>
+        <div class="usecase-card">
+          <div class="usecase-emoji">&#127912;</div>
+          <h4>创意协作</h4>
+          <p>设计师在台式机上复制配色方案，旁边笔记本即刻粘贴到设计稿中。灵感不中断。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section class="compare">
+    <div class="section-inner">
+      <div class="section-header reveal">
+        <div class="section-label">为什么选择 CopyBoard</div>
+        <h2>不是所有剪贴板工具都一样</h2>
+        <p>市面上的剪贴板同步工具大多依赖云端，或只支持纯文本。CopyBoard 走了一条不同的路。</p>
+      </div>
+      <div class="compare-table reveal">
+        <div class="compare-row">
+          <div class="compare-cell compare-head"></div>
+          <div class="compare-cell compare-head highlight">CopyBoard</div>
+          <div class="compare-cell compare-head">云端工具</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">富文本 / HTML <span style="color:#71717a;font-weight:400;font-size:0.8rem;">（链接、表格、排版格式）</span></div>
+          <div class="compare-cell"><span class="check">&#10003;</span> 完整保留</div>
+          <div class="compare-cell"><span class="cross">&#10007;</span> 仅纯文本</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">图片同步 <span style="color:#71717a;font-weight:400;font-size:0.8rem;">（PNG，任意分辨率）</span></div>
+          <div class="compare-cell"><span class="check">&#10003;</span> 原始画质</div>
+          <div class="compare-cell"><span class="cross">&#10007;</span> 不支持</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">文件传输</div>
+          <div class="compare-cell"><span class="check">&#10003;</span> 加密通道</div>
+          <div class="compare-cell"><span class="cross">&#10007;</span> 不支持</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">数据隐私</div>
+          <div class="compare-cell"><span class="check">&#10003;</span> 纯局域网，不出网</div>
+          <div class="compare-cell"><span class="cross">&#10007;</span> 经过云端服务器</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">需要账号</div>
+          <div class="compare-cell"><span class="check">&#10003;</span> 不需要，直接运行</div>
+          <div class="compare-cell"><span class="cross">&#10007;</span> 需要注册登录</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">跨平台</div>
+          <div class="compare-cell"><span class="check">&#10003;</span> Win / Mac / Linux</div>
+          <div class="compare-cell"><span class="partial">~</span> 因工具而异</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">加密</div>
+          <div class="compare-cell"><span class="check">&#10003;</span> TLS 1.3 + AES-256-GCM</div>
+          <div class="compare-cell"><span class="partial">~</span> 仅 TLS（若有）</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">价格</div>
+          <div class="compare-cell"><span class="check">&#10003;</span> 免费 & 开源</div>
+          <div class="compare-cell"><span class="cross">&#10007;</span> 免费增值 / 付费</div>
         </div>
       </div>
     </div>
@@ -296,27 +880,47 @@
   <!-- Security -->
   <section class="security" id="security">
     <div class="section-inner">
-      <div class="section-header">
+      <div class="section-header reveal">
         <div class="section-label">安全架构</div>
         <h2>纵深防御</h2>
-        <p>多层加密保护你的数据 — 传输中、存储时皆安全。</p>
+        <p>传输加密 + 落盘加密，全程守护你的数据。</p>
       </div>
-      <div class="security-diagram">
-        <div class="layer">
-          <span class="badge badge-app">应用层</span>
-          <span>AES-256-GCM 逐帧加密 — 密钥通过 HKDF 从 Ed25519 证书派生</span>
+      <div class="security-cards reveal">
+        <div class="sec-card">
+          <div class="sec-card-header">
+            <div class="sec-card-icon app">&#128274;</div>
+            <span class="sec-card-badge badge-app">应用层</span>
+          </div>
+          <h4>AES-256-GCM 逐帧加密</h4>
+          <ul class="sec-card-details">
+            <li>密钥通过 HKDF 从 Ed25519 证书派生，每对设备独立</li>
+            <li>可选预共享密码，进一步增强加密强度（PBKDF2，60 万次迭代）</li>
+          </ul>
         </div>
-        <div style="color:#52525b;padding-left:2.5rem;">&#8627; 可选预共享密码增加额外熵值（PBKDF2, 60 万次迭代）</div>
-        <div class="layer" style="margin-top:0.5rem;">
-          <span class="badge badge-transport">传输层</span>
-          <span>TLS 1.3 + Ed25519 自签名 X.509 证书</span>
+        <div class="sec-arrow">&#10132;</div>
+        <div class="sec-card">
+          <div class="sec-card-header">
+            <div class="sec-card-icon transport">&#128273;</div>
+            <span class="sec-card-badge badge-transport">传输层</span>
+          </div>
+          <h4>TLS 1.3 + Ed25519</h4>
+          <ul class="sec-card-details">
+            <li>Ed25519 自签名证书，端到端身份验证</li>
+            <li>证书锁定 —— 首次信任后持续校验，身份变更立即预警</li>
+          </ul>
         </div>
-        <div style="color:#52525b;padding-left:2.5rem;">&#8627; 证书锁定 — 首次使用信任机制，身份变更即时告警</div>
-        <div class="layer" style="margin-top:0.5rem;">
-          <span class="badge badge-rest">静态存储</span>
-          <span>AES-256-GCM 加密配置文件和剪贴板历史</span>
+        <div class="sec-arrow">&#10132;</div>
+        <div class="sec-card">
+          <div class="sec-card-header">
+            <div class="sec-card-icon rest">&#128190;</div>
+            <span class="sec-card-badge badge-rest">静态存储</span>
+          </div>
+          <h4>AES-256-GCM 落盘加密</h4>
+          <ul class="sec-card-details">
+            <li>配置文件和剪贴板历史均加密存储</li>
+            <li>密码仅存储 PBKDF2 验证哈希（密码本身永不落盘）</li>
+          </ul>
         </div>
-        <div style="color:#52525b;padding-left:2.5rem;">&#8627; 密码仅存储 PBKDF2 验证哈希（密码本身永不落盘）</div>
       </div>
     </div>
   </section>
@@ -324,21 +928,21 @@
   <!-- How It Works -->
   <section class="how" id="how-it-works">
     <div class="section-inner">
-      <div class="section-header">
+      <div class="section-header reveal">
         <div class="section-label">工作原理</div>
         <h2>四步完成同步</h2>
         <p>从发现到粘贴，不到一秒。</p>
       </div>
-      <div class="steps">
+      <div class="steps stagger-reveal">
         <div class="step">
           <div class="step-num">1</div>
           <h4>发现</h4>
-          <p>设备通过 mDNS/Zeroconf 在局域网内自动互相发现。</p>
+          <p>通过 mDNS 在局域网内自动发现其他设备。</p>
         </div>
         <div class="step">
           <div class="step-num">2</div>
           <h4>配对</h4>
-          <p>两端确认相同的 8 位配对码。证书被锁定以建立信任。</p>
+          <p>两端确认相同的 8 位配对码，锁定对方证书，建立长期信任。</p>
         </div>
         <div class="step">
           <div class="step-num">3</div>
@@ -348,7 +952,7 @@
         <div class="step">
           <div class="step-num">4</div>
           <h4>信任</h4>
-          <p>已配对设备自动重连。证书变更立即发出警告。</p>
+          <p>已配对设备自动重连。证书一旦变更，立即发出安全预警。</p>
         </div>
       </div>
     </div>
@@ -357,11 +961,11 @@
   <!-- Formats -->
   <section class="formats">
     <div class="section-inner">
-      <div class="section-header">
+      <div class="section-header reveal">
         <div class="section-label">支持格式</div>
-        <h2>完整保真同步</h2>
+        <h2>全格式，不失真</h2>
       </div>
-      <table>
+      <table class="reveal">
         <thead>
           <tr><th>格式</th><th>类型</th><th>说明</th></tr>
         </thead>
@@ -376,12 +980,44 @@
     </div>
   </section>
 
+  <!-- FAQ -->
+  <section class="faq">
+    <div class="section-inner">
+      <div class="section-header reveal">
+        <div class="section-label">常见问题</div>
+        <h2>还有疑问？</h2>
+      </div>
+      <div class="faq-list reveal">
+        <div class="faq-item">
+          <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">CopyBoard 的数据会经过云端服务器吗？</button>
+          <div class="faq-a">不会。所有数据仅在局域网内点对点传输，TLS 1.3 加密保护。CopyBoard 没有任何服务端组件，你的剪贴板数据永远不会离开你的本地网络。</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">支持跨平台吗？</button>
+          <div class="faq-a">支持。Windows、macOS、Linux 三个平台均可运行，不同系统之间无缝同步。Windows 上复制的内容可以直接在 MacBook 上粘贴。</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">需要注册账号吗？</button>
+          <div class="faq-a">不需要。没有账号系统，没有注册流程。下载后直接运行，设备之间通过 mDNS 自动发现，首次配对时双方确认 8 位配对码即可。</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">安全吗？有人能截获我的剪贴板内容吗？</button>
+          <div class="faq-a">CopyBoard 采用双层加密：TLS 1.3 保护传输通道，AES-256-GCM 逐帧加密应用数据。首次配对使用 8 位验证码防止中间人攻击，之后启用证书锁定 —— 一旦设备证书发生变化，立即发出安全预警。</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-q" onclick="this.parentElement.classList.toggle('open')">完全免费吗？</button>
+          <div class="faq-a">是的。CopyBoard 是 MIT 开源许可证下的自由软件，完全免费，无广告，无付费墙，无数据收集。代码托管在 GitHub，欢迎参与贡献。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Download CTA -->
   <section class="cta" id="download">
     <div class="section-inner">
-      <div class="cta-box">
+      <div class="cta-box reveal">
         <div class="section-label">下载</div>
-        <h2>准备好了吗？</h2>
+        <h2>即刻体验</h2>
         <p>支持 Windows、macOS、Linux。无需安装，下载即用。</p>
         <div class="hero-buttons">
           <a href="https://github.com/kai3316/copyboard/releases/latest" class="btn btn-primary">&#8595; 下载最新版本</a>
@@ -400,6 +1036,18 @@
       <a href="index.html">English</a>
     </p>
   </footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
+
+  document.querySelectorAll('.reveal, .stagger-reveal').forEach(el => observer.observe(el));
+</script>
 
 </body>
 </html>

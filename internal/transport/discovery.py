@@ -191,13 +191,75 @@ class Discovery:
         logger.info("Started browsing for peers")
 
     def stop(self):
+        self.stop_browsing()
+        self.stop_advertising()
+        if self._zc:
+            self._zc.close()
+            self._zc = None
+        logger.info("Discovery stopped")
+
+    # ── Granular control ───────────────────────────────────────
+
+    @property
+    def is_browsing(self) -> bool:
+        return self._browser is not None
+
+    @property
+    def is_advertising(self) -> bool:
+        return self._zc is not None and self._service_info is not None
+
+    def stop_browsing(self):
+        """Stop discovering new peers without affecting advertising."""
         if self._browser:
             self._browser.cancel()
-        if self._zc:
-            if self._service_info:
-                self._zc.unregister_service(self._service_info)
-            self._zc.close()
-        logger.info("Discovery stopped")
+            self._browser = None
+            logger.info("Stopped browsing for peers")
+
+    def start_browsing(self):
+        """Resume discovering new peers. Requires start() to have been called."""
+        if self._browser is not None:
+            return
+        if self._zc is None:
+            return
+        self._browser = ServiceBrowser(
+            self._zc,
+            self._service_type,
+            handlers=[self._on_service_state_change],
+        )
+        logger.info("Resumed browsing for peers")
+
+    def stop_advertising(self):
+        """Unregister mDNS service without affecting browsing."""
+        if self._zc and self._service_info:
+            self._zc.unregister_service(self._service_info)
+            self._service_info = None
+            logger.info("Stopped advertising this device")
+
+    def start_advertising(self):
+        """Re-register mDNS service. Requires start() to have been called."""
+        if self._service_info is not None:
+            return
+        if self._zc is None:
+            return
+        # Rebuild service info (IPs may have changed, and ServiceInfo
+        # can't be re-registered after unregistration).
+        props = {b"device_id_hash": self._device_id_hash.encode("utf-8")}
+        all_ips = _get_all_local_addresses()
+        for i, ip in enumerate(all_ips):
+            props[f"alt_ip_{i}".encode()] = ip.encode()
+        local_ip = _get_local_address()
+        self._service_info = ServiceInfo(
+            type_=self._service_type,
+            name=f"{self._display_name}.{self._service_type}",
+            addresses=[socket.inet_aton(local_ip)],
+            port=self._port,
+            properties=props,
+        )
+        try:
+            self._zc.register_service(self._service_info)
+            logger.info("Resumed advertising this device on port %d", self._port)
+        except Exception as e:
+            logger.warning("Failed to re-register mDNS: %s", e)
 
     def _wake_recovery(self):
         """Re-register the mDNS service after wake-from-sleep.

@@ -1,3 +1,3 @@
 @echo off
-python "%~dp0cmd\main.py"
+python "%~dp0src\main.py"
 pause

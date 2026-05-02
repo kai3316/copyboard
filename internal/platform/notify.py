@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class NotificationManager:
     def __init__(self):
         self._tray_icon = None  # set later via set_tray()
@@ -34,13 +39,13 @@ class NotificationManager:
             try:
                 self._pipe.send(("show_notification", title, message))
             except Exception:
-                pass
+                logger.debug("Notification via pipe failed", exc_info=True)
             return
         if self._tray_icon:
             try:
                 self._tray_icon.notify(message, title=title)
             except Exception:
-                pass  # notifications are best-effort
+                logger.debug("Desktop notification failed", exc_info=True)
 
 
 notification_mgr = NotificationManager()

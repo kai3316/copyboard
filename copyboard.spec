@@ -57,7 +57,7 @@ if sys.platform == "darwin":
     hiddenimports += ["pyobjc_framework_Cocoa"]
 
 a = Analysis(
-    ["cmd/main.py"],
+    ["src/main.py"],
     pathex=[_PROJ_ROOT],
     binaries=[],
     datas=[],

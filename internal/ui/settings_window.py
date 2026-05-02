@@ -13,7 +13,8 @@ from typing import Callable
 
 import customtkinter as ctk
 
-from internal.clipboard.filter import ALL_CATEGORIES, CATEGORY_LABELS
+from internal.clipboard.filter import ALL_CATEGORIES
+from internal.i18n import T, available_locales, set_locale
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class SettingsWindow:
         self._get_log_text = get_log_text
 
         self._window: ctk.CTkToplevel | None = None
-        self._dark_mode = False
+        self._dark_mode = get_config().appearance_mode == "dark"
         self._current_panel = "network"
         self._refresh_job: str | None = None
 
@@ -67,6 +68,7 @@ class SettingsWindow:
         self._max_reconnect_var: tk.StringVar | None = None
         self._transfer_timeout_var: tk.StringVar | None = None
         self._log_level_var: tk.StringVar | None = None
+        self._language_var: tk.StringVar | None = None
         self._notifications_var: tk.BooleanVar | None = None
 
     # ═══════════════════════════════════════════════════════════════
@@ -95,7 +97,7 @@ class SettingsWindow:
         ctk.set_default_color_theme("blue")
 
         self._window = ctk.CTkToplevel(self._root)
-        self._window.title("CopyBoard Settings")
+        self._window.title(T("settings_window.title"))
         self._window.geometry("740x620")
         self._window.minsize(680, 560)
         self._window.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -140,13 +142,13 @@ class SettingsWindow:
         h_inner.pack(fill="x", padx=20, pady=(14, 14))
 
         ctk.CTkLabel(
-            h_inner, text="\U0001F527  Settings",
+            h_inner, text="\U0001F527  " + T("ui.settings"),
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=("#FFFFFF", "#E0E0E0"),
         ).pack(side="left")
 
         self._theme_btn = ctk.CTkButton(
-            h_inner, text="☾  Dark" if not self._dark_mode else "☀  Light",
+            h_inner, text=T("ui.theme_dark") if not self._dark_mode else T("ui.theme_light"),
             width=90, height=32, fg_color="transparent",
             border_width=1, border_color=("#7F8C8D", "#566573"),
             text_color=("#FFFFFF", "#E0E0E0"),
@@ -184,13 +186,13 @@ class SettingsWindow:
         f_inner.pack(fill="x", padx=20, pady=8)
 
         self._status_label = ctk.CTkLabel(
-            f_inner, text="Ready", text_color=("gray50", "gray60"),
+            f_inner, text=T("footer.ready"), text_color=("gray50", "gray60"),
             font=ctk.CTkFont(size=11),
         )
         self._status_label.pack(side="left")
 
         ctk.CTkButton(
-            f_inner, text="Close", width=60, height=28,
+            f_inner, text=T("ui.close"), width=60, height=28,
             fg_color="transparent", border_width=1,
             text_color=("gray40", "gray70"),
             border_color=("gray60", "gray50"),
@@ -209,12 +211,12 @@ class SettingsWindow:
         inner.pack(fill="both", expand=True, padx=8, pady=16)
 
         nav = [
-            ("network", "\U0001F310  Network"),
-            ("filter",  "\U0001F6E1  Content Filter"),
-            ("security", "\U0001F512  Security"),
-            ("advanced", "⚙  Advanced"),
-            ("logs",    "\U0001F4C4  Logs"),
-            ("about",   "ℹ️  About"),
+            ("network", T("settings_nav.network")),
+            ("filter",  T("settings_nav.filter")),
+            ("security", T("settings_nav.security")),
+            ("advanced", T("settings_nav.advanced")),
+            ("logs",    T("settings_nav.logs")),
+            ("about",   T("settings_nav.about")),
         ]
 
         for key, label in nav:
@@ -267,7 +269,7 @@ class SettingsWindow:
         cfg = self._get_config()
 
         ctk.CTkLabel(
-            panel, text="Network Settings",
+            panel, text=T("settings_window.network_title"),
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", pady=(0, 16))
 
@@ -275,24 +277,24 @@ class SettingsWindow:
         card.pack(fill="x", pady=(0, 12))
 
         ctk.CTkLabel(
-            card, text="Connection",
+            card, text=T("network.connection"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         row1 = ctk.CTkFrame(card, fg_color="transparent")
         row1.pack(fill="x", padx=16, pady=(0, 8))
-        ctk.CTkLabel(row1, text="TCP Port", width=100, anchor="w").pack(side="left")
+        ctk.CTkLabel(row1, text=T("network.tcp_port"), width=100, anchor="w").pack(side="left")
         self._port_var = tk.StringVar(value=str(cfg.port))
         ctk.CTkEntry(row1, textvariable=self._port_var, width=80, height=32).pack(side="left", padx=(12, 8))
         ctk.CTkLabel(
-            row1, text="(1024–65535, restart required)",
+            row1, text=T("settings_window.port_hint"),
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
         ).pack(side="left")
 
         row2 = ctk.CTkFrame(card, fg_color="transparent")
         row2.pack(fill="x", padx=16, pady=(0, 10))
-        ctk.CTkLabel(row2, text="Service Type", width=100, anchor="w").pack(side="left")
+        ctk.CTkLabel(row2, text=T("network.service_type"), width=100, anchor="w").pack(side="left")
         self._svc_var = tk.StringVar(value=cfg.service_type)
         ctk.CTkEntry(row2, textvariable=self._svc_var, height=32).pack(
             side="left", fill="x", expand=True, padx=(12, 0))
@@ -302,12 +304,12 @@ class SettingsWindow:
         card2.pack(fill="x", pady=(0, 12))
 
         ctk.CTkLabel(
-            card2, text="Relay (optional)",
+            card2, text=T("network.relay"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         ctk.CTkLabel(
-            card2, text="Relay URL", anchor="w",
+            card2, text=T("network.relay_url"), anchor="w",
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=16)
         self._relay_var = tk.StringVar(value=cfg.relay_url)
@@ -316,13 +318,13 @@ class SettingsWindow:
 
         ctk.CTkLabel(
             card2,
-            text="Leave blank for LAN-only sync. Set a relay server URL for cross-network sync.",
+            text=T("settings_window.relay_hint"),
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
         ).pack(anchor="w", padx=16, pady=(0, 14))
 
         ctk.CTkButton(
-            panel, text="Save Network Settings",
+            panel, text=T("settings_window.save_network"),
             width=200, height=36, command=self._on_save_network,
         ).pack(anchor="w")
 
@@ -334,7 +336,7 @@ class SettingsWindow:
             if not 1024 <= port <= 65535:
                 raise ValueError("Port out of range")
         except ValueError:
-            show_warning(self._window, "Invalid", "Port must be 1024–65535.")
+            show_warning(self._window, T("dialog.invalid"), T("settings_window.port_invalid"))
             return
 
         cfg = self._get_config()
@@ -344,8 +346,8 @@ class SettingsWindow:
         self._save_config()
         show_info(
             self._window,
-            "Saved",
-            "Network settings saved.\nRestart CopyBoard for changes to take effect.",
+            T("dialog.saved"),
+            T("settings_window.network_saved"),
         )
 
     # ═══════════════════════════════════════════════════════════════
@@ -356,13 +358,13 @@ class SettingsWindow:
         panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
 
         ctk.CTkLabel(
-            panel, text="Content Filter",
+            panel, text=T("settings_window.filter_title"),
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", pady=(0, 8))
 
         ctk.CTkLabel(
             panel,
-            text="When enabled, sensitive content is replaced with [FILTERED] before syncing to other devices.",
+            text=T("settings_window.filter_desc"),
             font=ctk.CTkFont(size=12),
             text_color=("gray50", "gray60"),
             justify="left",
@@ -372,14 +374,14 @@ class SettingsWindow:
         card.pack(fill="x", pady=(0, 12))
 
         ctk.CTkLabel(
-            card, text="Sensitive Content Categories",
+            card, text=T("settings_window.filter_categories"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         active = self._get_filter_categories() if self._get_filter_categories else []
 
         for category in ALL_CATEGORIES:
-            label = CATEGORY_LABELS.get(category, category)
+            label = T(f"filter.{category}")
             var = tk.BooleanVar(value=category in active)
             self._filter_vars[category] = var
             ctk.CTkSwitch(
@@ -392,7 +394,7 @@ class SettingsWindow:
         ctk.CTkFrame(card, height=8, fg_color="transparent").pack()
 
         ctk.CTkButton(
-            panel, text="Save Filter Settings",
+            panel, text=T("settings_window.save_filter"),
             width=200, height=36, command=self._on_save_filter,
         ).pack(anchor="w")
 
@@ -405,7 +407,7 @@ class SettingsWindow:
         cfg = self._get_config()
         cfg.filter_enabled_categories = enabled
         self._save_config()
-        show_info(self._window, "Saved", "Content filter settings saved.")
+        show_info(self._window, T("dialog.saved"), T("settings_window.filter_saved"))
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Advanced
@@ -419,11 +421,11 @@ class SettingsWindow:
         scroll.pack(fill="both", expand=True)
 
         ctk.CTkLabel(
-            scroll, text="Security",
+            scroll, text=T("security.title"),
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", pady=(0, 4))
         ctk.CTkLabel(
-            scroll, text="Encryption settings protect your data at rest and in transit.",
+            scroll, text=T("settings_window.security_desc"),
             font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
         ).pack(anchor="w", pady=(0, 14))
 
@@ -431,15 +433,11 @@ class SettingsWindow:
         card1 = ctk.CTkFrame(scroll, corner_radius=12)
         card1.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(
-            card1, text="Data Encryption",
+            card1, text=T("security.data_encryption"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
-        features = [
-            "Private key encrypted at rest in config file",
-            "Clipboard history encrypted on disk",
-            "App-layer encryption between paired devices (on top of TLS 1.3)",
-        ]
+        features = T("settings_window.security_features")
         for i, desc in enumerate(features):
             ctk.CTkLabel(
                 card1, text=f"  {i+1}. {desc}",
@@ -450,7 +448,7 @@ class SettingsWindow:
 
         self._enc_enabled_var = tk.BooleanVar(value=cfg.encryption_enabled)
         ctk.CTkSwitch(
-            card1, text="Enable encryption (all three features)",
+            card1, text=T("settings_window.enable_encryption"),
             variable=self._enc_enabled_var,
             font=ctk.CTkFont(size=13),
         ).pack(anchor="w", padx=16, pady=(14, 14))
@@ -459,21 +457,19 @@ class SettingsWindow:
         card2 = ctk.CTkFrame(scroll, corner_radius=12)
         card2.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(
-            card2, text="Pre-Shared Password (Optional)",
+            card2, text=T("security.pre_shared_password"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
         ctk.CTkLabel(
             card2,
-            text="Set the same password on both devices for stronger\n"
-                 "app-layer encryption. Leave blank to auto-derive\n"
-                 "keys from device certificates.",
+            text=T("settings_window.password_hint"),
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
             anchor="w", justify="left",
         ).pack(anchor="w", padx=20, pady=(0, 4))
 
         # Status indicator — password is never loaded from disk (hash only)
-        _pw_status = "Password is set (hash stored)" if cfg.encryption_password_hash else "No password set"
+        _pw_status = T("security.password_set") if cfg.encryption_password_hash else T("security.no_password")
         self._enc_pw_status = ctk.CTkLabel(
             card2, text=_pw_status,
             font=ctk.CTkFont(size=11),
@@ -488,11 +484,11 @@ class SettingsWindow:
         self._enc_password_entry = ctk.CTkEntry(
             pw_row, textvariable=self._enc_password_var,
             height=32, width=240, show="*",
-            placeholder_text="Enter new password to set or change",
+            placeholder_text=T("settings_window.password_placeholder"),
         )
         self._enc_password_entry.pack(side="left", padx=(0, 8))
         self._show_pw_btn = ctk.CTkButton(
-            pw_row, text="Show", width=50, height=32,
+            pw_row, text=T("settings_window.show"), width=50, height=32,
             fg_color="transparent", border_width=1,
             text_color=("gray50", "gray60"),
             border_color=("gray70", "gray40"),
@@ -503,7 +499,7 @@ class SettingsWindow:
 
         # ── Save button ──────────────────────────────────────────
         ctk.CTkButton(
-            scroll, text="Save Security Settings",
+            scroll, text=T("settings_window.save_security"),
             width=200, height=36, command=self._on_save_security,
         ).pack(anchor="w", pady=(4, 16))
 
@@ -512,10 +508,10 @@ class SettingsWindow:
     def _toggle_password_visibility(self):
         if self._enc_password_entry.cget("show") == "*":
             self._enc_password_entry.configure(show="")
-            self._show_pw_btn.configure(text="Hide")
+            self._show_pw_btn.configure(text=T("settings_window.hide"))
         else:
             self._enc_password_entry.configure(show="*")
-            self._show_pw_btn.configure(text="Show")
+            self._show_pw_btn.configure(text=T("settings_window.show"))
 
     def _on_save_security(self):
         cfg = self._get_config()
@@ -523,9 +519,7 @@ class SettingsWindow:
         cfg.encryption_password = self._enc_password_var.get()
         self._save_config()
         if self._status_label:
-            self._status_label.configure(
-                text="Security settings saved. Restart required for changes to take effect."
-            )
+            self._status_label.configure(text=T("settings_window.security_saved"))
 
     def _build_advanced_panel(self):
         panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
@@ -535,11 +529,11 @@ class SettingsWindow:
         scroll.pack(fill="both", expand=True)
 
         ctk.CTkLabel(
-            scroll, text="Advanced Settings",
+            scroll, text=T("settings_window.advanced_title"),
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(anchor="w", pady=(0, 4))
         ctk.CTkLabel(
-            scroll, text="Some changes require a restart to take effect.",
+            scroll, text=T("settings_window.advanced_hint"),
             font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
         ).pack(anchor="w", pady=(0, 14))
 
@@ -559,44 +553,44 @@ class SettingsWindow:
         card1 = ctk.CTkFrame(scroll, corner_radius=12)
         card1.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(
-            card1, text="Clipboard & Sync",
+            card1, text=T("settings_window.clipboard_sync_section"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         r = _row(card1)
-        ctk.CTkLabel(r, text="History Max Entries", anchor="w",
+        ctk.CTkLabel(r, text=T("settings_window.history_max"), anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left")
         self._history_max_var = tk.StringVar(value=str(cfg.history_max_entries))
         ctk.CTkEntry(r, textvariable=self._history_max_var,
                      width=80, height=32).pack(side="right")
-        _desc(card1, "Maximum clipboard history entries to keep (10–1000)")
+        _desc(card1, T("settings_window.history_max_desc"))
 
         r = _row(card1)
-        ctk.CTkLabel(r, text="Sync Debounce (seconds)", anchor="w",
+        ctk.CTkLabel(r, text=T("settings_window.sync_debounce"), anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left")
         self._sync_debounce_var = tk.StringVar(value=str(cfg.sync_debounce))
         ctk.CTkEntry(r, textvariable=self._sync_debounce_var,
                      width=80, height=32).pack(side="right")
-        _desc(card1, "Minimum interval between outgoing syncs (0.1–5.0)")
+        _desc(card1, T("settings_window.sync_debounce_desc"))
 
         r = _row(card1)
-        ctk.CTkLabel(r, text="Poll Interval (seconds)", anchor="w",
+        ctk.CTkLabel(r, text=T("settings_window.poll_interval"), anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left")
         self._poll_interval_var = tk.StringVar(value=str(cfg.clipboard_poll_interval))
         ctk.CTkEntry(r, textvariable=self._poll_interval_var,
                      width=80, height=32).pack(side="right")
-        _desc(card1, "Clipboard change detection frequency (0.1–5.0). macOS/Linux only. Restart required.")
+        _desc(card1, T("settings_window.poll_interval_desc"))
 
         # ── Card 2: File Transfer ─────────────────────────────────
         card2 = ctk.CTkFrame(scroll, corner_radius=12)
         card2.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(
-            card2, text="File Transfer",
+            card2, text=T("settings_window.file_transfer_section"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         ctk.CTkLabel(
-            card2, text="Receive Directory", anchor="w",
+            card2, text=T("settings_window.receive_dir"), anchor="w",
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", padx=16, pady=(0, 4))
         dir_row = ctk.CTkFrame(card2, fg_color="transparent")
@@ -606,45 +600,45 @@ class SettingsWindow:
                      height=32, placeholder_text="~/Downloads/CopyBoard").pack(
             side="left", fill="x", expand=True, padx=(0, 8))
         ctk.CTkButton(
-            dir_row, text="Browse...", width=80, height=32,
+            dir_row, text=T("ui.browse"), width=80, height=32,
             command=self._browse_receive_dir,
         ).pack(side="right")
-        _desc(card2, "Where received files are saved. Leave blank for default. Restart required.")
+        _desc(card2, T("settings_window.receive_dir_desc"))
 
         r = _row(card2)
-        ctk.CTkLabel(r, text="Transfer Timeout (seconds)", anchor="w",
+        ctk.CTkLabel(r, text=T("settings_window.transfer_timeout"), anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left")
         self._transfer_timeout_var = tk.StringVar(value=str(cfg.transfer_timeout))
         ctk.CTkEntry(r, textvariable=self._transfer_timeout_var,
                      width=80, height=32).pack(side="right")
-        _desc(card2, "Maximum time for a file transfer before it's considered stale (30–3600)")
+        _desc(card2, T("settings_window.transfer_timeout_desc"))
 
         # ── Card 3: Connection ────────────────────────────────────
         card3 = ctk.CTkFrame(scroll, corner_radius=12)
         card3.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(
-            card3, text="Connection",
+            card3, text=T("settings_window.connection_section"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         r = _row(card3)
-        ctk.CTkLabel(r, text="Max Reconnect Attempts", anchor="w",
+        ctk.CTkLabel(r, text=T("settings_window.max_reconnect"), anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left")
         self._max_reconnect_var = tk.StringVar(value=str(cfg.max_reconnect_attempts))
         ctk.CTkEntry(r, textvariable=self._max_reconnect_var,
                      width=80, height=32).pack(side="right")
-        _desc(card3, "How many times to retry connecting to a lost peer (1–100). Restart required.")
+        _desc(card3, T("settings_window.max_reconnect_desc"))
 
         # ── Card 4: Logging & Notifications ───────────────────────
         card4 = ctk.CTkFrame(scroll, corner_radius=12)
         card4.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(
-            card4, text="Logging & Notifications",
+            card4, text=T("settings_window.logging_section"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 10))
 
         r = _row(card4)
-        ctk.CTkLabel(r, text="Log Level", anchor="w",
+        ctk.CTkLabel(r, text=T("settings_window.log_level"), anchor="w",
                      font=ctk.CTkFont(size=12)).pack(side="left")
         self._log_level_var = tk.StringVar(value=cfg.log_level)
         ctk.CTkOptionMenu(
@@ -653,16 +647,27 @@ class SettingsWindow:
             width=120, height=32,
         ).pack(side="right")
 
+        # Language selector
+        r = _row(card4)
+        ctk.CTkLabel(r, text=T("settings.language"), anchor="w",
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        self._language_var = tk.StringVar(value=cfg.language)
+        ctk.CTkOptionMenu(
+            r, variable=self._language_var,
+            values=available_locales(),
+            width=120, height=32,
+        ).pack(side="right")
+
         self._notifications_var = tk.BooleanVar(value=cfg.notifications_enabled)
         ctk.CTkSwitch(
-            card4, text="Enable desktop notifications",
+            card4, text=T("settings_window.enable_notifications"),
             variable=self._notifications_var,
             font=ctk.CTkFont(size=13),
         ).pack(anchor="w", padx=16, pady=(8, 14))
 
         # ── Save button ──────────────────────────────────────────
         ctk.CTkButton(
-            scroll, text="Save Advanced Settings",
+            scroll, text=T("settings_window.save_advanced"),
             width=200, height=36, command=self._on_save_advanced,
         ).pack(anchor="w", pady=(4, 16))
 
@@ -673,7 +678,7 @@ class SettingsWindow:
         from pathlib import Path
         directory = filedialog.askdirectory(
             parent=self._window,
-            title="Select File Receive Directory",
+            title=T("settings_window.receive_dir"),
             initialdir=self._file_receive_dir_var.get() or str(Path.home() / "Downloads" / "CopyBoard"),
         )
         if directory:
@@ -728,7 +733,7 @@ class SettingsWindow:
             max_reconnect = None
 
         if errors:
-            show_warning(self._window, "Validation Error", "\n".join(errors))
+            show_warning(self._window, T("settings_window.validation_error"), "\n".join(errors))
             return
 
         cfg = self._get_config()
@@ -739,17 +744,17 @@ class SettingsWindow:
         cfg.max_reconnect_attempts = max_reconnect
         cfg.transfer_timeout = timeout
         cfg.log_level = self._log_level_var.get()
+        cfg.language = self._language_var.get()
         cfg.notifications_enabled = self._notifications_var.get()
         self._save_config()
+        set_locale(cfg.language)
 
         if self._status_label:
-            self._status_label.configure(text="Advanced settings saved")
+            self._status_label.configure(text=T("footer.advanced_saved"))
         show_info(
             self._window,
-            "Saved",
-            "Advanced settings saved.\n\n"
-            "Settings marked 'Restart required' will take effect\n"
-            "after restarting CopyBoard.",
+            T("dialog.saved"),
+            T("settings_window.advanced_saved"),
         )
 
     # ═══════════════════════════════════════════════════════════════
@@ -763,7 +768,7 @@ class SettingsWindow:
         header.pack(fill="x", pady=(0, 12))
 
         ctk.CTkLabel(
-            header, text="Application Logs",
+            header, text=T("settings_window.logs_title"),
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(side="left")
 
@@ -771,7 +776,7 @@ class SettingsWindow:
         btn_row.pack(side="right")
 
         ctk.CTkButton(
-            btn_row, text="⟳  Refresh", width=90, height=30,
+            btn_row, text="⟳  " + T("ui.refresh"), width=90, height=30,
             fg_color="transparent", border_width=1,
             text_color=("gray40", "gray70"),
             border_color=("gray60", "gray50"),
@@ -782,7 +787,7 @@ class SettingsWindow:
 
         if self._on_export_logs:
             ctk.CTkButton(
-                btn_row, text="\U0001F4BE  Export", width=80, height=30,
+                btn_row, text="\U0001F4BE  " + T("ui.export_logs").rstrip("..."), width=80, height=30,
                 font=ctk.CTkFont(size=11),
                 command=self._on_export_logs,
             ).pack(side="left")
@@ -803,7 +808,7 @@ class SettingsWindow:
                 widget.configure(state="normal")
                 widget.delete("1.0", "end")
                 if not text:
-                    text = "No log entries yet."
+                    text = T("settings_window.no_logs")
                 widget.insert("1.0", text)
                 widget.see("end")
                 widget.configure(state="disabled")
@@ -830,14 +835,14 @@ class SettingsWindow:
         ).pack(pady=(0, 4))
 
         ctk.CTkLabel(
-            center, text="v1.0.0",
+            center, text=T("settings_window.about_version"),
             font=ctk.CTkFont(size=12),
             text_color=("gray50", "gray60"),
         ).pack()
 
         ctk.CTkLabel(
             center,
-            text="Cross-platform clipboard sharing\nbetween Windows, macOS, and Linux.",
+            text=T("settings_window.about_desc"),
             font=ctk.CTkFont(size=13),
             justify="center",
         ).pack(pady=(20, 18))
@@ -846,23 +851,16 @@ class SettingsWindow:
                                 fg_color=("gray95", "gray17"))
         feat_card.pack(fill="x", padx=20)
 
-        features = [
-            ("✅", "Automatic peer discovery on LAN (mDNS/Bonjour)"),
-            ("\U0001F512", "TLS 1.3 encrypted transport + certificate pinning"),
-            ("\U0001F4C4", "Text, HTML, RTF, and image clipboard support"),
-            ("⚡", "Zero configuration — just run it"),
-            ("\U0001F6AB", "8-digit pairing code, rate-limited"),
-            ("\U0001F4E4", "File sharing between devices"),
-        ]
-
-        for icon, desc in features:
+        feature_icons = ["✅", "\U0001F512", "\U0001F4C4", "⚡", "\U0001F6AB", "\U0001F4E4"]
+        feature_texts = T("settings_window.about_features")
+        for icon, desc in zip(feature_icons, feature_texts):
             row = ctk.CTkFrame(feat_card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=3)
             ctk.CTkLabel(row, text=icon, font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 8))
             ctk.CTkLabel(row, text=desc, font=ctk.CTkFont(size=12)).pack(side="left")
 
         ctk.CTkButton(
-            center, text="\U0001F4C2  Show Data Folder", width=200, height=34,
+            center, text=T("settings_window.show_data_folder"), width=200, height=34,
             fg_color="transparent", border_width=1,
             border_color=("#2980B9", "#3498DB"),
             text_color=("#2980B9", "#3498DB"),
@@ -896,7 +894,12 @@ class SettingsWindow:
 
     def _toggle_theme(self):
         self._dark_mode = not self._dark_mode
-        ctk.set_appearance_mode("dark" if self._dark_mode else "light")
+        new_mode = "dark" if self._dark_mode else "light"
+        ctk.set_appearance_mode(new_mode)
         self._theme_btn.configure(
-            text="☀  Light" if self._dark_mode else "☾  Dark"
+            text=T("ui.theme_light") if self._dark_mode else T("ui.theme_dark")
         )
+        # Persist to config so it survives restarts
+        cfg = self._get_config()
+        cfg.appearance_mode = new_mode
+        self._save_config()

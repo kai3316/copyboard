@@ -5,6 +5,8 @@ Uses CTkToplevel for consistent look with the rest of the app.
 
 import customtkinter as ctk
 
+from internal.i18n import T
+
 # ── Icon + color scheme per dialog type ──────────────────────────
 _INFO_ICON = "ℹ️"     # ℹ
 _WARN_ICON = "⚠️"     # ⚠
@@ -106,22 +108,93 @@ def _darken(hex_color, amount):
 def show_info(parent, title, message):
     """Show an info dialog with an OK button."""
     return _dialog(parent, title, message, _INFO_ICON, _INFO_COLOR,
-                   [("OK", _INFO_COLOR)])
+                   [(T("ui.ok"), _INFO_COLOR)])
 
 
 def show_warning(parent, title, message):
     """Show a warning dialog with an OK button."""
     return _dialog(parent, title, message, _WARN_ICON, _WARN_COLOR,
-                   [("OK", _WARN_COLOR)])
+                   [(T("ui.ok"), _WARN_COLOR)])
 
 
 def show_error(parent, title, message):
     """Show an error dialog with an OK button."""
     return _dialog(parent, title, message, _ERROR_ICON, _ERROR_COLOR,
-                   [("OK", _ERROR_COLOR)])
+                   [(T("ui.ok"), _ERROR_COLOR)])
 
 
 def ask_yesno(parent, title, message):
     """Show a confirmation dialog with Yes/No buttons. Returns True if Yes."""
     return _dialog(parent, title, message, _WARN_ICON, _WARN_COLOR,
-                   [("Yes", _INFO_COLOR), ("No", ("gray65", "gray45"))])
+                   [(T("ui.yes"), _INFO_COLOR), (T("ui.no"), ("gray65", "gray45"))])
+
+
+def ask_string(parent, title, prompt, initial_value=""):
+    """Show a themed input dialog. Returns the entered string, or None if
+    cancelled. Uses CTkEntry for consistent look."""
+    import customtkinter as ctk
+
+    dlg = ctk.CTkToplevel(parent)
+    dlg.title(title)
+    dlg.resizable(False, False)
+    dlg.transient(parent)
+    dlg.grab_set()
+
+    dlg.update_idletasks()
+    pw, ph = parent.winfo_width(), parent.winfo_height()
+    px, py = parent.winfo_rootx(), parent.winfo_rooty()
+    w, h = 400, 160
+    x = px + (pw - w) // 2
+    y = py + (ph - h) // 2
+    dlg.geometry(f"{w}x{h}+{x}+{y}")
+
+    result = [None]
+
+    body = ctk.CTkFrame(dlg, fg_color="transparent")
+    body.pack(fill="both", expand=True, padx=24, pady=(20, 12))
+
+    ctk.CTkLabel(
+        body, text=prompt, justify="left",
+        font=ctk.CTkFont(size=12),
+        text_color=("gray30", "gray80"),
+        wraplength=350,
+    ).pack(fill="x", pady=(0, 10))
+
+    entry_var = ctk.StringVar(value=initial_value)
+    entry = ctk.CTkEntry(
+        body, textvariable=entry_var, height=34,
+        font=ctk.CTkFont(size=13),
+    )
+    entry.pack(fill="x")
+    entry.select_range(0, "end")
+    entry.focus_set()
+
+    btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
+    btn_row.pack(fill="x", padx=24, pady=(0, 20))
+
+    ctk.CTkButton(
+        btn_row, text=T("ui.cancel"), width=90, height=32,
+        fg_color="transparent", border_width=1,
+        text_color=("gray40", "gray60"),
+        border_color=("gray60", "gray50"),
+        hover_color=("gray85", "gray25"),
+        font=ctk.CTkFont(size=12),
+        command=lambda: _on_close(None),
+    ).pack(side="right", padx=(6, 0))
+    ctk.CTkButton(
+        btn_row, text=T("ui.save"), width=90, height=32,
+        fg_color=_INFO_COLOR,
+        font=ctk.CTkFont(size=12),
+        command=lambda: _on_close(entry_var.get()),
+    ).pack(side="right")
+
+    entry.bind("<Return>", lambda e: _on_close(entry_var.get()))
+    entry.bind("<Escape>", lambda e: _on_close(None))
+
+    def _on_close(value):
+        result[0] = value
+        dlg.destroy()
+
+    dlg.protocol("WM_DELETE_WINDOW", lambda: _on_close(None))
+    dlg.wait_window()
+    return result[0]

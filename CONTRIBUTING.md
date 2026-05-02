@@ -1,0 +1,59 @@
+# Contributing to CopyBoard
+
+## Setup
+
+```bash
+git clone https://github.com/kai3316/copyboard.git
+cd copyboard
+python -m venv .venv
+source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -e ".[dev]"
+```
+
+## Development workflow
+
+1. Create a feature branch: `git checkout -b feat/my-feature`
+2. Make your changes
+3. Run linting: `ruff check .`
+4. Run tests: `python -m pytest tests/ -v`
+5. Commit with a descriptive message
+6. Submit a pull request
+
+## Code style
+
+- Python 3.12+ with type hints where practical
+- 4-space indentation, 100-character line limit
+- Follow existing patterns in the codebase
+- Keep changes focused — one PR, one purpose
+
+## Project structure
+
+```
+src/main.py              # Application entry point
+internal/
+  clipboard/             # Platform-specific clipboard I/O
+  config/                # JSON config persistence
+  platform/              # OS integration (autostart, notifications)
+  protocol/              # Wire format encoding/decoding
+  security/              # Encryption, pairing, identity
+  sync/                  # Sync orchestration and file transfer
+  transport/             # TLS connections and mDNS discovery
+  ui/                    # Dashboard, settings, system tray
+tests/                   # pytest test suite
+```
+
+## Adding a new feature
+
+- Core logic goes in the appropriate `internal/` subpackage
+- UI for the feature goes in `internal/ui/dashboard.py` or `settings_window.py`
+- Config fields are defined in `internal/config/config.py`
+- Add tests in the `tests/` directory
+- Wire everything together in `src/main.py`
+
+## Reporting issues
+
+Use the GitHub Issues tracker. Include:
+- Your OS and Python version
+- Steps to reproduce
+- Expected vs actual behavior
+- Any relevant log output (Settings → Logs → Export)

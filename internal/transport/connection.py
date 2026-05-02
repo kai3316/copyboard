@@ -240,6 +240,7 @@ class TransportManager:
         self._hash_to_real_id: dict[str, str] = {}
         self._rejected_peer_ids: set[str] = set()
         self._enc_mgr = None
+        self._on_security_alert: Callable | None = None
 
     def set_encryption_manager(self, enc_mgr) -> None:
         """Set the encryption manager for app-layer encryption."""
@@ -255,6 +256,13 @@ class TransportManager:
         mDNS or perform other post-wake recovery.
         """
         self._on_wake = callback
+
+    def set_on_security_alert(self, callback: Callable):
+        """Set a callback for security events (e.g. certificate changed).
+
+        Called with (peer_name, expected_fingerprint, received_fingerprint).
+        """
+        self._on_security_alert = callback
 
     @staticmethod
     def _secure_scratch_dir() -> Path:
@@ -655,6 +663,8 @@ class TransportManager:
                     "SECURITY: Certificate for %s has changed — possible MITM attack! "
                     "Connection rejected.", peer_name,
                 )
+                if self._on_security_alert:
+                    self._on_security_alert(peer_name, "", "")
                 if sock:
                     try:
                         sock.close()
@@ -1111,6 +1121,8 @@ class TransportManager:
                     "SECURITY: Incoming connection presented changed certificate — "
                     "possible MITM attack! Connection rejected.",
                 )
+                if self._on_security_alert:
+                    self._on_security_alert(peer_name or "unknown", "", "")
                 if client_sock:
                     try:
                         client_sock.close()

@@ -27,6 +27,7 @@ class PeerInfo:
     device_name: str
     public_key_pem: str = ""  # pinned after pairing
     paired: bool = False
+    notes: str = ""  # user-assigned alias or memo
 
 
 @dataclass
@@ -55,6 +56,9 @@ class Config:
     encryption_enabled: bool = True
     encryption_password: str = ""       # runtime only — never persisted
     encryption_password_hash: str = ""  # persisted verification token
+    # UI preferences
+    appearance_mode: str = "system"     # "system", "light", "dark"
+    language: str = "en"                # locale code: "en", "zh-CN"
 
     def add_peer(self, peer: PeerInfo):
         self.peers[peer.device_id] = peer
@@ -112,6 +116,8 @@ def load() -> Config:
             "log_level", "notifications_enabled",
             "encryption_enabled",
             "encryption_password_hash",
+            "appearance_mode",
+            "language",
         ):
             if key in data:
                 setattr(cfg, key, data[key])
@@ -129,6 +135,7 @@ def load() -> Config:
                     device_name=peer_data["device_name"],
                     public_key_pem=peer_data.get("public_key_pem", ""),
                     paired=peer_data.get("paired", False),
+                    notes=peer_data.get("notes", ""),
                 )
                 cfg.peers[peer.device_id] = peer
             except (KeyError, TypeError):
@@ -169,12 +176,15 @@ def save(cfg: Config, enc_mgr: "EncryptionManager | None" = None):
         "notifications_enabled": cfg.notifications_enabled,
         "encryption_enabled": cfg.encryption_enabled,
         "encryption_password_hash": cfg.encryption_password_hash,
+        "appearance_mode": cfg.appearance_mode,
+        "language": cfg.language,
         "peers": [
             {
                 "device_id": p.device_id,
                 "device_name": p.device_name,
                 "public_key_pem": p.public_key_pem,
                 "paired": p.paired,
+                "notes": p.notes,
             }
             for p in cfg.peers.values()
         ],

@@ -18,6 +18,7 @@ from typing import Callable
 import pystray
 from PIL import Image, ImageDraw
 
+from internal.i18n import T
 from internal.platform.notify import notification_mgr
 
 logger = logging.getLogger(__name__)
@@ -119,29 +120,29 @@ class SystrayApp:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                f"Device: {self._device_name}",
+                T("tray.device", name=self._device_name),
                 None,
                 enabled=False,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Syncing: ON",
+                T("tray.syncing_on"),
                 self._on_toggle_sync,
                 checked=lambda item: self._syncing,
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Show Dashboard", self._on_open_dashboard_click),
+            pystray.MenuItem(T("tray.show_dashboard"), self._on_open_dashboard_click),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Connected Devices",
+                T("tray.connected_devices"),
                 pystray.Menu(self._build_peer_menu),
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Settings...", self._on_open_settings_click),
-            pystray.MenuItem("Export Logs...", self._on_export_logs_click),
+            pystray.MenuItem(T("tray.settings"), self._on_open_settings_click),
+            pystray.MenuItem(T("tray.export_logs"), self._on_export_logs_click),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("About CopyBoard", self._on_about),
-            pystray.MenuItem("Quit", self._on_quit),
+            pystray.MenuItem(T("tray.about"), self._on_about),
+            pystray.MenuItem(T("tray.quit"), self._on_quit),
         )
 
         logger.info("Starting system tray")
@@ -174,7 +175,7 @@ class SystrayApp:
         items = []
         if not self._peers:
             items.append(
-                pystray.MenuItem("(no devices connected)", None, enabled=False),
+                pystray.MenuItem(T("tray.no_devices"), None, enabled=False),
             )
         else:
             for peer in self._peers:
@@ -207,9 +208,8 @@ class SystrayApp:
         # Show a simple notification
         if self._tray:
             self._tray.notify(
-                "CopyBoard — Cross-platform clipboard sharing\n"
-                "Share your clipboard between Windows and Mac in real time.",
-                title="About CopyBoard",
+                T("tray.about_message"),
+                title=T("tray.about_title"),
             )
 
     def _on_quit(self, icon, item):

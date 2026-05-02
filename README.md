@@ -24,6 +24,35 @@
 
 ---
 
+## Quick Start
+
+1. [Download](https://github.com/kai3316/copyboard/releases/latest) the app for your platform
+2. Run it — no install needed
+3. Run it on another device on the **same network**
+4. Confirm the 8-digit pairing code on both devices
+5. Copy on one, paste on the other!
+
+> **macOS users:** If Gatekeeper blocks the app, run `xattr -cr copyboard.app` then right-click → Open.
+
+---
+
+## Contents
+
+- [Overview](#overview)
+- [Why CopyBoard?](#why-copyboard)
+- [Features](#features)
+- [Download](#download)
+- [Install from Source](#install-from-source)
+- [Build from Source](#build-from-source)
+- [How It Works](#how-it-works)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
 ## Overview
 
 CopyBoard syncs your clipboard across devices on the same local network. Copy text, images, HTML, or rich text on your Windows PC — paste it seconds later on your MacBook. No cloud, no accounts, no setup.
@@ -35,6 +64,28 @@ CopyBoard syncs your clipboard across devices on the same local network. Copy te
 - **Full fidelity** — preserves text encoding, HTML structure, RTF formatting, and image data byte-for-byte
 - **Secure by default** — dual-layer encryption: TLS 1.3 transport + AES-256-GCM per frame, at-rest encryption for stored data
 - **Zero config** — devices discover each other automatically via mDNS; pair once, trusted forever
+
+---
+
+## Comparison
+
+Most clipboard sync tools fall into two camps: **cloud-based services** (convenient but your data leaves your network) and **OS built-in solutions** (limited to one ecosystem, plain text only). CopyBoard takes a third path.
+
+| Capability | CopyBoard | Cloud Clipboard Tools | OS Built-in (Universal Clipboard, etc.) |
+|---|---|---|---|
+| **Plain Text** | ✅ UTF-8, full Unicode | ✅ | ✅ |
+| **Rich Text / HTML** | ✅ Links, tables, formatting preserved | ❌ Plain text only | ❌ Plain text only |
+| **Images (PNG)** | ✅ Full resolution, any size | ❌ Not supported | ❌ Not supported |
+| **File Transfer** | ✅ Encrypted, any file type | ❌ Not supported | ❌ |
+| **Data Location** | ✅ Pure LAN — never leaves | ❌ Uploaded to cloud servers | ✅ Local only |
+| **Account Required** | ✅ None — just run it | ❌ Account + sign-in | Varies |
+| **Cross-Platform** | ✅ Windows / macOS / Linux | Varies by tool | ❌ Single ecosystem |
+| **Encryption** | ✅ TLS 1.3 + AES-256-GCM | ⚠️ TLS only (if at all) | ❌ None or basic |
+| **Zero Config** | ✅ mDNS auto-discovery | ❌ Manual setup | ✅ |
+| **Open Source** | ✅ MIT License | ❌ Proprietary | ❌ |
+| **Price** | ✅ Free forever | ❌ Freemium / Paid | ✅ Free |
+
+**Bottom line:** If you only copy plain text within one ecosystem, built-in tools work fine. If you need rich text, images, files, cross-platform sync, and privacy — CopyBoard is purpose-built for that.
 
 ---
 
@@ -56,27 +107,11 @@ CopyBoard syncs your clipboard across devices on the same local network. Copy te
 
 ### Security Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Application Layer                                  │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  AES-256-GCM (per-frame, per-peer)            │  │
-│  │  Keys derived via HKDF from sorted cert       │  │
-│  │  fingerprints + optional pre-shared password  │  │
-│  └───────────────────────────────────────────────┘  │
-│                        │                            │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  TLS 1.3 (transport layer)                    │  │
-│  │  Self-signed X.509 Ed25519 certificates       │  │
-│  │  Certificate pinning for peer verification    │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-
-At-Rest Protection:
-  - Private keys: AES-256-GCM encrypted in config.json
-  - Clipboard history: all entries encrypted on disk
-  - Password hash: PBKDF2 verification token (password never stored)
-```
+| Layer | Technology | Detail |
+|---|---|---|
+| **Application** | AES-256-GCM per frame | Per-peer encryption keys derived via HKDF from Ed25519 certificates; optional pre-shared password for extra entropy (PBKDF2, 600K iterations) |
+| **Transport** | TLS 1.3 | Self-signed Ed25519 X.509 certificates with certificate pinning (TOFU); MITM detection on identity change |
+| **At-Rest** | AES-256-GCM on disk | Private keys, clipboard history, and sensitive config fields encrypted at rest; password stored as PBKDF2 verification token (never persisted) |
 
 - **Dual-layer encryption** — TLS 1.3 secures the transport; AES-256-GCM encrypts each frame at the application layer. Different keys per peer-pair, automatically derived
 - **Storage encryption** — private keys, clipboard history, and sensitive config fields are AES-256-GCM encrypted at rest
@@ -133,7 +168,7 @@ source .venv/bin/activate      # macOS / Linux
 pip install -r requirements.txt
 
 # Run
-python cmd/main.py
+python src/main.py
 ```
 
 **Linux prerequisites:**
@@ -265,7 +300,7 @@ All application data is stored locally:
 
 ```
 copyboard/
-├── cmd/
+├── src/
 │   └── main.py                      # Application entry point
 ├── internal/
 │   ├── clipboard/                   # Clipboard I/O per platform
