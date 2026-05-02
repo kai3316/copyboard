@@ -8,7 +8,7 @@ filtering preferences, and version information.
 import logging
 import os
 import tkinter as tk
-from tkinter import messagebox
+from internal.ui.dialogs import show_info, show_warning
 from typing import Callable
 
 import customtkinter as ctk
@@ -334,7 +334,7 @@ class SettingsWindow:
             if not 1024 <= port <= 65535:
                 raise ValueError("Port out of range")
         except ValueError:
-            messagebox.showwarning("Invalid", "Port must be 1024–65535.")
+            show_warning(self._window, "Invalid", "Port must be 1024–65535.")
             return
 
         cfg = self._get_config()
@@ -342,7 +342,8 @@ class SettingsWindow:
         cfg.service_type = self._svc_var.get().strip()
         cfg.relay_url = self._relay_var.get().strip()
         self._save_config()
-        messagebox.showinfo(
+        show_info(
+            self._window,
             "Saved",
             "Network settings saved.\nRestart CopyBoard for changes to take effect.",
         )
@@ -404,7 +405,7 @@ class SettingsWindow:
         cfg = self._get_config()
         cfg.filter_enabled_categories = enabled
         self._save_config()
-        messagebox.showinfo("Saved", "Content filter settings saved.")
+        show_info(self._window, "Saved", "Content filter settings saved.")
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Advanced
@@ -727,7 +728,7 @@ class SettingsWindow:
             max_reconnect = None
 
         if errors:
-            messagebox.showwarning("Validation Error", "\n".join(errors))
+            show_warning(self._window, "Validation Error", "\n".join(errors))
             return
 
         cfg = self._get_config()
@@ -743,7 +744,8 @@ class SettingsWindow:
 
         if self._status_label:
             self._status_label.configure(text="Advanced settings saved")
-        messagebox.showinfo(
+        show_info(
+            self._window,
             "Saved",
             "Advanced settings saved.\n\n"
             "Settings marked 'Restart required' will take effect\n"

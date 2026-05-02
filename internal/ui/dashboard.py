@@ -10,7 +10,7 @@ import platform
 import socket
 import time
 import tkinter as tk
-from tkinter import messagebox
+from internal.ui.dialogs import ask_yesno, show_error, show_info
 from typing import Callable
 
 import customtkinter as ctk
@@ -1001,7 +1001,7 @@ class DashboardWindow:
                     break
         except Exception:
             pass
-        if messagebox.askyesno("Unpair", f"Unpair this device?\n\n{device_name}"):
+        if ask_yesno(self._window, "Unpair", f"Unpair this device?\n\n{device_name}"):
             self._on_unpair(peer_id)
             self._refresh_devices()
 
@@ -1016,7 +1016,7 @@ class DashboardWindow:
                     break
         except Exception:
             pass
-        if messagebox.askyesno("Forget Device", f"Remove this device from known list?\n\n{device_name}"):
+        if ask_yesno(self._window, "Forget Device", f"Remove this device from known list?\n\n{device_name}"):
             self._on_remove_peer(peer_id)
             self._refresh_devices()
 
@@ -1080,9 +1080,10 @@ class DashboardWindow:
         if success:
             if self._status_footer:
                 self._status_footer.configure(text="Device paired successfully")
-            messagebox.showinfo("Paired", "Device paired successfully!")
+            show_info(self._window, "Paired", "Device paired successfully!")
         else:
-            messagebox.showerror(
+            show_error(
+                self._window,
                 "Failed",
                 "Pairing failed. The code may have expired.\n"
                 "Try connecting again.",
@@ -1308,14 +1309,14 @@ class DashboardWindow:
     def _on_clear_history(self):
         if self._clear_history is None:
             return
-        if messagebox.askyesno("Clear History", "Delete all clipboard history?"):
+        if ask_yesno(self._window, "Clear History", "Delete all clipboard history?"):
             self._clear_history()
             self._refresh_history_list()
 
     def _on_delete_history_item(self, index: int):
         if self._delete_history_item is None:
             return
-        if messagebox.askyesno("Delete Item", "Delete this clipboard entry?"):
+        if ask_yesno(self._window, "Delete Item", "Delete this clipboard entry?"):
             self._delete_history_item(index)
             # Defer rebuild so the button animation completes first
             self._root.after(50, self._refresh_history_list)
@@ -1323,7 +1324,7 @@ class DashboardWindow:
     def _on_clear_transfer_history(self):
         if self._clear_transfer_history is None:
             return
-        if messagebox.askyesno("Clear Transfer History", "Delete all transfer history?"):
+        if ask_yesno(self._window, "Clear Transfer History", "Delete all transfer history?"):
             self._clear_transfer_history()
             self._root.after(50, self._refresh_transfers)
 

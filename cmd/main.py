@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, simpledialog
 
 # Add project root to Python path so 'internal' package can be found
 # (not needed in a PyInstaller-frozen bundle)
@@ -32,6 +32,7 @@ from internal.sync.manager import SyncManager
 from internal.transport.connection import TransportManager
 from internal.transport.discovery import Discovery
 from internal.ui.dashboard import DashboardWindow
+from internal.ui.dialogs import show_error, show_info, show_warning
 from internal.ui.settings_window import SettingsWindow
 from internal.ui.systray import SystrayApp
 
@@ -419,16 +420,17 @@ def main():
             return
         try:
             shutil.copy2(log_path, dest)
-            messagebox.showinfo("Exported", f"Log saved to:\n{dest}")
+            show_info(root, "Exported", f"Log saved to:\n{dest}")
             logger.info("Log exported to %s", dest)
         except FileNotFoundError:
-            messagebox.showwarning(
+            show_warning(
+                root,
                 "Not Found",
                 f"No log file found at:\n{log_path}\n\n"
                 "CopyBoard may not have been running long enough to generate logs.",
             )
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to export log:\n{e}")
+            show_error(root, "Error", f"Failed to export log:\n{e}")
             logger.error("Failed to export log: %s", e)
 
     # ── Send file ──────────────────────────────────────────────
@@ -448,12 +450,13 @@ def main():
         try:
             transfer_id = file_transfer_mgr.send_file(file_path, transport_mgr.broadcast)
             logger.info("File transfer initiated: %s", transfer_id[:8])
-            messagebox.showinfo(
+            show_info(
+                root,
                 "File Transfer",
                 f"Sending: {os.path.basename(file_path)}",
             )
         except FileNotFoundError:
-            messagebox.showerror("Error", f"File not found:\n{file_path}")
+            show_error(root, "Error", f"File not found:\n{file_path}")
 
     # ── Window factories ─────────────────────────────────
 
