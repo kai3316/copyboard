@@ -189,8 +189,11 @@ class _ClipboardReader(ClipboardReader):
             )
             if result.returncode != 0:
                 stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
-                logger.warning("AppleScript image read failed (permissions?): %s",
-                              stderr[:200] if stderr else "unknown error")
+                if "-1700" in stderr:
+                    logger.debug("AppleScript: no image on clipboard (expected)")
+                else:
+                    logger.warning("AppleScript image read failed (permissions?): %s",
+                                  stderr[:200] if stderr else "unknown error")
                 return b""
 
             file_size = os.path.getsize(tmp_path)
@@ -461,19 +464,18 @@ class DarwinClipboardMonitor(ClipboardMonitor):
                 return hashlib.sha256(combined).hexdigest()
 
             # No text — check for image-only content so image copies
-            # are detected.  Only pay the osascript cost when the
-            # text+HTML hash is empty, which is rare.
+            # are detected.  Uses plain AppleScript (no AppKit)
+            # to avoid macOS TCC permission issues.
             try:
                 img_check = subprocess.run(
                     ["osascript", "-e",
-                     'use framework "AppKit"\n'
-                     'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
-                     'if pb\'s dataForType:"public.tiff" = missing value then\n'
-                     '    if pb\'s dataForType:"public.png" = missing value then\n'
-                     '        return "0"\n'
+                     'try\n'
+                     '    set imgData to (the clipboard as «class TIFF»)\n'
+                     '    if imgData is not missing value and length of imgData > 0 then\n'
+                     '        return "1"\n'
                      '    end if\n'
-                     'end if\n'
-                     'return "1"'],
+                     'end try\n'
+                     'return "0"'],
                     capture_output=True, timeout=2,
                 )
                 if img_check.returncode == 0 and img_check.stdout.strip() == b"1":
