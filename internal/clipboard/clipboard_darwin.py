@@ -151,49 +151,73 @@ class _ClipboardReader(ClipboardReader):
     def _get_image_via_nspasteboard() -> bytes:
         """Read image from NSPasteboard via AppleScript-ObjC bridge.
 
-        Writes the pasteboard image data to a temp file and converts
-        to PNG via PIL.  Handles both public.tiff (canonical macOS
-        image pasteboard type) and public.png.
+        Uses readObjectsForClasses: (the modern NSPasteboard API) to
+        get an NSImage directly, then converts to PNG via
+        NSBitmapImageRep. This is more reliable than reading raw UTI
+        data because it handles all image formats macOS supports.
         """
-        tmp_path = None
         try:
             from PIL import Image
         except ImportError:
             return b""
 
+        tmp_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                suffix=".tiff", delete=False,
-            ) as f:
-                tmp_path = f.name
+            import tempfile as _tf
+            tmp_fd, tmp_path = _tf.mkstemp(suffix=".png")
+            os.close(tmp_fd)
 
+            # Use readObjectsForClasses:options: — the modern pasteboard
+            # API that returns NSImage directly from any image content.
             script = (
                 'use framework "AppKit"\n'
                 'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
-                f'set tmpPath to "{tmp_path}"\n'
-                'set theData to pb\'s dataForType:"public.tiff"\n'
-                'if theData = missing value then\n'
-                '    set theData to pb\'s dataForType:"public.png"\n'
-                'end if\n'
-                'if theData = missing value then\n'
+                'set theClasses to current application\'s NSArray\'s '
+                'arrayWithObject:(current application\'s NSImage\'s class)\n'
+                'set results to pb\'s readObjectsForClasses:theClasses '
+                'options:(missing value)\n'
+                'if results\'s |count|() = 0 then\n'
                 '    return "NO_IMAGE"\n'
                 'end if\n'
-                'theData\'s writeToFile:tmpPath atomically:true\n'
+                'set img to results\'s firstObject()\n'
+                'set tiffRep to img\'s TIFFRepresentation()\n'
+                'set pngRep to current application\'s NSBitmapImageRep\'s '
+                'imageRepWithData:tiffRep\n'
+                'if pngRep = missing value then\n'
+                '    return "NO_IMAGE"\n'
+                'end if\n'
+                'set pngData to pngRep\'s representationUsingType:'
+                '(current application\'s NSPNGFileType) |properties|:(missing value)\n'
+                'if pngData = missing value then\n'
+                '    return "NO_IMAGE"\n'
+                'end if\n'
+                f'set tmpPath to "{tmp_path}"\n'
+                'pngData\'s writeToFile:tmpPath atomically:true\n'
                 'return "OK"'
             )
             result = subprocess.run(
                 ["osascript", "-e", script],
-                capture_output=True, timeout=4,
+                capture_output=True, timeout=5,
             )
-            if result.returncode != 0 or b"NO_IMAGE" in result.stdout:
+            if result.returncode != 0:
+                stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+                if stderr:
+                    logger.debug("NSPasteboard osascript failed: %s", stderr[:200])
+                return b""
+            if b"NO_IMAGE" in (result.stdout or b""):
                 return b""
 
-            with open(tmp_path, "rb") as fh:
-                img = Image.open(fh)
-                buf = BytesIO()
-                img.save(buf, format="PNG")
-                logger.debug("Read image via NSPasteboard fallback (%d bytes)", buf.tell())
-                return buf.getvalue()
+            # Verify the written file is non-empty before handing to PIL
+            file_size = os.path.getsize(tmp_path)
+            if file_size == 0:
+                logger.debug("NSPasteboard wrote empty image file")
+                return b""
+
+            img = Image.open(tmp_path)
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            logger.debug("Read image via NSPasteboard fallback (%d bytes)", buf.tell())
+            return buf.getvalue()
         except Exception:
             logger.debug("NSPasteboard image read failed", exc_info=True)
             return b""
@@ -354,7 +378,11 @@ class DarwinClipboardMonitor(ClipboardMonitor):
                 last_hash = current
 
     def _get_content_hash(self) -> str:
-        """Hash text + HTML pasteboard content for change detection."""
+        """Hash text + HTML pasteboard content for change detection.
+
+        Falls back to osascript for image detection when no text/HTML
+        is on the pasteboard, so image-only copies are not missed.
+        """
         try:
             text = subprocess.run(
                 ["pbpaste", "-Prefer", "txt"],
@@ -369,6 +397,27 @@ class DarwinClipboardMonitor(ClipboardMonitor):
             combined = txt_data + html_data
             if combined:
                 return hashlib.sha256(combined).hexdigest()
+
+            # No text — check for image-only content so image copies
+            # are detected.  Only pay the osascript cost when the
+            # text+HTML hash is empty, which is rare.
+            try:
+                img_check = subprocess.run(
+                    ["osascript", "-e",
+                     'use framework "AppKit"\n'
+                     'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
+                     'if pb\'s dataForType:"public.tiff" = missing value then\n'
+                     '    if pb\'s dataForType:"public.png" = missing value then\n'
+                     '        return "0"\n'
+                     '    end if\n'
+                     'end if\n'
+                     'return "1"'],
+                    capture_output=True, timeout=2,
+                )
+                if img_check.returncode == 0 and img_check.stdout.strip() == b"1":
+                    return hashlib.sha256(str(time.time()).encode()).hexdigest()
+            except Exception:
+                pass
         except Exception:
             pass
         return ""
