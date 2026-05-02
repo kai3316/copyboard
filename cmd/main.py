@@ -480,13 +480,12 @@ def main():
 
     def save_cfg():
         for peer in pairing_mgr.get_known_peers():
-            if peer.device_id not in cfg.peers:
-                cfg.peers[peer.device_id] = PeerInfo(
-                    device_id=peer.device_id,
-                    device_name=peer.device_name,
-                    public_key_pem=peer.certificate_pem,
-                    paired=peer.paired,
-                )
+            cfg.peers[peer.device_id] = PeerInfo(
+                device_id=peer.device_id,
+                device_name=peer.device_name,
+                public_key_pem=peer.certificate_pem,
+                paired=peer.paired,
+            )
         save(cfg, _make_save_enc())
 
     def get_peers():
@@ -731,13 +730,12 @@ def main():
         transport_mgr.stop_server()
 
         for peer in pairing_mgr.get_known_peers():
-            if peer.device_id not in cfg.peers:
-                cfg.peers[peer.device_id] = PeerInfo(
-                    device_id=peer.device_id,
-                    device_name=peer.device_name,
-                    public_key_pem=peer.certificate_pem,
-                    paired=peer.paired,
-                )
+            cfg.peers[peer.device_id] = PeerInfo(
+                device_id=peer.device_id,
+                device_name=peer.device_name,
+                public_key_pem=peer.certificate_pem,
+                paired=peer.paired,
+            )
         _save_cfg_encrypted()
         root.quit()
 
