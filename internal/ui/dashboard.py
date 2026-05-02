@@ -1362,20 +1362,19 @@ class DashboardWindow:
             command=self._do_speed_test,
         ).pack(side="left")
 
-        # ── Active card — takes all extra vertical space ─────────────
+        # ── Active card — fixed height, scrollable ──────────────────
         active_card = ctk.CTkFrame(panel, corner_radius=12)
-        active_card.pack(fill="both", expand=True, pady=(0, 6))
-        active_card.grid_propagate(False)
+        active_card.pack(fill="x", pady=(0, 6))
 
         ctk.CTkLabel(active_card, text="Active",
                      font=ctk.CTkFont(size=12, weight="bold"),
         ).pack(anchor="w", padx=12, pady=(8, 2))
         self._transfer_scroll = ctk.CTkScrollableFrame(
-            active_card, fg_color="transparent",
+            active_card, height=200, fg_color="transparent",
         )
-        self._transfer_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self._transfer_scroll.pack(fill="x", padx=8, pady=(0, 8))
 
-        # ── History card — compact, sticks to bottom ─────────────────
+        # ── History card — compact, fixed 60px ───────────────────────
         history_card = ctk.CTkFrame(panel, corner_radius=12)
         history_card.pack(fill="x")
 
