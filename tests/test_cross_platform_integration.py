@@ -113,10 +113,10 @@ def _bridge(from_dev: _SimDevice, to_dev: _SimDevice):
     from_dev.sent.clear()
 
 
-def _simulate_copy(dev: _SimDevice, content: ClipboardContent, pause: float = 0.45):
+def _simulate_copy(dev: _SimDevice, content: ClipboardContent, pause: float = 0.7):
     """Simulate user copying content on a device.
 
-    pause must exceed SYNC_DEBOUNCE (0.3s) so the coalescing timer fires
+    pause must exceed SYNC_DEBOUNCE (0.5s) so the coalescing timer fires
     and the SyncMessage lands in dev.sent before the caller checks it.
     """
     dev.reader.content = content
@@ -304,6 +304,10 @@ class TestBidirectionalSync:
         _bridge(self.win, self.mac)
         assert self.mac.writer.last_written.types[ContentType.TEXT] == b"From Windows"
 
+        # Let remote-write suppression window expire before the next
+        # local copy, otherwise the monitor ignores the fire event.
+        time.sleep(0.8)
+
         # Now macOS copies something else
         _simulate_copy(self.mac, ClipboardContent(
             types={ContentType.TEXT: b"From Mac"},
@@ -350,6 +354,10 @@ class TestBidirectionalSync:
             expected_mac_count += 1
             assert self.mac.writer.write_count == expected_mac_count
 
+            # Let the remote-write suppression window expire before the
+            # next local copy, otherwise the monitor ignores the fire.
+            time.sleep(0.6)
+
             # Mac copies
             _simulate_copy(self.mac, ClipboardContent(
                 types={ContentType.TEXT: f"mac-{i}".encode()},
@@ -357,6 +365,8 @@ class TestBidirectionalSync:
             _bridge(self.mac, self.win)
             expected_win_count += 1
             assert self.win.writer.write_count == expected_win_count
+
+            time.sleep(0.6)
 
 
 # ══════════════════════════════════════════════════════════════════════════

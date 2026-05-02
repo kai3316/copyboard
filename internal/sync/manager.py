@@ -105,7 +105,10 @@ class SyncManager:
             # window after the write, because writers that set formats
             # sequentially will trigger multiple change events.
             self._last_local_hash = content_hash
-            self._suppress_monitor_until = time.time() + self._sync_debounce + 0.5
+            # Writer sets formats sequentially (pbcopy → osascript → ...);
+            # each step triggers a change event.  Suppress long enough to
+            # cover the slowest writer path (~0.3 s).
+            self._suppress_monitor_until = time.time() + self._sync_debounce + 0.2
 
             # Cancel any pending local timer so it doesn't fire with
             # the remote content we're about to write.

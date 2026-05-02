@@ -119,24 +119,13 @@ def _pb_types() -> set[bytes]:
 
 
 def _pb_data_for_type(uti: bytes) -> bytes | None:
-    """Read raw data for a UTI from the general pasteboard.  Returns None if
-    the type is not available or reading fails."""
+    """Read raw data for a UTI from the general pasteboard."""
     objc, pb = _init_nspasteboard()
     if not pb:
         return None
 
     try:
-        # Build an NSString for the UTI so we can pass it to dataForType:
-        sel_alloc = objc.sel_registerName(b"alloc")
-        sel_init_utf8 = objc.sel_registerName(b"initWithUTF8String:")
-
-        ns_string_cls = objc.objc_getClass(b"NSString")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        ns_str_alloc = objc.objc_msgSend(ns_string_cls, sel_alloc)
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        ns_uti = objc.objc_msgSend(ns_str_alloc, sel_init_utf8, uti)
+        ns_uti = _nsstring(objc, uti)
         if not ns_uti:
             return None
 
@@ -166,6 +155,23 @@ def _pb_data_for_type(uti: bytes) -> bytes | None:
         return None
 
 
+def _nsstring(objc, s: bytes):
+    """Create an NSString from a Python bytes string via ctypes.
+
+    Caller must release the returned object when done (not needed for
+    short-lived calls — the Objective-C autorelease pool handles it).
+    """
+    sel_alloc = objc.sel_registerName(b"alloc")
+    sel_init = objc.sel_registerName(b"initWithUTF8String:")
+    ns_string_cls = objc.objc_getClass(b"NSString")
+    objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    objc.objc_msgSend.restype = ctypes.c_void_p
+    alloced = objc.objc_msgSend(ns_string_cls, sel_alloc)
+    objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
+    objc.objc_msgSend.restype = ctypes.c_void_p
+    return objc.objc_msgSend(alloced, sel_init, s)
+
+
 def _pb_has_image() -> bool:
     """Check whether any image UTI is present on the pasteboard."""
     types = _pb_types()
@@ -179,17 +185,9 @@ def _pb_change_count() -> int | None:
         return None
 
     try:
-        # Build @"changeCount" NSString
-        sel_alloc = objc.sel_registerName(b"alloc")
-        sel_init_utf8 = objc.sel_registerName(b"initWithUTF8String:")
-
-        ns_string_cls = objc.objc_getClass(b"NSString")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        alloc_str = objc.objc_msgSend(ns_string_cls, sel_alloc)
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        key = objc.objc_msgSend(alloc_str, sel_init_utf8, b"changeCount")
+        key = _nsstring(objc, b"changeCount")
+        if not key:
+            return None
 
         sel_value = objc.sel_registerName(b"valueForKey:")
         objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
@@ -387,8 +385,7 @@ class _ClipboardReader(ClipboardReader):
 
         tmp_path = None
         try:
-            import tempfile as _tf
-            tmp_fd, tmp_path = _tf.mkstemp(suffix=".tiff")
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tiff")
             os.close(tmp_fd)
 
             script = (
@@ -446,8 +443,7 @@ class _ClipboardReader(ClipboardReader):
 
         tmp_path = None
         try:
-            import tempfile as _tf
-            tmp_fd, tmp_path = _tf.mkstemp(suffix=".png")
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".png")
             os.close(tmp_fd)
 
             script = (
