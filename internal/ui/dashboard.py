@@ -776,27 +776,22 @@ class DashboardWindow:
             self._status_label.configure(text=T("ui.sync_paused"))
 
     def _animate_breath(self):
-        """Smooth breathing-light animation for the sync status dot."""
+        """Gentle breathing-light animation for the sync status dot."""
         if not getattr(self, '_breathing', False) or self._status_dot is None:
             return
         import math
         self._breath_frame += 1
-        # Sine wave: smooth pulse, ~2.5 second period at 80ms interval
-        t = self._breath_frame * 0.08
-        brightness = (math.sin(t) + 1) / 2  # 0.0 → 1.0 → 0.0
-        # Interpolate size: 13 → 17
-        size = int(13 + brightness * 4)
-        # Interpolate color between dim and bright green
+        # Slow sine wave: ~4 second period at 100ms interval
+        t = self._breath_frame * 0.04
+        brightness = (math.sin(t) + 1) / 2  # 0.0 → 1.0
+        # Fixed size, only animate color brightness gently
+        # Bright green #2ECC71 (46,204,113) ↔ dim #1a7a3a (26,122,58)
         r = int(26 + brightness * 20)
-        g = int(140 + brightness * 64)
-        b = int(53 + brightness * 60)
+        g = int(122 + brightness * 82)
+        b = int(58 + brightness * 55)
         color = f"#{r:02x}{g:02x}{b:02x}"
-        self._status_dot.configure(
-            width=size, height=size,
-            corner_radius=size // 2,
-            fg_color=color,
-        )
-        self._breath_timer = self._root.after(80, self._animate_breath)
+        self._status_dot.configure(fg_color=color)
+        self._breath_timer = self._root.after(100, self._animate_breath)
 
         # Uptime
         if self._uptime_label and self._start_time:
@@ -1490,19 +1485,12 @@ class DashboardWindow:
                 "IMAGE": T("history.type_image"),
                 "RTF": T("history.type_rich_text"),
             }
-            self._card_type_icons = {
-                "TEXT": "✉",
-                "HTML": "🌐",
-                "IMAGE": "🖼",
-                "IMAGE_EMF": "🖼",
-                "RTF": "📝",
-            }
             self._cached_device_id = self._get_config().device_id
 
         timestamp = entry.get("timestamp", 0)
         content_type = entry.get("content_type", "Unknown")
         preview = self._sanitize_preview(entry.get("text_preview", ""))
-        type_icon = self._card_type_icons.get(content_type, "📄")
+        type_color = self._TYPE_COLORS.get(content_type, ("#7F8C8D", "#95A5A6"))
 
         # Relative time
         time_str = self._format_relative_time(timestamp)
@@ -1527,11 +1515,9 @@ class DashboardWindow:
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=14, pady=10)
 
-        # ── Left: type icon ──────────────────────────────────────
-        icon_lbl = ctk.CTkLabel(
-            inner, text=type_icon, font=ctk.CTkFont(size=22),
-        )
-        icon_lbl.pack(side="left", padx=(0, 12))
+        # ── Left: colored accent bar ─────────────────────────────
+        accent = ctk.CTkFrame(inner, width=4, fg_color=type_color)
+        accent.pack(side="left", fill="y", padx=(0, 12))
 
         # ── Right column ─────────────────────────────────────────
         right = ctk.CTkFrame(inner, fg_color="transparent")
