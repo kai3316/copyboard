@@ -75,10 +75,38 @@ def _hide_dock():
     """Hide the app from the macOS Dock, keeping only the menu bar icon."""
     if sys.platform != "darwin":
         return
+    # rubicon-objc ships with pystray on macOS — try it first.
     try:
         from rubicon.objc import ObjCClass
         NSApp = ObjCClass('NSApplication').sharedApplication()
         NSApp.setActivationPolicy_(2)  # NSApplicationActivationPolicyAccessory
+        return
+    except Exception:
+        pass
+    # Fallback: raw ctypes call into the ObjC runtime.
+    try:
+        import ctypes
+        import ctypes.util
+        lib = ctypes.util.find_library('objc')
+        if not lib:
+            return
+        objc = ctypes.cdll.LoadLibrary(lib)
+        objc.objc_getClass.argtypes = (ctypes.c_char_p,)
+        objc.objc_getClass.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = (ctypes.c_char_p,)
+        objc.sel_registerName.restype = ctypes.c_void_p
+
+        cls = objc.objc_getClass(b'NSApplication')
+        sel_shared = objc.sel_registerName(b'sharedApplication')
+        sel_policy = objc.sel_registerName(b'setActivationPolicy:')
+
+        proto0 = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+        app = proto0(('objc_msgSend', objc))(cls, sel_shared)
+
+        proto1 = ctypes.CFUNCTYPE(
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long,
+        )
+        proto1(('objc_msgSend', objc))(app, sel_policy, 2)
     except Exception:
         pass
 
