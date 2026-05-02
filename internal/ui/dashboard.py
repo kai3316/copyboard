@@ -1366,7 +1366,7 @@ class DashboardWindow:
         card = ctk.CTkFrame(panel, corner_radius=12)
         card.pack(fill="both", expand=True)
         card.columnconfigure(0, weight=1)
-        card.rowconfigure(2, weight=1)  # history section expands
+        card.rowconfigure(0, weight=1)  # active section expands
 
         # Active (top)
         top = ctk.CTkFrame(card, fg_color="transparent")
@@ -1405,8 +1405,8 @@ class DashboardWindow:
             text_color=("gray55", "gray55"),
         )
         self._transfer_history_stats.pack(anchor="w", pady=(1, 0))
-        self._transfer_history_scroll = ctk.CTkScrollableFrame(bottom, fg_color="transparent")
-        self._transfer_history_scroll.pack(fill="x", expand=True, pady=(2, 0))
+        self._transfer_history_scroll = ctk.CTkScrollableFrame(bottom, height=80, fg_color="transparent")
+        self._transfer_history_scroll.pack(fill="x", expand=False, pady=(2, 0))
 
         # Speed test result below the card
         self._speed_test_label = ctk.CTkLabel(
