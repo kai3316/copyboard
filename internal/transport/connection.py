@@ -232,6 +232,7 @@ class TransportManager:
         self._reconnect_timers: dict[str, threading.Timer] = {}
         self._max_reconnect_attempts = max_reconnect_attempts
         self._hash_to_real_id: dict[str, str] = {}
+        self._rejected_peer_ids: set[str] = set()
         self._enc_mgr = None
 
     def set_encryption_manager(self, enc_mgr) -> None:
@@ -433,6 +434,18 @@ class TransportManager:
 
     def connect_to_peer(self, peer_id: str, peer_name: str, address: str, port: int):
         with self._lock:
+            # Clear rejected status — user explicitly wants to connect now.
+            # Also clear any related IDs (hashed or real) so the incoming
+            # side of the connection won't be refused.
+            ids_to_clear = {peer_id}
+            real_id = self._hash_to_real_id.get(peer_id)
+            if real_id:
+                ids_to_clear.add(real_id)
+            for h, r in list(self._hash_to_real_id.items()):
+                if r == peer_id:
+                    ids_to_clear.add(h)
+            for pid in ids_to_clear:
+                self._rejected_peer_ids.discard(pid)
             if peer_id in self._peers:
                 logger.debug(
                     "[%s] connect_to_peer: already connected (peer_id=%s), skipping",
@@ -625,6 +638,69 @@ class TransportManager:
             logger.info("[%s] manual disconnect", peer_id[:12])
             conn.set_on_disconnect(None)
             conn.stop()
+
+    def forget_peer(self, peer_id: str):
+        """Disconnect and permanently reject this peer.
+
+        After calling this, the peer will not be able to reconnect
+        (incoming connections are refused) until the user explicitly
+        connects again. Use this for Reject and Forget actions.
+        """
+        # Collect all IDs that refer to the same peer.  There are three
+        # cases:
+        #   1. peer_id is the real device_id → purge peer_id + every
+        #      hashed mDNS ID that maps to it.
+        #   2. peer_id is a hashed mDNS ID → purge peer_id + the real
+        #      device_id it maps to + every other hash that maps to the
+        #      same real ID.
+        #   3. peer_id is an anonymous key (__anon__…) → just purge it.
+        ids_to_reject = {peer_id}
+
+        with self._lock:
+            # If peer_id is a hashed ID, resolve it to the real ID
+            real_id = self._hash_to_real_id.get(peer_id)
+            if real_id:
+                ids_to_reject.add(real_id)
+            else:
+                # peer_id might be the real ID — find every hash that
+                # resolves to it
+                real_id = peer_id
+
+            # Find all hashed IDs that map to this real ID
+            for h, r in list(self._hash_to_real_id.items()):
+                if r == real_id:
+                    ids_to_reject.add(h)
+
+            # Also find any hashed IDs stored in _peer_addresses that
+            # share the same (address, port) and are not yet covered
+            addr_info = self._peer_addresses.get(peer_id)
+            if addr_info:
+                _, addr, port = addr_info
+                for pid, (_, a, p) in list(self._peer_addresses.items()):
+                    if a == addr and p == port:
+                        ids_to_reject.add(pid)
+
+            # Purge every collected ID from all tracking structures
+            timer_to_cancel = None
+            conn_to_stop = None
+            for pid in ids_to_reject:
+                self._rejected_peer_ids.add(pid)
+                self._peer_addresses.pop(pid, None)
+                self._reconnect_attempts.pop(pid, None)
+                t = self._reconnect_timers.pop(pid, None)
+                if t:
+                    timer_to_cancel = t
+                c = self._peers.pop(pid, None)
+                if c:
+                    conn_to_stop = c
+                self._hash_to_real_id.pop(pid, None)
+
+        if timer_to_cancel:
+            timer_to_cancel.cancel()
+        if conn_to_stop:
+            logger.info("[%s] forget: manual disconnect", peer_id[:12])
+            conn_to_stop.set_on_disconnect(None)
+            conn_to_stop.stop()
 
     def get_connected_peers(self) -> list[str]:
         with self._lock:
@@ -860,6 +936,15 @@ class TransportManager:
                         "Identity from %s:%d — peer_id=%s, peer_name=%s",
                         addr[0], addr[1], peer_id[:12] if peer_id else "N/A", peer_name or "N/A",
                     )
+                    # Refuse connections from peers the user has explicitly
+                    # rejected or forgotten.
+                    if peer_id and peer_id in self._rejected_peer_ids:
+                        logger.info(
+                            "[%s] incoming connection from rejected peer — refusing",
+                            peer_id[:12],
+                        )
+                        ssl_sock.close()
+                        continue
                     was_paired = self._pairing_mgr.is_peer_paired(peer_id)
                     self._pairing_mgr.add_peer(
                         peer_id, peer_name,

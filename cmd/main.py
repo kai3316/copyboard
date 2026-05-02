@@ -547,7 +547,7 @@ def main():
     def on_unpair(peer_id):
         pairing_mgr.unpair_peer(peer_id)
         pairing_mgr.reject_pairing(peer_id)
-        transport_mgr.disconnect_peer(peer_id)
+        transport_mgr.forget_peer(peer_id)
         if peer_id in cfg.peers:
             cfg.peers[peer_id].paired = False
         _save_cfg_encrypted()
