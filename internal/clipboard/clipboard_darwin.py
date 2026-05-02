@@ -63,6 +63,7 @@ class _ClipboardReader(ClipboardReader):
         return b""
 
     def _get_html(self) -> bytes:
+        # Method 1: pbpaste -Prefer html (fast, works on most macOS versions)
         try:
             result = subprocess.run(
                 ["pbpaste", "-Prefer", "html"],
@@ -74,6 +75,42 @@ class _ClipboardReader(ClipboardReader):
                     return data
         except Exception:
             logger.debug("pbpaste html read failed", exc_info=True)
+
+        # Method 2: NSPasteboard via osascript (bypasses pbpaste limitations)
+        return self._get_html_via_nspasteboard()
+
+    def _get_html_via_nspasteboard(self) -> bytes:
+        """Read HTML from NSPasteboard via AppleScript-ObjC bridge.
+
+        This is more reliable than pbpaste -Prefer html because it
+        accesses the pasteboard directly and reads the public.html UTI.
+        """
+        try:
+            script = (
+                'use framework "AppKit"\n'
+                'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
+                'set htmlData to pb\'s dataForType:"public.html"\n'
+                'if htmlData = missing value then\n'
+                '    return "COPYBOARD_NO_HTML"\n'
+                'end if\n'
+                'set htmlStr to current application\'s NSString\'s alloc()\'s '
+                'initWithData:htmlData encoding:current application\'s NSUTF8StringEncoding\n'
+                'if htmlStr = missing value then\n'
+                '    return "COPYBOARD_NO_HTML"\n'
+                'end if\n'
+                'return htmlStr as text'
+            )
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, timeout=3,
+            )
+            if result.returncode == 0 and result.stdout:
+                data = result.stdout
+                if data != b"COPYBOARD_NO_HTML" and b"<" in data and b">" in data:
+                    logger.debug("Read HTML via NSPasteboard fallback (%d bytes)", len(data))
+                    return data
+        except Exception:
+            logger.debug("NSPasteboard html read failed", exc_info=True)
         return b""
 
     def _get_rtf(self) -> bytes:
@@ -94,22 +131,78 @@ class _ClipboardReader(ClipboardReader):
         return b""
 
     def _get_image(self) -> bytes:
+        # Method 1: PIL.ImageGrab.grabclipboard()
         try:
             from PIL import ImageGrab
+            img = ImageGrab.grabclipboard()
+            if img is not None:
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                return buf.getvalue()
         except ImportError:
             logger.debug("PIL import failed, image read unavailable")
+        except Exception:
+            logger.debug("ImageGrab read failed", exc_info=True)
+
+        # Method 2: NSPasteboard via osascript (TIFF → PNG via PIL)
+        return self._get_image_via_nspasteboard()
+
+    @staticmethod
+    def _get_image_via_nspasteboard() -> bytes:
+        """Read image from NSPasteboard via AppleScript-ObjC bridge.
+
+        Writes the pasteboard image data to a temp file and converts
+        to PNG via PIL.  Handles both public.tiff (canonical macOS
+        image pasteboard type) and public.png.
+        """
+        tmp_path = None
+        try:
+            from PIL import Image
+        except ImportError:
             return b""
 
         try:
-            img = ImageGrab.grabclipboard()
-            if img is None:
+            with tempfile.NamedTemporaryFile(
+                suffix=".tiff", delete=False,
+            ) as f:
+                tmp_path = f.name
+
+            script = (
+                'use framework "AppKit"\n'
+                'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
+                f'set tmpPath to "{tmp_path}"\n'
+                'set theData to pb\'s dataForType:"public.tiff"\n'
+                'if theData = missing value then\n'
+                '    set theData to pb\'s dataForType:"public.png"\n'
+                'end if\n'
+                'if theData = missing value then\n'
+                '    return "NO_IMAGE"\n'
+                'end if\n'
+                'theData\'s writeToFile:tmpPath atomically:true\n'
+                'return "OK"'
+            )
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, timeout=4,
+            )
+            if result.returncode != 0 or b"NO_IMAGE" in result.stdout:
                 return b""
-            buf = BytesIO()
-            img.save(buf, format="PNG")
-            return buf.getvalue()
+
+            with open(tmp_path, "rb") as fh:
+                img = Image.open(fh)
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                logger.debug("Read image via NSPasteboard fallback (%d bytes)", buf.tell())
+                return buf.getvalue()
         except Exception:
-            logger.debug("ImageGrab read failed", exc_info=True)
+            logger.debug("NSPasteboard image read failed", exc_info=True)
             return b""
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
 
 class _ClipboardWriter(ClipboardWriter):

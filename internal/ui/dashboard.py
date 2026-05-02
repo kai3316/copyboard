@@ -1113,6 +1113,16 @@ class DashboardWindow:
             font=ctk.CTkFont(size=18, weight="bold"),
         ).pack(side="left")
 
+        ctk.CTkButton(
+            header_row, text="\U0001F504  Refresh", width=80, height=28,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray60"),
+            border_color=("gray55", "gray45"),
+            hover_color=("gray85", "gray25"),
+            font=ctk.CTkFont(size=11),
+            command=self._refresh_history_list,
+        ).pack(side="right", padx=(0, 6))
+
         if self._clear_history:
             self._clear_history_btn = ctk.CTkButton(
                 header_row, text="Clear All", width=80, height=28,
