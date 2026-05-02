@@ -98,6 +98,13 @@ class SyncManager:
             # write we're about to make (prevents re-broadcasting remote content).
             self._last_local_hash = content_hash
 
+        # Record in local clipboard history
+        if self._history is not None:
+            try:
+                self._history.add(content)
+            except Exception:
+                logger.debug("Failed to add remote content to history", exc_info=True)
+
         # Write to local clipboard
         logger.info(
             "Writing remote clipboard from %s: %d format(s)",
@@ -108,47 +115,44 @@ class SyncManager:
     def _on_clipboard_change(self):
         """Called by the clipboard monitor when local clipboard changes.
 
-        Uses a coalescing timer: rapid changes within the debounce window
-        cancel the pending send and restart the timer, so only one send
-        fires after the clipboard has settled. This prevents duplicate
-        sends caused by applications that set clipboard formats in
-        multiple steps (each triggering WM_CLIPBOARDUPDATE on Windows).
+        Defers the actual clipboard read until the debounce window has
+        elapsed.  Applications often set clipboard formats in multiple
+        steps (each triggering a change event), so reading + hashing on
+        every event wastes CPU and creates duplicate history entries.
+        By waiting for the clipboard to settle, we read once and produce
+        a single history entry per user action.
         """
         with self._lock:
             if not self._enabled:
                 return
 
-            had_pending = self._pending_timer is not None
-
-            # Cancel any pending send — restart the coalescing window
+            # Reset the coalescing timer — each new change pushes the
+            # read further out until the clipboard is quiet.
             if self._pending_timer is not None:
                 self._pending_timer.cancel()
                 self._pending_timer = None
 
-        # Read clipboard content (outside lock to avoid blocking)
+            self._pending_timer = threading.Timer(
+                self._sync_debounce,
+                self._do_read_and_send,
+            )
+            self._pending_timer.daemon = True
+            self._pending_timer.start()
+
+    def _do_read_and_send(self):
+        """Read clipboard after debounce, then broadcast if content is new."""
+        with self._lock:
+            self._pending_timer = None
+
         content = self._reader.read()
         if content.is_empty():
             return
-
-        # Record in clipboard history (if available)
-        if self._history is not None:
-            try:
-                self._history.add(content)
-            except Exception:
-                logger.debug("Failed to add to clipboard history", exc_info=True)
 
         content_hash = content.hash_key()
 
         with self._lock:
             if content_hash == self._last_local_hash:
-                if had_pending:
-                    # Same content re-emerged while a send was pending.
-                    # The content hasn't been sent yet — restart the timer
-                    # to coalesce these duplicate clipboard events.
-                    pass  # fall through to reschedule the timer
-                else:
-                    # Already sent this exact content — suppress duplicate
-                    return
+                return  # Already sent, suppress
 
             self._last_local_hash = content_hash
 
@@ -156,20 +160,12 @@ class SyncManager:
             if len(self._dedup_ring) > DEDUP_RING_SIZE:
                 self._dedup_ring = self._dedup_ring[-DEDUP_RING_SIZE:]
 
-        # Schedule the actual send after the debounce window
-        with self._lock:
-            self._pending_timer = threading.Timer(
-                self._sync_debounce,
-                self._do_send,
-                args=[content, content_hash],
-            )
-            self._pending_timer.daemon = True
-            self._pending_timer.start()
-
-    def _do_send(self, content: ClipboardContent, content_hash: str):
-        """Fire the actual send after the debounce timer expires."""
-        with self._lock:
-            self._pending_timer = None
+        # Record in clipboard history — once per action
+        if self._history is not None:
+            try:
+                self._history.add(content)
+            except Exception:
+                logger.debug("Failed to add to clipboard history", exc_info=True)
 
         msg = SyncMessage(
             content=content,
