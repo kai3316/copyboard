@@ -41,9 +41,9 @@ class SyncManager:
         self._on_send: Callable | None = None
         self._lock = threading.Lock()
         self._last_local_hash: str | None = None
-        self._last_send_time = 0.0
         self._dedup_ring: list[str] = []
         self._sync_debounce = sync_debounce
+        self._pending_timer: threading.Timer | None = None
 
     @property
     def on_send(self) -> Callable | None:
@@ -62,6 +62,10 @@ class SyncManager:
         logger.info("SyncManager started on %s", self._device_name)
 
     def stop(self):
+        with self._lock:
+            if self._pending_timer is not None:
+                self._pending_timer.cancel()
+                self._pending_timer = None
         self._monitor.stop()
         logger.info("SyncManager stopped")
 
@@ -102,11 +106,26 @@ class SyncManager:
         self._writer.write(content)
 
     def _on_clipboard_change(self):
-        """Called by the clipboard monitor when local clipboard changes."""
+        """Called by the clipboard monitor when local clipboard changes.
+
+        Uses a coalescing timer: rapid changes within the debounce window
+        cancel the pending send and restart the timer, so only one send
+        fires after the clipboard has settled. This prevents duplicate
+        sends caused by applications that set clipboard formats in
+        multiple steps (each triggering WM_CLIPBOARDUPDATE on Windows).
+        """
         with self._lock:
             if not self._enabled:
                 return
 
+            had_pending = self._pending_timer is not None
+
+            # Cancel any pending send — restart the coalescing window
+            if self._pending_timer is not None:
+                self._pending_timer.cancel()
+                self._pending_timer = None
+
+        # Read clipboard content (outside lock to avoid blocking)
         content = self._reader.read()
         if content.is_empty():
             return
@@ -121,17 +140,36 @@ class SyncManager:
         content_hash = content.hash_key()
 
         with self._lock:
-            now = time.time()
-            if now - self._last_send_time < self._sync_debounce:
-                return
             if content_hash == self._last_local_hash:
-                return
+                if had_pending:
+                    # Same content re-emerged while a send was pending.
+                    # The content hasn't been sent yet — restart the timer
+                    # to coalesce these duplicate clipboard events.
+                    pass  # fall through to reschedule the timer
+                else:
+                    # Already sent this exact content — suppress duplicate
+                    return
+
             self._last_local_hash = content_hash
-            self._last_send_time = now
 
             self._dedup_ring.append(content_hash)
             if len(self._dedup_ring) > DEDUP_RING_SIZE:
                 self._dedup_ring = self._dedup_ring[-DEDUP_RING_SIZE:]
+
+        # Schedule the actual send after the debounce window
+        with self._lock:
+            self._pending_timer = threading.Timer(
+                self._sync_debounce,
+                self._do_send,
+                args=[content, content_hash],
+            )
+            self._pending_timer.daemon = True
+            self._pending_timer.start()
+
+    def _do_send(self, content: ClipboardContent, content_hash: str):
+        """Fire the actual send after the debounce timer expires."""
+        with self._lock:
+            self._pending_timer = None
 
         msg = SyncMessage(
             content=content,

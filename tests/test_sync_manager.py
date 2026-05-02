@@ -73,7 +73,7 @@ class TestSyncManager:
         )
         self.mgr.start()
         self.monitor.fire()
-        time.sleep(0.1)
+        time.sleep(0.5)  # exceed SYNC_DEBOUNCE for timer to fire
 
         assert len(self.sent) == 1
         assert self.sent[0].source_device == "test-device"
@@ -85,8 +85,8 @@ class TestSyncManager:
         )
         self.mgr.start()
         self.monitor.fire()
-        self.monitor.fire()
-        time.sleep(0.1)
+        self.monitor.fire()  # second fire cancels timer, restarts — coalesced
+        time.sleep(0.5)  # exceed SYNC_DEBOUNCE
 
         assert len(self.sent) == 1
 
@@ -96,29 +96,30 @@ class TestSyncManager:
         )
         self.mgr.start()
         self.monitor.fire()
-        time.sleep(0.4)  # exceed SYNC_DEBOUNCE
+        time.sleep(0.5)  # exceed SYNC_DEBOUNCE for first timer
 
         self.reader.content = ClipboardContent(
             types={ContentType.TEXT: b"second"},
         )
         self.monitor.fire()
-        time.sleep(0.1)
+        time.sleep(0.5)  # exceed SYNC_DEBOUNCE for second timer
 
         assert len(self.sent) == 2
 
     def test_throttle_rapid_changes(self):
         self.mgr.start()
 
-        # Fire 5 changes as fast as possible
+        # Fire 5 changes as fast as possible — coalescing timer keeps resetting
         for i in range(5):
             self.reader.content = ClipboardContent(
                 types={ContentType.TEXT: f"rapid {i}".encode()},
             )
             self.monitor.fire()
 
-        time.sleep(0.2)
-        # At least some throttling occurred — not all 5 should be sent
-        assert len(self.sent) < 5, f"Expected throttling, got {len(self.sent)}"
+        time.sleep(0.5)  # exceed SYNC_DEBOUNCE to let final timer fire
+        # Rapid changes coalesce into a single send (only the last one)
+        assert len(self.sent) == 1, f"Expected coalescing to 1, got {len(self.sent)}"
+        assert self.sent[0].content.types[ContentType.TEXT] == b"rapid 4"
 
     def test_disabled_does_not_broadcast(self):
         self.reader.content = ClipboardContent(
@@ -165,7 +166,7 @@ class TestSyncManager:
         )
         self.mgr.start()
         self.monitor.fire()
-        time.sleep(0.1)
+        time.sleep(0.5)  # exceed SYNC_DEBOUNCE
 
         assert len(self.sent) == 1
         write_count_before = self.writer.write_count

@@ -113,8 +113,12 @@ def _bridge(from_dev: _SimDevice, to_dev: _SimDevice):
     from_dev.sent.clear()
 
 
-def _simulate_copy(dev: _SimDevice, content: ClipboardContent, pause: float = 0.05):
-    """Simulate user copying content on a device."""
+def _simulate_copy(dev: _SimDevice, content: ClipboardContent, pause: float = 0.45):
+    """Simulate user copying content on a device.
+
+    pause must exceed SYNC_DEBOUNCE (0.3s) so the coalescing timer fires
+    and the SyncMessage lands in dev.sent before the caller checks it.
+    """
     dev.reader.content = content
     dev.monitor.fire()
     time.sleep(pause)
