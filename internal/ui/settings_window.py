@@ -17,14 +17,6 @@ from internal.clipboard.filter import ALL_CATEGORIES, CATEGORY_LABELS
 
 logger = logging.getLogger(__name__)
 
-STATUS_COLORS = {
-    "Connected":  "#2ECC71",
-    "Paired":     "#F39C12",
-    "Discovered": "#3498DB",
-    "Pending":    "#95A5A6",
-}
-
-
 class SettingsWindow:
     """Settings window with sidebar navigation — separate from the main dashboard."""
 
@@ -235,7 +227,7 @@ class SettingsWindow:
                 font=ctk.CTkFont(size=13),
                 command=lambda k=key: self._switch_panel(k),
             )
-            btn.pack(fill="x", pady=3)
+            btn.pack(fill="x", pady=5)
             self._sidebar_buttons[key] = btn
 
     # ═══════════════════════════════════════════════════════════════
@@ -299,7 +291,7 @@ class SettingsWindow:
         ).pack(side="left")
 
         row2 = ctk.CTkFrame(card, fg_color="transparent")
-        row2.pack(fill="x", padx=16, pady=(0, 14))
+        row2.pack(fill="x", padx=16, pady=(0, 10))
         ctk.CTkLabel(row2, text="Service Type", width=100, anchor="w").pack(side="left")
         self._svc_var = tk.StringVar(value=cfg.service_type)
         ctk.CTkEntry(row2, textvariable=self._svc_var, height=32).pack(
@@ -312,7 +304,7 @@ class SettingsWindow:
         ctk.CTkLabel(
             card2, text="Relay (optional)",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 6))
+        ).pack(anchor="w", padx=16, pady=(14, 10))
 
         ctk.CTkLabel(
             card2, text="Relay URL", anchor="w",
@@ -331,7 +323,7 @@ class SettingsWindow:
 
         ctk.CTkButton(
             panel, text="Save Network Settings",
-            width=180, height=34, command=self._on_save_network,
+            width=200, height=36, command=self._on_save_network,
         ).pack(anchor="w")
 
         return panel
@@ -393,14 +385,14 @@ class SettingsWindow:
                 card, text=label,
                 variable=var,
                 font=ctk.CTkFont(size=12),
-            ).pack(anchor="w", padx=16, pady=(0, 6))
+            ).pack(anchor="w", padx=16, pady=(2, 6))
 
         # Spacer at bottom of card
         ctk.CTkFrame(card, height=8, fg_color="transparent").pack()
 
         ctk.CTkButton(
             panel, text="Save Filter Settings",
-            width=180, height=34, command=self._on_save_filter,
+            width=200, height=36, command=self._on_save_filter,
         ).pack(anchor="w")
 
         return panel
@@ -440,7 +432,7 @@ class SettingsWindow:
         ctk.CTkLabel(
             card1, text="Data Encryption",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 4))
+        ).pack(anchor="w", padx=16, pady=(14, 10))
 
         features = [
             "Private key encrypted at rest in config file",
@@ -468,7 +460,7 @@ class SettingsWindow:
         ctk.CTkLabel(
             card2, text="Pre-Shared Password (Optional)",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", padx=16, pady=(14, 4))
+        ).pack(anchor="w", padx=16, pady=(14, 10))
         ctk.CTkLabel(
             card2,
             text="Set the same password on both devices for stronger\n"
@@ -484,7 +476,7 @@ class SettingsWindow:
         self._enc_pw_status = ctk.CTkLabel(
             card2, text=_pw_status,
             font=ctk.CTkFont(size=11),
-            text_color="#27AE60" if cfg.encryption_password_hash else ("gray50", "gray60"),
+            text_color=("#27AE60", "#2ECC71") if cfg.encryption_password_hash else ("gray50", "gray60"),
         )
         self._enc_pw_status.pack(anchor="w", padx=20, pady=(0, 8))
 
@@ -808,6 +800,8 @@ class SettingsWindow:
                 text = self._get_log_text()
                 widget.configure(state="normal")
                 widget.delete("1.0", "end")
+                if not text:
+                    text = "No log entries yet."
                 widget.insert("1.0", text)
                 widget.see("end")
                 widget.configure(state="disabled")
@@ -863,21 +857,17 @@ class SettingsWindow:
             row = ctk.CTkFrame(feat_card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=3)
             ctk.CTkLabel(row, text=icon, font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 8))
-            ctk.CTkLabel(row, text=desc, font=ctk.CTkFont(size=11)).pack(side="left")
-
-        ctk.CTkFrame(feat_card, height=6, fg_color="transparent").pack()
-
-        ctk.CTkFrame(feat_card, height=12, fg_color="transparent").pack()
+            ctk.CTkLabel(row, text=desc, font=ctk.CTkFont(size=12)).pack(side="left")
 
         ctk.CTkButton(
             center, text="\U0001F4C2  Show Data Folder", width=200, height=34,
             fg_color="transparent", border_width=1,
-            border_color=("#3498DB", "#2980B9"),
-            text_color=("#3498DB", "#2980B9"),
+            border_color=("#2980B9", "#3498DB"),
+            text_color=("#2980B9", "#3498DB"),
             hover_color=("#D6EAF8", "#1A3A4A"),
             font=ctk.CTkFont(size=12),
             command=self._open_data_folder,
-        ).pack(pady=(0, 20))
+        ).pack(pady=(18, 20))
 
         return panel
 
