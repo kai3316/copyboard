@@ -131,30 +131,95 @@ class _ClipboardReader(ClipboardReader):
         return b""
 
     def _get_image(self) -> bytes:
-        # Method 1: PIL.ImageGrab.grabclipboard()
+        # Method 1: Plain AppleScript (no AppKit — avoids TCC permissions)
+        data = self._get_image_via_applescript()
+        if data:
+            return data
+
+        # Method 2: PIL.ImageGrab.grabclipboard()
         try:
             from PIL import ImageGrab
             img = ImageGrab.grabclipboard()
             if img is not None:
                 buf = BytesIO()
                 img.save(buf, format="PNG")
+                logger.info("Read image via ImageGrab.grabclipboard (%d bytes)", buf.tell())
                 return buf.getvalue()
+        except NotImplementedError:
+            logger.debug("ImageGrab.grabclipboard not implemented on this platform")
         except ImportError:
             logger.debug("PIL import failed, image read unavailable")
         except Exception:
             logger.debug("ImageGrab read failed", exc_info=True)
 
-        # Method 2: NSPasteboard via osascript (TIFF → PNG via PIL)
+        # Method 3: NSPasteboard via AppleScript-ObjC (may need permissions)
         return self._get_image_via_nspasteboard()
+
+    @staticmethod
+    def _get_image_via_applescript() -> bytes:
+        """Read clipboard image using plain AppleScript — no AppKit needed.
+
+        This avoids macOS TCC (Transparency, Consent, and Control)
+        permission issues that ``use framework "AppKit"`` can trigger.
+        Writes the pasteboard TIFF data to a temp file, then converts
+        to PNG via PIL.
+        """
+        try:
+            from PIL import Image
+        except ImportError:
+            return b""
+
+        tmp_path = None
+        try:
+            import tempfile as _tf
+            tmp_fd, tmp_path = _tf.mkstemp(suffix=".tiff")
+            os.close(tmp_fd)
+
+            script = (
+                f'set f to open for access (POSIX file "{tmp_path}") '
+                'with write permission\n'
+                'set eof f to 0\n'
+                'write (the clipboard as «class TIFF») to f\n'
+                'close access f\n'
+                'return "OK"'
+            )
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, timeout=5,
+            )
+            if result.returncode != 0:
+                stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+                logger.warning("AppleScript image read failed (permissions?): %s",
+                              stderr[:200] if stderr else "unknown error")
+                return b""
+
+            file_size = os.path.getsize(tmp_path)
+            if file_size == 0:
+                logger.debug("AppleScript wrote empty image file — no image on clipboard")
+                return b""
+
+            img = Image.open(tmp_path)
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            logger.info("Read image via plain AppleScript (%d bytes)", buf.tell())
+            return buf.getvalue()
+        except Exception:
+            logger.warning("AppleScript image read exception", exc_info=True)
+            return b""
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     @staticmethod
     def _get_image_via_nspasteboard() -> bytes:
         """Read image from NSPasteboard via AppleScript-ObjC bridge.
 
-        Uses readObjectsForClasses: (the modern NSPasteboard API) to
-        get an NSImage directly, then converts to PNG via
-        NSBitmapImageRep. This is more reliable than reading raw UTI
-        data because it handles all image formats macOS supports.
+        Uses readObjectsForClasses: to get an NSImage directly, then
+        converts to PNG via NSBitmapImageRep.  May require macOS
+        Accessibility permissions for the terminal / Python launcher.
         """
         try:
             from PIL import Image
@@ -167,8 +232,6 @@ class _ClipboardReader(ClipboardReader):
             tmp_fd, tmp_path = _tf.mkstemp(suffix=".png")
             os.close(tmp_fd)
 
-            # Use readObjectsForClasses:options: — the modern pasteboard
-            # API that returns NSImage directly from any image content.
             script = (
                 'use framework "AppKit"\n'
                 'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
@@ -201,13 +264,12 @@ class _ClipboardReader(ClipboardReader):
             )
             if result.returncode != 0:
                 stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
-                if stderr:
-                    logger.debug("NSPasteboard osascript failed: %s", stderr[:200])
+                logger.warning("NSPasteboard osascript failed (permissions?): %s",
+                              stderr[:200] if stderr else "unknown error")
                 return b""
             if b"NO_IMAGE" in (result.stdout or b""):
                 return b""
 
-            # Verify the written file is non-empty before handing to PIL
             file_size = os.path.getsize(tmp_path)
             if file_size == 0:
                 logger.debug("NSPasteboard wrote empty image file")
@@ -216,10 +278,10 @@ class _ClipboardReader(ClipboardReader):
             img = Image.open(tmp_path)
             buf = BytesIO()
             img.save(buf, format="PNG")
-            logger.debug("Read image via NSPasteboard fallback (%d bytes)", buf.tell())
+            logger.info("Read image via NSPasteboard (%d bytes)", buf.tell())
             return buf.getvalue()
         except Exception:
-            logger.debug("NSPasteboard image read failed", exc_info=True)
+            logger.warning("NSPasteboard image read exception", exc_info=True)
             return b""
         finally:
             if tmp_path:
