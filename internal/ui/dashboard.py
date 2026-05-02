@@ -18,6 +18,7 @@ import customtkinter as ctk
 logger = logging.getLogger(__name__)
 
 STATUS_COLOR = "#2ECC71"
+PAIRING_COLOR = "#E67E22"
 OFFLINE_COLOR = "#95A5A6"
 WARN_COLOR = "#F39C12"
 ACCENT = "#3498DB"
@@ -884,8 +885,10 @@ class DashboardWindow:
         ).pack(side="left", padx=(6, 0))
 
     def _create_device_row(self, dev_id, dev_name, paired, connected):
-        if connected:
+        if connected and paired:
             color, status = STATUS_COLOR, "Connected"
+        elif connected:
+            color, status = PAIRING_COLOR, "Pairing..."
         elif paired:
             color, status = WARN_COLOR, "Paired (offline)"
         else:
