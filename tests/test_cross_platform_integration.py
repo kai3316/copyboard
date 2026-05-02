@@ -345,7 +345,7 @@ class TestBidirectionalSync:
             # Windows copies
             _simulate_copy(self.win, ClipboardContent(
                 types={ContentType.TEXT: f"win-{i}".encode()},
-            ), pause=0.35)  # exceed SYNC_DEBOUNCE so each copy is sent
+            ), pause=0.5)
             _bridge(self.win, self.mac)
             expected_mac_count += 1
             assert self.mac.writer.write_count == expected_mac_count
@@ -353,7 +353,7 @@ class TestBidirectionalSync:
             # Mac copies
             _simulate_copy(self.mac, ClipboardContent(
                 types={ContentType.TEXT: f"mac-{i}".encode()},
-            ), pause=0.35)
+            ), pause=0.5)
             _bridge(self.mac, self.win)
             expected_win_count += 1
             assert self.win.writer.write_count == expected_win_count

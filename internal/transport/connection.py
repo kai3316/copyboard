@@ -499,8 +499,8 @@ class TransportManager:
                         try:
                             shared_code = self._pairing_mgr.generate_shared_pairing_code(real_peer_id)
                             logger.info(
-                                "[%s] pairing code: %s — verify on both devices",
-                                peer_name, shared_code,
+                                "[%s] pairing code: %s**** — verify on both devices",
+                                peer_name, shared_code[:4],
                             )
                         except Exception as e:
                             logger.debug("Could not generate shared pairing code: %s", e)
@@ -870,8 +870,8 @@ class TransportManager:
                         try:
                             shared_code = self._pairing_mgr.generate_shared_pairing_code(peer_id)
                             logger.info(
-                                "[%s] pairing code: %s — verify on both devices",
-                                peer_name or peer_id, shared_code,
+                                "[%s] pairing code: %s**** — verify on both devices",
+                                peer_name or peer_id, shared_code[:4],
                             )
                         except Exception as e:
                             logger.debug("Could not generate shared pairing code: %s", e)

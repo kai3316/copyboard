@@ -210,7 +210,7 @@ class PairingManager:
         with self._lock:
             self._pending_pairings[peer_id] = (code, time.time())
             self._pairing_attempts[peer_id] = []
-        logger.info("Shared pairing code for %s: %s (derived from cert fingerprints)", peer_id, code)
+        logger.info("Shared pairing code for %s: %s**** (derived from cert fingerprints)", peer_id, code[:4])
         if self._on_new_pairing:
             peer_name = peer.device_name
             try:

@@ -39,6 +39,21 @@ from internal.protocol.codec import encode_frame
 
 logger = logging.getLogger(__name__)
 
+
+def _mask_file_name(file_name: str) -> str:
+    """Return a privacy-safe file name: only the extension is preserved."""
+    if not file_name or file_name == "?":
+        return file_name
+    ext = os.path.splitext(file_name)[1]
+    return f"*{ext}" if ext else "*"
+
+
+def _mask_path(path: str) -> str:
+    """Return a privacy-safe path: only the parent directory name is shown."""
+    parent = os.path.basename(os.path.dirname(path))
+    return f"{parent}/***" if parent else "***"
+
+
 # ---- Constants -----------------------------------------------------------
 
 CHUNK_SIZE = 65536                     # 64 KB per chunk
@@ -240,7 +255,7 @@ class FileTransferManager:
 
         logger.info(
             "File transfer %s initiated: %s (%d bytes, %d chunks)",
-            transfer_id[:8], file_name, file_size, total_chunks,
+            transfer_id[:8], _mask_file_name(file_name), file_size, total_chunks,
         )
         return transfer_id
 
@@ -278,7 +293,7 @@ class FileTransferManager:
         )
         logger.info(
             "Accepted file transfer: %s (%s)",
-            transfer_id[:8], transfer.get("file_name", "?"),
+            transfer_id[:8], _mask_file_name(transfer.get("file_name", "?")),
         )
 
     def cancel_transfer(self, transfer_id: str, broadcast_fn: Callable[[bytes], None] | None = None) -> bool:
@@ -404,7 +419,7 @@ class FileTransferManager:
 
         logger.info(
             "Incoming file transfer request: %s (%s, %d bytes)",
-            file_name, transfer_id[:8], file_size,
+            _mask_file_name(file_name), transfer_id[:8], file_size,
         )
 
         total_chunks = max((file_size + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE, 1) if file_size > 0 else 1
@@ -583,7 +598,7 @@ class FileTransferManager:
                 {"msg_type": "file_complete", "transfer_id": transfer_id, "status": "success"},
                 send_fn,
             )
-            logger.info("File received successfully: %s -> %s", file_name, dest_path)
+            logger.info("File received successfully: %s -> %s", _mask_file_name(file_name), _mask_path(str(dest_path)))
             self._add_to_history(transfer, True)
 
             if self._on_file_received is not None:
@@ -644,7 +659,7 @@ class FileTransferManager:
         if transfer is not None and transfer.get("type") == "outgoing":
             logger.info(
                 "File transfer %s rejected by peer (%s)",
-                transfer_id[:8], transfer.get("file_name", "?"),
+                transfer_id[:8], _mask_file_name(transfer.get("file_name", "?")),
             )
             if self._on_transfer_complete is not None:
                 self._on_transfer_complete(transfer_id, False)
@@ -663,7 +678,7 @@ class FileTransferManager:
                 "File transfer %s %s (%s) -- status=%s",
                 transfer_id[:8],
                 "completed" if success else "failed",
-                transfer.get("file_name", "?"),
+                _mask_file_name(transfer.get("file_name", "?")),
                 status,
             )
             if self._on_transfer_complete is not None:
@@ -685,7 +700,7 @@ class FileTransferManager:
 
         logger.info(
             "Sending %d chunks for transfer %s (%s)",
-            total_chunks, transfer_id[:8], file_name,
+            total_chunks, transfer_id[:8], _mask_file_name(file_name),
         )
 
         try:
@@ -958,7 +973,7 @@ class FileTransferManager:
 
             logger.info(
                 "Cleaned up stale transfer %s (%s)",
-                tid[:8], transfer.get("file_name", "?"),
+                tid[:8], _mask_file_name(transfer.get("file_name", "?")),
             )
             if self._on_transfer_complete is not None:
                 self._on_transfer_complete(tid, False)

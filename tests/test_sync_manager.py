@@ -195,7 +195,7 @@ class TestSyncManager:
                 types={ContentType.TEXT: f"clip-{i}".encode()},
             )
             self.monitor.fire()
-            time.sleep(0.35)  # exceed SYNC_DEBOUNCE
+            time.sleep(0.5)  # exceed SYNC_DEBOUNCE with margin for timer jitter
 
         # All should have been sent (each is different)
         assert len(self.sent) == DEDUP_RING_SIZE + 10
