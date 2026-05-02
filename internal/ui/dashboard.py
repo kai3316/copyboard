@@ -150,7 +150,6 @@ class DashboardWindow:
         self._sub_discovery: ctk.CTkLabel | None = None
         self._sub_visibility: ctk.CTkLabel | None = None
         self._recent_activity: ctk.CTkLabel | None = None
-        self._theme_var: tk.BooleanVar | None = None
         self._uptime_label: ctk.CTkLabel | None = None
         self._local_ip_label: ctk.CTkLabel | None = None
         self._start_time: float = 0.0
@@ -206,6 +205,7 @@ class DashboardWindow:
                 self._window = None
 
         logger.info("Opening CopyBoard dashboard")
+        self._dark_mode = self._get_config().appearance_mode == "dark"
         ctk.set_appearance_mode("dark" if self._dark_mode else "light")
         ctk.set_default_color_theme("blue")
 
@@ -230,12 +230,14 @@ class DashboardWindow:
         self._schedule_refresh()
 
     def _on_hide(self):
+        self._breathing = False
         if self._window is not None:
             self._window.withdraw()
         if self._on_hidden:
             self._on_hidden()
 
     def _on_close(self):
+        self._breathing = False
         if self._refresh_job is not None:
             self._root.after_cancel(self._refresh_job)
             self._refresh_job = None
@@ -298,16 +300,6 @@ class DashboardWindow:
             text_color=("#D5D8DC", "#ABB2B9"),
         )
         self._device_name_label.pack(side="left")
-
-        self._theme_btn = ctk.CTkButton(
-            h_inner, text=T("ui.theme_dark") if not self._dark_mode else T("ui.theme_light"),
-            width=90, height=32, fg_color="transparent",
-            border_width=1, border_color=("#7F8C8D", "#566573"),
-            text_color=("#FFFFFF", "#E0E0E0"),
-            hover_color=("#5D6D7E", "#4A5568"),
-            command=self._toggle_theme,
-        )
-        self._theme_btn.pack(side="right")
 
         # ── Body: sidebar | content ─────────────────────────────────
         body = ctk.CTkFrame(outer, fg_color="transparent")
@@ -683,8 +675,6 @@ class DashboardWindow:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", pady=(0, 6))
 
-        self._theme_var = tk.BooleanVar(value=self._dark_mode)
-
         # ── Bottom: Activity ───────────────────────────────────────────
         card_a = ctk.CTkFrame(panel, corner_radius=14)
         card_a.pack(fill="both", expand=True)
@@ -774,17 +764,39 @@ class DashboardWindow:
             return
 
         syncing = self._get_sync()
-        self._anim_frame = (self._anim_frame + 4) % 20
         if syncing:
-            size = 15 + (1 if self._anim_frame < 10 else 0)
-            self._status_dot.configure(width=size, height=size,
-                                       corner_radius=size // 2,
-                                       fg_color=STATUS_COLOR)
             self._status_label.configure(text=T("ui.sync_active"))
+            if not getattr(self, '_breathing', False):
+                self._breathing = True
+                self._breath_frame = 0
+                self._animate_breath()
         else:
-            self._status_dot.configure(width=14, height=14, corner_radius=7,
-                                       fg_color=OFFLINE_COLOR)
+            self._breathing = False
+            self._status_dot.configure(fg_color=OFFLINE_COLOR)
             self._status_label.configure(text=T("ui.sync_paused"))
+
+    def _animate_breath(self):
+        """Smooth breathing-light animation for the sync status dot."""
+        if not getattr(self, '_breathing', False) or self._status_dot is None:
+            return
+        import math
+        self._breath_frame += 1
+        # Sine wave: smooth pulse, ~2.5 second period at 80ms interval
+        t = self._breath_frame * 0.08
+        brightness = (math.sin(t) + 1) / 2  # 0.0 → 1.0 → 0.0
+        # Interpolate size: 13 → 17
+        size = int(13 + brightness * 4)
+        # Interpolate color between dim and bright green
+        r = int(26 + brightness * 20)
+        g = int(140 + brightness * 64)
+        b = int(53 + brightness * 60)
+        color = f"#{r:02x}{g:02x}{b:02x}"
+        self._status_dot.configure(
+            width=size, height=size,
+            corner_radius=size // 2,
+            fg_color=color,
+        )
+        self._breath_timer = self._root.after(80, self._animate_breath)
 
         # Uptime
         if self._uptime_label and self._start_time:
@@ -1430,6 +1442,29 @@ class DashboardWindow:
             self._history_more_btn.pack(fill="x", pady=4, padx=4)
 
     @staticmethod
+    @staticmethod
+    def _format_relative_time(timestamp: float) -> str:
+        """Format a timestamp as a human-readable relative time string."""
+        if not timestamp or timestamp <= 0:
+            return ""
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        diff = (datetime.datetime.now() - dt).total_seconds()
+        if diff < 10:
+            return T("history.just_now")
+        elif diff < 60:
+            return T("history.seconds_ago", count=int(diff))
+        elif diff < 3600:
+            return T("history.minutes_ago", count=int(diff // 60))
+        elif diff < 86400:
+            return T("history.hours_ago", count=int(diff // 3600))
+        elif dt.date() == datetime.datetime.now().date():
+            return dt.strftime("%H:%M")
+        elif (datetime.datetime.now().date() - dt.date()).days == 1:
+            return T("history.yesterday", time=dt.strftime("%H:%M"))
+        else:
+            return dt.strftime("%m-%d %H:%M")
+
+    @staticmethod
     def _sanitize_preview(raw: str, max_len: int = 120) -> str:
         """Strip control and replacement characters for clean display."""
         if not raw:
@@ -1445,7 +1480,7 @@ class DashboardWindow:
                             peer_map: dict[str, str] | None = None):
         # ── Lazy-init cached objects (first call only) ───────────
         if self._card_font_bold is None:
-            self._card_font_bold = ctk.CTkFont(size=11, weight="bold")
+            self._card_font_bold = ctk.CTkFont(size=13, weight="bold")
             self._card_font = ctk.CTkFont(size=11)
             self._card_font_small = ctk.CTkFont(size=10)
             self._card_font_btn = ctk.CTkFont(size=11)
@@ -1455,48 +1490,24 @@ class DashboardWindow:
                 "IMAGE": T("history.type_image"),
                 "RTF": T("history.type_rich_text"),
             }
+            self._card_type_icons = {
+                "TEXT": "✉",
+                "HTML": "🌐",
+                "IMAGE": "🖼",
+                "IMAGE_EMF": "🖼",
+                "RTF": "📝",
+            }
             self._cached_device_id = self._get_config().device_id
 
         timestamp = entry.get("timestamp", 0)
         content_type = entry.get("content_type", "Unknown")
         preview = self._sanitize_preview(entry.get("text_preview", ""))
+        type_icon = self._card_type_icons.get(content_type, "📄")
 
-        if timestamp and timestamp > 0:
-            dt = datetime.datetime.fromtimestamp(timestamp)
-            now = datetime.datetime.now()
-            if dt.date() == now.date():
-                time_str = dt.strftime("%H:%M")
-            elif (now.date() - dt.date()).days == 1:
-                time_str = T("history.yesterday", time=dt.strftime('%H:%M'))
-            else:
-                time_str = dt.strftime("%m-%d %H:%M")
-        else:
-            time_str = ""
+        # Relative time
+        time_str = self._format_relative_time(timestamp)
 
-        card = ctk.CTkFrame(self._history_scroll, corner_radius=8,
-                           fg_color=("gray95", "gray17"))
-        card.pack(fill="x", pady=3, padx=2)
-
-        inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="x", padx=12, pady=8)
-
-        top = ctk.CTkFrame(inner, fg_color="transparent")
-        top.pack(fill="x")
-
-        ctk.CTkLabel(
-            top, text=self._card_type_labels.get(content_type, content_type),
-            font=self._card_font_bold,
-            text_color=self._TYPE_COLORS.get(content_type, ("#2A82C7", "#5DADE2")),
-        ).pack(side="left")
-
-        if time_str:
-            ctk.CTkLabel(
-                top, text=time_str,
-                font=self._card_font,
-                text_color=("gray50", "gray60"),
-            ).pack(side="right")
-
-        # Source device indicator
+        # Source device
         source_device = entry.get("source_device", "")
         if source_device and source_device != self._cached_device_id:
             peer_name = peer_map.get(source_device) if peer_map else None
@@ -1505,38 +1516,68 @@ class DashboardWindow:
             source_label = T("history.source.remote", name=peer_name)
         else:
             source_label = T("history.source.local")
+
+        type_label = self._card_type_labels.get(content_type, content_type)
+        meta = f"{type_label}  ·  {source_label}"
+
+        card = ctk.CTkFrame(self._history_scroll, corner_radius=10,
+                           fg_color=("gray95", "gray17"))
+        card.pack(fill="x", pady=3, padx=2)
+
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="x", padx=14, pady=10)
+
+        # ── Left: type icon ──────────────────────────────────────
+        icon_lbl = ctk.CTkLabel(
+            inner, text=type_icon, font=ctk.CTkFont(size=22),
+        )
+        icon_lbl.pack(side="left", padx=(0, 12))
+
+        # ── Right column ─────────────────────────────────────────
+        right = ctk.CTkFrame(inner, fg_color="transparent")
+        right.pack(side="left", fill="x", expand=True)
+
+        # Preview text
         ctk.CTkLabel(
-            inner, text=source_label,
+            right, text=preview or "[No preview]",
+            font=self._card_font_bold,
+            text_color=("gray20", "gray85"),
+            anchor="w", justify="left",
+        ).pack(fill="x")
+
+        # Type · source
+        ctk.CTkLabel(
+            right, text=meta,
             font=self._card_font_small,
-            text_color=("#3498DB", "#5DADE2"),
+            text_color=("gray55", "gray55"),
             anchor="w",
-        ).pack(fill="x", pady=(2, 0))
+        ).pack(fill="x", pady=(2, 4))
 
-        if preview:
-            ctk.CTkLabel(
-                inner, text=preview,
-                font=self._card_font,
-                text_color=("gray40", "gray60"),
-                anchor="w", justify="left",
-            ).pack(fill="x", pady=(4, 6))
+        # ── Bottom row: time + buttons ───────────────────────────
+        bottom = ctk.CTkFrame(right, fg_color="transparent")
+        bottom.pack(fill="x")
 
-        btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-        btn_row.pack(fill="x")
-        ctk.CTkButton(
-            btn_row, text=T("ui.copy"), width=60, height=26,
-            fg_color=("#27AE60", "#2ECC71"),
-            font=self._card_font_btn,
-            command=lambda i=index: self._do_copy_history(i),
+        ctk.CTkLabel(
+            bottom, text=time_str,
+            font=self._card_font_small,
+            text_color=("gray60", "gray55"),
         ).pack(side="left")
+
         ctk.CTkButton(
-            btn_row, text=T("ui.delete"), width=60, height=26,
+            bottom, text=T("ui.copy"), width=52, height=24,
+            fg_color=("#27AE60", "#2ECC71"),
+            font=ctk.CTkFont(size=10),
+            command=lambda i=index: self._do_copy_history(i),
+        ).pack(side="right", padx=(4, 0))
+        ctk.CTkButton(
+            bottom, text=T("ui.delete"), width=52, height=24,
             fg_color="transparent", border_width=1,
             text_color=("#E74C3C", "#C0392B"),
             border_color=("#E74C3C", "#C0392B"),
             hover_color=("#FADBD8", "#5B2C2C"),
-            font=self._card_font_btn,
+            font=ctk.CTkFont(size=10),
             command=lambda i=index: self._on_delete_history_item(i),
-        ).pack(side="left", padx=(6, 0))
+        ).pack(side="right")
 
     def _do_copy_history(self, index: int):
         if self._copy_from_history:
@@ -2021,16 +2062,3 @@ class DashboardWindow:
             if self._status_footer:
                 self._status_footer.configure(text=T("footer.name_updated"))
 
-    def _toggle_theme(self):
-        self._dark_mode = not self._dark_mode
-        new_mode = "dark" if self._dark_mode else "light"
-        ctk.set_appearance_mode(new_mode)
-        self._theme_btn.configure(
-            text=T("ui.theme_light") if self._dark_mode else T("ui.theme_dark")
-        )
-        if self._theme_var is not None:
-            self._theme_var.set(self._dark_mode)
-        # Persist preference across restarts
-        cfg = self._get_config()
-        cfg.appearance_mode = new_mode
-        self._save_config()

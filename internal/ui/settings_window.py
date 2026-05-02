@@ -171,6 +171,7 @@ class SettingsWindow:
 
         # Build panels
         self._panels["network"] = self._build_network_panel()
+        self._panels["appearance"] = self._build_appearance_panel()
         self._panels["filter"] = self._build_filter_panel()
         self._panels["security"] = self._build_security_panel()
         self._panels["advanced"] = self._build_advanced_panel()
@@ -211,12 +212,13 @@ class SettingsWindow:
         inner.pack(fill="both", expand=True, padx=8, pady=16)
 
         nav = [
-            ("network", T("settings_nav.network")),
-            ("filter",  T("settings_nav.filter")),
-            ("security", T("settings_nav.security")),
-            ("advanced", T("settings_nav.advanced")),
-            ("logs",    T("settings_nav.logs")),
-            ("about",   T("settings_nav.about")),
+            ("network",    T("settings_nav.network")),
+            ("appearance", T("settings_nav.appearance")),
+            ("filter",     T("settings_nav.filter")),
+            ("security",   T("settings_nav.security")),
+            ("advanced",   T("settings_nav.advanced")),
+            ("logs",       T("settings_nav.logs")),
+            ("about",      T("settings_nav.about")),
         ]
 
         for key, label in nav:
@@ -349,6 +351,81 @@ class SettingsWindow:
             T("dialog.saved"),
             T("settings_window.network_saved"),
         )
+
+    # ═══════════════════════════════════════════════════════════════
+    # Panel: Appearance
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_appearance_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+
+        ctk.CTkLabel(
+            panel, text=T("settings_window.appearance_title"),
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        ctk.CTkLabel(
+            panel, text=T("settings_window.appearance_desc"),
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray60"),
+            justify="left", wraplength=500,
+        ).pack(anchor="w", pady=(0, 20))
+
+        # Theme selector — segmented button for System / Light / Dark
+        cfg = self._get_config()
+        current = cfg.appearance_mode  # "system", "light", "dark"
+
+        self._appearance_var = tk.StringVar(value=current)
+
+        theme_card = ctk.CTkFrame(panel, corner_radius=12,
+                                  fg_color=("gray95", "gray17"))
+        theme_card.pack(fill="x")
+
+        t_inner = ctk.CTkFrame(theme_card, fg_color="transparent")
+        t_inner.pack(fill="x", padx=20, pady=20)
+
+        ctk.CTkLabel(
+            t_inner, text=T("settings_window.theme_label"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(0, 12))
+
+        modes = [
+            ("system", T("settings_window.theme_system")),
+            ("light",  T("settings_window.theme_light")),
+            ("dark",   T("settings_window.theme_dark")),
+        ]
+
+        for mode, label in modes:
+            btn = ctk.CTkRadioButton(
+                t_inner, text=label, variable=self._appearance_var, value=mode,
+                font=ctk.CTkFont(size=13),
+                command=lambda m=mode: self._on_appearance_change(m),
+            )
+            btn.pack(anchor="w", pady=3)
+
+        ctk.CTkLabel(
+            t_inner, text=T("settings_window.theme_hint"),
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray55"),
+        ).pack(anchor="w", pady=(10, 0))
+
+        return panel
+
+    def _on_appearance_change(self, mode: str):
+        ctk.set_appearance_mode(mode)
+        self._dark_mode = (mode == "dark")
+        # Update header theme button
+        if hasattr(self, '_theme_btn') and self._theme_btn:
+            self._theme_btn.configure(
+                text=T("ui.theme_light") if self._dark_mode else T("ui.theme_dark")
+            )
+        cfg = self._get_config()
+        cfg.appearance_mode = mode
+        self._save_config()
+        try:
+            self._status_label.configure(text=T("footer.settings_saved"))
+        except Exception:
+            pass
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Content Filter

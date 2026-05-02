@@ -152,9 +152,8 @@
 
     /* ── Hero ────────────────────────────────────────────── */
     .hero {
-      min-height: 100vh; display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      text-align: center; padding: 7rem 2rem 2rem;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 7rem 2rem 2rem;
       background:
         radial-gradient(ellipse 80% 60% at 50% -10%, rgba(52,152,219,0.18), transparent),
         radial-gradient(ellipse 60% 50% at 85% 85%, rgba(46,204,113,0.1), transparent),
@@ -166,35 +165,16 @@
       content: ''; position: absolute; inset: 0;
       background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     }
-    .hero-content { position: relative; z-index: 1; max-width: 800px; }
+    .hero-inner {
+      display: flex; flex-direction: row; align-items: center;
+      gap: 5rem; max-width: 1200px; width: 100%;
+      position: relative; z-index: 1;
+    }
+    .hero-content { flex: 1 1 55%; max-width: 580px; }
 
-    /* Icon with glow ring */
-    .hero-icon-wrapper {
-      position: relative; display: inline-block; margin-bottom: 2.5rem;
-    }
-    .hero-glow-ring {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 140px; height: 140px;
-      border-radius: 50%;
-      border: 2px solid rgba(52,152,219,0.2);
-      animation: ringPulse 3s ease-in-out infinite, ringSpin 20s linear infinite;
-    }
-    .hero-glow-ring::after {
-      content: ''; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #3498DB; box-shadow: 0 0 20px #3498DB, 0 0 40px #3498DB;
-    }
-    @keyframes ringPulse {
-      0%, 100% { width: 140px; height: 140px; opacity: 0.6; }
-      50% { width: 160px; height: 160px; opacity: 1; }
-    }
-    @keyframes ringSpin {
-      from { transform: translate(-50%, -50%) rotate(0deg); }
-      to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    .hero-icon { width: 88px; height: 88px; position: relative; z-index: 1; }
+    .hero-icon-wrap { margin-bottom: 2rem; }
+    .hero-icon { width: 52px; height: 52px; }
 
-    /* Badge subtitle */
     .hero-badge {
       display: inline-block;
       padding: 0.35rem 1rem;
@@ -207,37 +187,22 @@
       margin-bottom: 1.5rem;
     }
 
-    /* Title */
     .hero h1 {
       font-size: 4.5rem; font-weight: 800; letter-spacing: -0.03em;
-      line-height: 1; margin-bottom: 2.25rem;
-      background: linear-gradient(135deg, #fff 0%, #e4e4e8 40%, #3498DB 70%, #2ECC71 100%);
-      background-size: 300% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: heroShimmer 6s ease-in-out infinite;
+      line-height: 1.15; margin-bottom: 0.25rem;
+      color: #fff;
     }
-    @keyframes heroShimmer {
-      0%, 100% { background-position: 0% center; }
-      50% { background-position: 100% center; }
-    }
-
-    /* Decorative divider */
-    .hero-divider {
-      width: 60px; height: 3px; border-radius: 2px;
+    .hero-underline {
+      width: 64px; height: 4px; border-radius: 2px;
       background: linear-gradient(90deg, #3498DB, #2ECC71);
-      margin: 0 auto 2rem; opacity: 0.6;
+      margin-bottom: 1.75rem;
     }
-
-    /* Description */
     .hero p {
-      font-size: 1.2rem; color: #71717a; max-width: 600px;
-      margin: 0 auto 2.5rem; line-height: 1.7;
+      font-size: 1.15rem; color: #71717a; max-width: 500px;
+      margin-bottom: 2.25rem; line-height: 1.7;
     }
 
-    /* Buttons */
-    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .hero-buttons { display: flex; gap: 1rem; flex-wrap: wrap; }
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 0.85rem 2rem; border-radius: 12px; font-size: 1rem;
@@ -250,22 +215,99 @@
     .btn-secondary { background: rgba(255,255,255,0.05); color: #e4e4e8; border: 1px solid rgba(255,255,255,0.12); }
     .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
 
-    /* Scroll indicator */
-    .scroll-indicator {
-      position: absolute; bottom: 2.5rem; left: 50%; transform: translateX(-50%);
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
-      opacity: 0.5;
+    /* ── Hero Dashboard Card ──────────────────────────── */
+    .hero-visual {
+      flex: 1 1 45%;
+      display: flex; align-items: center; justify-content: center;
     }
-    .scroll-indicator span {
-      display: block; width: 20px; height: 20px;
-      border-right: 2px solid #71717a; border-bottom: 2px solid #71717a;
-      transform: rotate(45deg);
-      animation: scrollBounce 2s ease-in-out infinite;
+    .dashboard-card {
+      width: 100%; max-width: 400px;
+      background: rgba(20,20,30,0.7);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 1.75rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 40px rgba(52,152,219,0.05);
+      animation: cardFloat 6s ease-in-out infinite;
     }
-    .scroll-indicator span:nth-child(2) { animation-delay: 0.15s; margin-top: -4px; }
-    @keyframes scrollBounce {
-      0%, 100% { opacity: 0.3; transform: rotate(45deg) translate(0, 0); }
-      50% { opacity: 1; transform: rotate(45deg) translate(4px, 4px); }
+    @keyframes cardFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .dash-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+    .dash-status {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.85rem; font-weight: 600; color: #2ECC71;
+    }
+    .dash-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #2ECC71;
+      animation: dotPulse 2s ease-in-out infinite;
+    }
+    @keyframes dotPulse {
+      0%, 100% { box-shadow: 0 0 6px #2ECC71; }
+      50% { box-shadow: 0 0 16px #2ECC71, 0 0 28px rgba(46,204,113,0.5); }
+    }
+    .dash-enc-badge {
+      padding: 3px 10px; border-radius: 6px;
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em;
+      background: rgba(52,152,219,0.12); color: #5DADE2;
+    }
+    .dash-devices {
+      display: flex; gap: 0.75rem; margin-bottom: 1.25rem;
+    }
+    .dash-device {
+      flex: 1; text-align: center;
+      padding: 0.75rem 0.5rem;
+      background: rgba(255,255,255,0.02);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .dash-device .dev-icon {
+      font-size: 1.5rem; margin-bottom: 0.35rem;
+    }
+    .dash-device .dev-name {
+      font-size: 0.8rem; font-weight: 600; color: #e4e4e8;
+    }
+    .dash-device .dev-label {
+      font-size: 0.7rem; color: #52525b; margin-top: 2px;
+    }
+    .dash-divider {
+      border: none; border-top: 1px solid rgba(255,255,255,0.05);
+      margin: 0 0 1rem;
+    }
+    .dash-feed-label {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #52525b; margin-bottom: 0.65rem;
+    }
+    .dash-feed-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 0.6rem 0.75rem;
+      background: rgba(255,255,255,0.015);
+      border-radius: 10px;
+      margin-bottom: 0.5rem;
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    .dash-feed-icon {
+      width: 30px; height: 30px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; flex-shrink: 0;
+    }
+    .dash-feed-icon.text { background: rgba(52,152,219,0.12); }
+    .dash-feed-icon.image { background: rgba(46,204,113,0.12); }
+    .dash-feed-info { flex: 1; min-width: 0; }
+    .dash-feed-info .feed-title {
+      font-size: 0.78rem; color: #d4d4d8; font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .dash-feed-info .feed-meta {
+      font-size: 0.68rem; color: #52525b; margin-top: 2px;
+    }
+    .dash-feed-time {
+      font-size: 0.68rem; color: #52525b; flex-shrink: 0;
     }
 
     /* ── Sections ────────────────────────────────────────── */
@@ -517,7 +559,14 @@
     @media (max-width: 1024px) {
       .feature-grid { grid-template-columns: repeat(2, 1fr); }
       .steps { grid-template-columns: repeat(2, 1fr); }
+      .hero-inner { flex-direction: column; gap: 3rem; text-align: center; }
+      .hero-content { max-width: 100%; }
+      .hero-underline { margin: 0 auto 1.75rem; }
       .hero h1 { font-size: 2.8rem; }
+      .hero p { margin-left: auto; margin-right: auto; }
+      .hero-buttons { justify-content: center; }
+      .hero-visual { width: 100%; }
+      .dashboard-card { max-width: 100%; }
       
       section { padding: 4.5rem 1.5rem; }
       .stats-grid { gap: 2.5rem; }
@@ -529,12 +578,13 @@
       .feature-grid { grid-template-columns: 1fr; }
       .steps { grid-template-columns: 1fr; }
       .hero { min-height: 100svh; padding: 6rem 1.25rem 3rem; }
+      .hero-inner { gap: 2.5rem; }
       .hero h1 { font-size: 2rem; }
-      
       .hero p { font-size: 0.95rem; }
-      .hero-icon { width: 64px; height: 64px; }
+      .hero-icon { width: 44px; height: 44px; }
       .hero-buttons { flex-direction: column; align-items: center; }
       .btn { width: 100%; justify-content: center; max-width: 300px; }
+      .dashboard-card { padding: 1.25rem; }
       section { padding: 3rem 1rem; }
       .section-header { margin-bottom: 2.5rem; }
       .section-header h2 { font-size: 1.6rem; }
@@ -551,8 +601,7 @@
 
     /* Small phone */
     @media (max-width: 400px) {
-      .hero h1 { font-size: 1.7rem; }
-      .hero h1 span { font-size: 1rem; }
+      .hero h1 { font-size: 1.8rem; }
       .mobile-menu { padding: 1rem 1.25rem; }
       .mobile-menu a { font-size: 0.95rem; }
       .cta-box { padding: 2rem 1rem; }
@@ -602,13 +651,10 @@
       75%  { transform: translate(-90px, 40px) scale(1.05); }
     }
 
-    /* Hero icon float */
-    .hero-icon {
-      animation: floatIcon 6s ease-in-out infinite;
-    }
+    /* Float animation for stat icons */
     @keyframes floatIcon {
       0%, 100% { transform: translateY(0); }
-      50%  { transform: translateY(-12px); }
+      50%  { transform: translateY(-10px); }
     }
 
     /* Animated gradient text */
@@ -762,22 +808,58 @@
 
   <!-- Hero -->
   <section class="hero">
-    <div class="hero-content">
-      <div class="hero-icon-wrapper">
-        <div class="hero-glow-ring"></div>
-        <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="" class="hero-icon">
+    <div class="hero-inner">
+      <div class="hero-content">
+        <div class="hero-icon-wrap">
+          <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="" class="hero-icon">
+        </div>
+        <div class="hero-badge">Clipboard Sync, Done Right</div>
+        <h1>CopyBoard</h1>
+        <div class="hero-underline"></div>
+        <p>Copy text, images, rich HTML, or files on one device — paste on another. Instantly, securely, over your local network. No cloud. No accounts. Full fidelity.</p>
+        <div class="hero-buttons">
+          <a href="https://github.com/kai3316/copyboard/releases/latest" class="btn btn-primary">&#8595; Download Latest</a>
+          <a href="https://github.com/kai3316/copyboard" class="btn btn-secondary">&#8594; View Source</a>
+        </div>
       </div>
-      <div class="hero-badge">Clipboard Sync, Done Right</div>
-      <h1>CopyBoard</h1>
-      <div class="hero-divider"></div>
-      <p>Copy text, images, rich HTML, or files on one device — paste on another. Instantly, securely, over your local network. No cloud. No accounts. Full fidelity.</p>
-      <div class="hero-buttons">
-        <a href="https://github.com/kai3316/copyboard/releases/latest" class="btn btn-primary">&#8595; Download Latest</a>
-        <a href="https://github.com/kai3316/copyboard" class="btn btn-secondary">&#8594; View Source</a>
+      <div class="hero-visual">
+        <div class="dashboard-card">
+          <div class="dash-header">
+            <div class="dash-status"><span class="dash-dot"></span> Live Sync Active</div>
+            <div class="dash-enc-badge">AES-256-GCM</div>
+          </div>
+          <div class="dash-devices">
+            <div class="dash-device">
+              <div class="dev-icon">&#128187;</div>
+              <div class="dev-name">This Device</div>
+              <div class="dev-label">Windows &middot; macOS &middot; Linux</div>
+            </div>
+            <div class="dash-device">
+              <div class="dev-icon">&#128187;</div>
+              <div class="dev-name">Peer Device</div>
+              <div class="dev-label">Connected &amp; Encrypted</div>
+            </div>
+          </div>
+          <hr class="dash-divider">
+          <div class="dash-feed-label">Recent Activity</div>
+          <div class="dash-feed-item">
+            <div class="dash-feed-icon text">&#9993;</div>
+            <div class="dash-feed-info">
+              <div class="feed-title">Meeting notes: Q3 roadmap &amp; milestones...</div>
+              <div class="feed-meta">Text &middot; from This Device</div>
+            </div>
+            <div class="dash-feed-time">just now</div>
+          </div>
+          <div class="dash-feed-item">
+            <div class="dash-feed-icon image">&#128247;</div>
+            <div class="dash-feed-info">
+              <div class="feed-title">design_mockup_v3.png (2.1 MB)</div>
+              <div class="feed-meta">Image &middot; from Peer Device</div>
+            </div>
+            <div class="dash-feed-time">2s ago</div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="scroll-indicator">
-      <span></span><span></span>
     </div>
   </section>
 
