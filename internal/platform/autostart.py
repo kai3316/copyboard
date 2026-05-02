@@ -1,7 +1,7 @@
-"""Auto-start on boot functionality for CopyBoard.
+"""Auto-start on boot functionality for ClipSync.
 
 Provides cross-platform support for enabling, disabling, and checking
-the "launch on login" / "start on boot" behaviour of CopyBoard.
+the "launch on login" / "start on boot" behaviour of ClipSync.
 
 Platform support:
     - Windows  : Registry Run key (HKCU)
@@ -42,7 +42,7 @@ def _get_executable_info():
 
 def _get_display_name():
     """Human-readable name used inside registry / plist / .desktop entries."""
-    return "CopyBoard"
+    return "ClipSync"
 
 
 # ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ def _get_display_name():
 # ---------------------------------------------------------------------------
 
 def _enable_windows():
-    """Create ``HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\CopyBoard``."""
+    """Create ``HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\ClipSync``."""
     import winreg
 
     exe, args = _get_executable_info()
@@ -71,7 +71,7 @@ def _enable_windows():
 
 
 def _disable_windows():
-    """Remove the CopyBoard value from the Run registry key."""
+    """Remove the ClipSync value from the Run registry key."""
     import winreg
 
     try:
@@ -122,12 +122,12 @@ def _is_enabled_windows():
 def _plist_path():
     """Absolute path to the LaunchAgent plist."""
     return os.path.expanduser(
-        "~/Library/LaunchAgents/com.copyboard.plist"
+        "~/Library/LaunchAgents/com.clipsync.plist"
     )
 
 
 def _enable_macos():
-    """Create a LaunchAgent plist that starts CopyBoard on login."""
+    """Create a LaunchAgent plist that starts ClipSync on login."""
     exe, args = _get_executable_info()
     # ProgramArguments must be an array of strings
     program_args = [exe] + args
@@ -140,7 +140,7 @@ def _enable_macos():
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.copyboard</string>
+    <string>com.clipsync</string>
     <key>ProgramArguments</key>
     <array>
 {args_xml}
@@ -189,7 +189,7 @@ def _xml_escape(text: str) -> str:
 def _desktop_path():
     """Absolute path to the XDG autostart .desktop file."""
     return os.path.expanduser(
-        "~/.config/autostart/copyboard.desktop"
+        "~/.config/autostart/clipsync.desktop"
     )
 
 
@@ -232,20 +232,20 @@ def _is_enabled_linux():
 # ---------------------------------------------------------------------------
 
 def enable_autostart():
-    """Enable CopyBoard to start automatically on user login.
+    """Enable ClipSync to start automatically on user login.
 
     The implementation is chosen based on :func:`platform.system`:
 
     * **Windows** – Creates a string value in the
       ``HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`` registry
-      key named ``CopyBoard``.
+      key named ``ClipSync``.
 
     * **macOS** – Creates a LaunchAgent property list at
-      ``~/Library/LaunchAgents/com.copyboard.plist`` with ``RunAtLoad``
+      ``~/Library/LaunchAgents/com.clipsync.plist`` with ``RunAtLoad``
       enabled.
 
     * **Linux** – Creates an XDG autostart ``.desktop`` file at
-      ``~/.config/autostart/copyboard.desktop``.
+      ``~/.config/autostart/clipsync.desktop``.
 
     Raises :exc:`OSError` if the current platform is not supported.
     """
@@ -261,7 +261,7 @@ def enable_autostart():
 
 
 def disable_autostart():
-    """Remove the auto-start entry so CopyBoard no longer launches on login.
+    """Remove the auto-start entry so ClipSync no longer launches on login.
 
     This is a safe no-op when no entry exists (e.g. already removed, or
     auto-start was never enabled).

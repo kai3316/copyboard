@@ -1,4 +1,4 @@
-# CopyBoard — 跨平台剪贴板实时共享工具
+# ClipSync — 跨平台剪贴板实时共享工具
 
 ## 实际实施计划（Python 版）
 
@@ -28,7 +28,7 @@
 ## 3. 项目结构（实际）
 
 ```
-copyboard/
+clipsync/
 ├── cmd/
 │   └── main.py                       # 入口，组装所有模块
 ├── internal/
@@ -65,7 +65,7 @@ copyboard/
 ## 4. 架构设计
 
 ```
-┌─────────────── CopyBoard 节点 ───────────────┐
+┌─────────────── ClipSync 节点 ───────────────┐
 │                                               │
 │  ┌──────────────┐    ┌────────────────────┐   │
 │  │ 系统托盘 UI   │◄──►│   Sync Manager     │   │
@@ -107,7 +107,7 @@ copyboard/
 ### 5.2 网络发现
 
 - mDNS/DNS-SD 协议，`zeroconf` 库（纯 Python）
-- 服务类型：`_copyboard._tcp.local.`
+- 服务类型：`_clipsync._tcp.local.`
 - 广播元数据：设备名、设备ID、版本号、端口
 - 同一局域网自动发现，无需任何配置
 

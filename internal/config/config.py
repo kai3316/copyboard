@@ -1,8 +1,8 @@
 """Configuration management.
 
 Config is stored as JSON in the user's config directory:
-  Windows: %APPDATA%/CopyBoard/config.json
-  macOS:   ~/Library/Application Support/CopyBoard/config.json
+  Windows: %APPDATA%/ClipSync/config.json
+  macOS:   ~/Library/Application Support/ClipSync/config.json
 """
 
 import json
@@ -35,7 +35,7 @@ class Config:
     device_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     device_name: str = field(default_factory=platform.node)
     port: int = 19990
-    service_type: str = "_copyboard._tcp.local."
+    service_type: str = "_clipsync._tcp.local."
     peers: dict[str, PeerInfo] = field(default_factory=dict)
     sync_enabled: bool = True
     auto_start: bool = False
@@ -68,11 +68,11 @@ def _config_dir() -> Path:
     system = platform.system()
     if system == "Windows":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
-        return Path(base) / "CopyBoard"
+        return Path(base) / "ClipSync"
     elif system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "CopyBoard"
+        return Path.home() / "Library" / "Application Support" / "ClipSync"
     else:
-        return Path.home() / ".config" / "copyboard"
+        return Path.home() / ".config" / "clipsync"
 
 
 def _config_path() -> Path:

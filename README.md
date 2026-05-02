@@ -4,10 +4,10 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="CopyBoard" width="96" height="96">
+  <img src="https://raw.githubusercontent.com/kai3316/clipsync/master/assets/icon.svg" alt="ClipSync" width="96" height="96">
 </p>
 
-<h1 align="center">CopyBoard</h1>
+<h1 align="center">ClipSync</h1>
 
 <p align="center">
   <strong>Copy on one device. Paste on another. Instantly.</strong>
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kai3316/copyboard/releases"><img src="https://img.shields.io/github/v/release/kai3316/copyboard?color=3498DB" alt="Release"></a>
+  <a href="https://github.com/kai3316/clipsync/releases"><img src="https://img.shields.io/github/v/release/kai3316/clipsync?color=3498DB" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <img src="https://img.shields.io/badge/python-3.12+-blue" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms">
@@ -26,20 +26,20 @@
 
 ## Quick Start
 
-1. [Download](https://github.com/kai3316/copyboard/releases/latest) the app for your platform
+1. [Download](https://github.com/kai3316/clipsync/releases/latest) the app for your platform
 2. Run it — no install needed
 3. Run it on another device on the **same network**
 4. Confirm the 8-digit pairing code on both devices
 5. Copy on one, paste on the other!
 
-> **macOS users:** If Gatekeeper blocks the app, run `xattr -cr copyboard.app` then right-click → Open.
+> **macOS users:** If Gatekeeper blocks the app, run `xattr -cr clipsync.app` then right-click → Open.
 
 ---
 
 ## Contents
 
 - [Overview](#overview)
-- [Why CopyBoard?](#why-copyboard)
+- [Why ClipSync?](#why-clipsync)
 - [Features](#features)
 - [Download](#download)
 - [Install from Source](#install-from-source)
@@ -55,9 +55,9 @@
 
 ## Overview
 
-CopyBoard syncs your clipboard across devices on the same local network. Copy text, images, HTML, or rich text on your Windows PC — paste it seconds later on your MacBook. No cloud, no accounts, no setup.
+ClipSync syncs your clipboard across devices on the same local network. Copy text, images, HTML, or rich text on your Windows PC — paste it seconds later on your MacBook. No cloud, no accounts, no setup.
 
-### Why CopyBoard?
+### Why ClipSync?
 
 - **No cloud dependency** — all data stays on your LAN; nothing ever leaves your network
 - **Instant** — sub-second sync after paste detection, with smart debouncing to prevent echo
@@ -69,9 +69,9 @@ CopyBoard syncs your clipboard across devices on the same local network. Copy te
 
 ## Comparison
 
-Most clipboard sync tools fall into two camps: **cloud-based services** (convenient but your data leaves your network) and **OS built-in solutions** (limited to one ecosystem, plain text only). CopyBoard takes a third path.
+Most clipboard sync tools fall into two camps: **cloud-based services** (convenient but your data leaves your network) and **OS built-in solutions** (limited to one ecosystem, plain text only). ClipSync takes a third path.
 
-| Capability | CopyBoard | Cloud Clipboard Tools | OS Built-in (Universal Clipboard, etc.) |
+| Capability | ClipSync | Cloud Clipboard Tools | OS Built-in (Universal Clipboard, etc.) |
 |---|---|---|---|
 | **Plain Text** | ✅ UTF-8, full Unicode | ✅ | ✅ |
 | **Rich Text / HTML** | ✅ Links, tables, formatting preserved | ❌ Plain text only | ❌ Plain text only |
@@ -85,7 +85,7 @@ Most clipboard sync tools fall into two camps: **cloud-based services** (conveni
 | **Open Source** | ✅ MIT License | ❌ Proprietary | ❌ |
 | **Price** | ✅ Free forever | ❌ Freemium / Paid | ✅ Free |
 
-**Bottom line:** If you only copy plain text within one ecosystem, built-in tools work fine. If you need rich text, images, files, cross-platform sync, and privacy — CopyBoard is purpose-built for that.
+**Bottom line:** If you only copy plain text within one ecosystem, built-in tools work fine. If you need rich text, images, files, cross-platform sync, and privacy — ClipSync is purpose-built for that.
 
 ---
 
@@ -129,23 +129,23 @@ Most clipboard sync tools fall into two camps: **cloud-based services** (conveni
 
 ## Download
 
-Get the latest release from the [Releases page](https://github.com/kai3316/copyboard/releases):
+Get the latest release from the [Releases page](https://github.com/kai3316/clipsync/releases):
 
 | Platform | File | Notes |
 |---|---|---|
-| Windows 10/11 | `copyboard.exe` | Portable — no install needed |
-| macOS 12+ | `copyboard.app` (zip) | Universal binary (Apple Silicon + Intel) |
-| Linux (X11/Wayland) | `copyboard` (tar.gz) | Requires `xclip` or `wl-clipboard` |
+| Windows 10/11 | `clipsync.exe` | Portable — no install needed |
+| macOS 12+ | `clipsync.app` (zip) | Universal binary (Apple Silicon + Intel) |
+| Linux (X11/Wayland) | `clipsync` (tar.gz) | Requires `xclip` or `wl-clipboard` |
 
 No Python installation required. Download, run, done.
 
 > **macOS users:** The app is not notarized. If Gatekeeper blocks it:
 > ```bash
-> xattr -cr copyboard.app
+> xattr -cr clipsync.app
 > ```
 > Then right-click the app and select **Open**. If issues persist, run the binary directly for diagnostics:
 > ```bash
-> ./copyboard.app/Contents/MacOS/copyboard
+> ./clipsync.app/Contents/MacOS/clipsync
 > ```
 
 ---
@@ -156,8 +156,8 @@ Requires **Python 3.12+**.
 
 ```bash
 # Clone the repository
-git clone https://github.com/kai3316/copyboard.git
-cd copyboard
+git clone https://github.com/kai3316/clipsync.git
+cd clipsync
 
 # Create and activate a virtual environment
 python -m venv .venv
@@ -190,13 +190,13 @@ Build a standalone executable with PyInstaller:
 
 ```bash
 pip install pyinstaller
-pyinstaller copyboard.spec
+pyinstaller clipsync.spec
 ```
 
 Output in `dist/`:
-- Windows: `dist/copyboard.exe`
-- macOS: `dist/copyboard.app`
-- Linux: `dist/copyboard`
+- Windows: `dist/clipsync.exe`
+- macOS: `dist/clipsync.app`
+- Linux: `dist/clipsync`
 
 The `.spec` file auto-collects all internal modules and required dependencies (`zeroconf`, `cryptography`, `PIL`, `pystray`, `customtkinter`).
 
@@ -207,7 +207,7 @@ The `.spec` file auto-collects all internal modules and required dependencies (`
 ```
 Device A                              Device B
    │                                     │
-   ├─ 1. mDNS broadcast ────────────────►│  "I'm here: copyboard._tcp.local"
+   ├─ 1. mDNS broadcast ────────────────►│  "I'm here: clipsync._tcp.local"
    │                                     │
    ├─ 2. TCP connection ◄───────────────►│  TLS 1.3 handshake
    │                                     │
@@ -222,7 +222,7 @@ Device A                              Device B
    ├─ 6. Trusted on reconnect ──────────►│  Pinned cert verified, auto-connect
 ```
 
-1. **Discovery** — mDNS/Zeroconf broadcasts device presence on the LAN. The service type `_copyboard._tcp.local` enables automatic peer detection without IP configuration.
+1. **Discovery** — mDNS/Zeroconf broadcasts device presence on the LAN. The service type `_clipsync._tcp.local` enables automatic peer detection without IP configuration.
 
 2. **Connection** — TCP connection established, TLS 1.3 handshake with self-signed Ed25519 certificates. Certificate fingerprints are exchanged at the application layer for identity verification.
 
@@ -258,9 +258,9 @@ All application data is stored locally:
 
 | OS | Config & History | Logs |
 |---|---|---|
-| Windows | `%APPDATA%\CopyBoard\` | `%APPDATA%\CopyBoard\copyboard.log` |
-| macOS | `~/Library/Application Support/CopyBoard/` | `~/Library/Logs/CopyBoard/copyboard.log` |
-| Linux | `~/.config/copyboard/` | `~/.local/share/copyboard/copyboard.log` |
+| Windows | `%APPDATA%\ClipSync\` | `%APPDATA%\ClipSync\clipsync.log` |
+| macOS | `~/Library/Application Support/ClipSync/` | `~/Library/Logs/ClipSync/clipsync.log` |
+| Linux | `~/.config/clipsync/` | `~/.local/share/clipsync/clipsync.log` |
 
 - `config.json` — device identity, peer list, settings (private key encrypted)
 - `clipboard_history.json` — last N clipboard entries (all content encrypted at rest)
@@ -272,7 +272,7 @@ All application data is stored locally:
 ### Devices not discovering each other
 1. Verify both devices are on the **same subnet** (same WiFi network)
 2. Corporate networks may have **client isolation** blocking mDNS — try a personal hotspot
-3. Check that your firewall allows **UDP port 5353** (mDNS) and **TCP port 19990** (CopyBoard)
+3. Check that your firewall allows **UDP port 5353** (mDNS) and **TCP port 19990** (ClipSync)
 4. Try the **Relay URL** setting if crossing subnets
 
 ### Sync not working
@@ -287,7 +287,7 @@ All application data is stored locally:
   - Orange dot + "Paired" = Trusted but offline
   - Blue dot + "Discovered" = Found but not yet paired
 - If a device shows as "Discovered" but won't connect, try **Forget** and re-discover
-- Restarting CopyBoard on both devices often resolves transient mDNS issues
+- Restarting ClipSync on both devices often resolves transient mDNS issues
 
 ### Getting logs
 - Right-click the system tray icon → **Export Logs**
@@ -299,7 +299,7 @@ All application data is stored locally:
 ## Project Structure
 
 ```
-copyboard/
+clipsync/
 ├── src/
 │   └── main.py                      # Application entry point
 ├── internal/
@@ -335,7 +335,7 @@ copyboard/
 ├── tests/                           # 204 tests covering all modules
 ├── assets/
 │   └── icon.svg                     # Application icon
-├── copyboard.spec                   # PyInstaller build spec
+├── clipsync.spec                   # PyInstaller build spec
 ├── requirements.txt                 # Python dependencies
 ├── README.md
 ├── README_zh.md

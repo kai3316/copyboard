@@ -1,4 +1,4 @@
-"""CopyBoard — entry point redirect.
+"""ClipSync — entry point redirect.
 
 Run with: python main.py  (or)  python src/main.py
 """

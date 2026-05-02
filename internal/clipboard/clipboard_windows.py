@@ -404,7 +404,7 @@ class WindowsClipboardMonitor(ClipboardMonitor):
         hinstance = kernel32.GetModuleHandleW(None)
 
         # Register window class
-        class_name = "CopyBoardClipWatcher"
+        class_name = "ClipSyncClipWatcher"
         wndproc = WNDPROC(self._window_proc)
 
         wndclass = _WNDCLASSW()

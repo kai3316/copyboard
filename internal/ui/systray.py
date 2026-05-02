@@ -1,4 +1,4 @@
-"""System tray UI for CopyBoard.
+"""System tray UI for ClipSync.
 
 Cross-platform system tray icon with menu:
 - Device name and status
@@ -114,7 +114,7 @@ class SystrayApp:
         """Run the system tray. Blocks until quit."""
         menu = pystray.Menu(
             pystray.MenuItem(
-                "CopyBoard",
+                "ClipSync",
                 None,
                 enabled=False,
             ),
@@ -147,9 +147,9 @@ class SystrayApp:
 
         logger.info("Starting system tray")
         self._tray = pystray.Icon(
-            "copyboard",
+            "clipsync",
             self._icon_image,
-            "CopyBoard",
+            "ClipSync",
             menu,
         )
 

@@ -4,10 +4,10 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kai3316/copyboard/master/assets/icon.svg" alt="CopyBoard" width="96" height="96">
+  <img src="https://raw.githubusercontent.com/kai3316/clipsync/master/assets/icon.svg" alt="ClipSync" width="96" height="96">
 </p>
 
-<h1 align="center">CopyBoard</h1>
+<h1 align="center">ClipSync</h1>
 
 <p align="center">
   <strong>一台设备复制，另一台即刻粘贴。</strong>
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kai3316/copyboard/releases"><img src="https://img.shields.io/github/v/release/kai3316/copyboard?color=3498DB" alt="Release"></a>
+  <a href="https://github.com/kai3316/clipsync/releases"><img src="https://img.shields.io/github/v/release/kai3316/clipsync?color=3498DB" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <img src="https://img.shields.io/badge/python-3.12+-blue" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms">
@@ -26,20 +26,20 @@
 
 ## 快速开始
 
-1. [下载](https://github.com/kai3316/copyboard/releases/latest) 对应平台的应用
+1. [下载](https://github.com/kai3316/clipsync/releases/latest) 对应平台的应用
 2. 直接运行 — 无需安装
-3. 在**同一网络**的另一台设备上也运行 CopyBoard
+3. 在**同一网络**的另一台设备上也运行 ClipSync
 4. 两端确认相同的 8 位配对码
 5. 一台复制，另一台粘贴！
 
-> **macOS 用户：** 如遇 Gatekeeper 拦截，运行 `xattr -cr copyboard.app`，然后右键 → 打开。
+> **macOS 用户：** 如遇 Gatekeeper 拦截，运行 `xattr -cr clipsync.app`，然后右键 → 打开。
 
 ---
 
 ## 目录
 
 - [项目简介](#项目简介)
-- [为什么选择 CopyBoard？](#为什么选择-copyboard)
+- [为什么选择 ClipSync？](#为什么选择-clipsync)
 - [功能特性](#功能特性)
 - [下载](#下载)
 - [从源码运行](#从源码运行)
@@ -55,9 +55,9 @@
 
 ## 项目简介
 
-CopyBoard 在局域网内自动同步多台设备的剪贴板内容。你在 Windows 电脑上复制一段文字、一张图片或一个表格，几秒后在 MacBook 上直接粘贴。不需要发邮件、不需要通过聊天工具中转、不需要上传云端。
+ClipSync 在局域网内自动同步多台设备的剪贴板内容。你在 Windows 电脑上复制一段文字、一张图片或一个表格，几秒后在 MacBook 上直接粘贴。不需要发邮件、不需要通过聊天工具中转、不需要上传云端。
 
-### 为什么选择 CopyBoard？
+### 为什么选择 ClipSync？
 
 - **数据不出局域网** — 所有数据仅在本地网络中传输，绝不经过任何云端服务器
 - **即时同步** — 亚秒级响应，智能去重，杜绝重复粘贴与同步回环
@@ -69,9 +69,9 @@ CopyBoard 在局域网内自动同步多台设备的剪贴板内容。你在 Win
 
 ## 方案对比
 
-市面上的剪贴板工具大致分为两类：**云端服务**（方便，但数据经过第三方服务器）和**系统内置方案**（仅限单一生态，只支持纯文本）。CopyBoard 走了第三条路。
+市面上的剪贴板工具大致分为两类：**云端服务**（方便，但数据经过第三方服务器）和**系统内置方案**（仅限单一生态，只支持纯文本）。ClipSync 走了第三条路。
 
-| 能力 | CopyBoard | 云端剪贴板工具 | 系统内置（通用剪贴板等） |
+| 能力 | ClipSync | 云端剪贴板工具 | 系统内置（通用剪贴板等） |
 |---|---|---|---|
 | **纯文本** | ✅ UTF-8，完整 Unicode | ✅ | ✅ |
 | **富文本 / HTML** | ✅ 链接、表格、排版格式完整保留 | ❌ 仅纯文本 | ❌ 仅纯文本 |
@@ -85,7 +85,7 @@ CopyBoard 在局域网内自动同步多台设备的剪贴板内容。你在 Win
 | **开源** | ✅ MIT 开源协议 | ❌ 闭源 | ❌ |
 | **价格** | ✅ 永久免费 | ❌ 免费增值 / 付费 | ✅ 免费 |
 
-**总结：** 如果你只需要在同一生态内同步纯文本，系统自带工具够用。如果你需要同步富文本、图片、文件，跨平台使用，并且注重隐私 — CopyBoard 正是为此而生。
+**总结：** 如果你只需要在同一生态内同步纯文本，系统自带工具够用。如果你需要同步富文本、图片、文件，跨平台使用，并且注重隐私 — ClipSync 正是为此而生。
 
 ---
 
@@ -132,23 +132,23 @@ CopyBoard 在局域网内自动同步多台设备的剪贴板内容。你在 Win
 
 ## 下载
 
-从 [Releases 页面](https://github.com/kai3316/copyboard/releases) 获取最新版本：
+从 [Releases 页面](https://github.com/kai3316/clipsync/releases) 获取最新版本：
 
 | 平台 | 文件 | 备注 |
 |---|---|---|
-| Windows 10/11 | `copyboard.exe` | 便携版 — 无需安装 |
-| macOS 12+ | `copyboard.app` (zip) | 通用二进制（Apple Silicon + Intel） |
-| Linux (X11/Wayland) | `copyboard` (tar.gz) | 需安装 `xclip` 或 `wl-clipboard` |
+| Windows 10/11 | `clipsync.exe` | 便携版 — 无需安装 |
+| macOS 12+ | `clipsync.app` (zip) | 通用二进制（Apple Silicon + Intel） |
+| Linux (X11/Wayland) | `clipsync` (tar.gz) | 需安装 `xclip` 或 `wl-clipboard` |
 
 无需 Python 环境，下载后直接运行即可。
 
 > **macOS 用户注意：** 应用未经过公证。如果 Gatekeeper 阻止运行：
 > ```bash
-> xattr -cr copyboard.app
+> xattr -cr clipsync.app
 > ```
 > 然后右键点击应用并选择 **打开**。如果仍然无法打开，从终端运行内部二进制文件查看错误详情：
 > ```bash
-> ./copyboard.app/Contents/MacOS/copyboard
+> ./clipsync.app/Contents/MacOS/clipsync
 > ```
 
 ---
@@ -159,8 +159,8 @@ CopyBoard 在局域网内自动同步多台设备的剪贴板内容。你在 Win
 
 ```bash
 # 克隆仓库
-git clone https://github.com/kai3316/copyboard.git
-cd copyboard
+git clone https://github.com/kai3316/clipsync.git
+cd clipsync
 
 # 创建并激活虚拟环境
 python -m venv .venv
@@ -193,13 +193,13 @@ sudo pacman -S xclip
 
 ```bash
 pip install pyinstaller
-pyinstaller copyboard.spec
+pyinstaller clipsync.spec
 ```
 
 构建结果在 `dist/` 目录：
-- Windows: `dist/copyboard.exe`
-- macOS: `dist/copyboard.app`
-- Linux: `dist/copyboard`
+- Windows: `dist/clipsync.exe`
+- macOS: `dist/clipsync.app`
+- Linux: `dist/clipsync`
 
 `.spec` 文件自动收集所有内部模块和依赖（`zeroconf`、`cryptography`、`PIL`、`pystray`、`customtkinter`）。
 
@@ -210,7 +210,7 @@ pyinstaller copyboard.spec
 ```
 设备 A                              设备 B
    │                                     │
-   ├─ 1. mDNS 广播 ──────────────────►    │  "我在这里: copyboard._tcp.local"
+   ├─ 1. mDNS 广播 ──────────────────►    │  "我在这里: clipsync._tcp.local"
    │                                     │
    ├─ 2. TCP 连接 ◄──────────────────►    │  TLS 1.3 握手
    │                                     │
@@ -225,7 +225,7 @@ pyinstaller copyboard.spec
    ├─ 6. 信任重连 ◄──────────────────►    │  锁定证书验证通过，自动连接
 ```
 
-1. **发现** — mDNS/Zeroconf 在局域网内广播设备存在。服务类型 `_copyboard._tcp.local` 使设备无需配置 IP 即可自动互相发现。
+1. **发现** — mDNS/Zeroconf 在局域网内广播设备存在。服务类型 `_clipsync._tcp.local` 使设备无需配置 IP 即可自动互相发现。
 
 2. **连接** — 建立 TCP 连接，使用自签名 Ed25519 证书进行 TLS 1.3 握手。在应用层交换证书指纹以进行身份验证。
 
@@ -261,9 +261,9 @@ pyinstaller copyboard.spec
 
 | 系统 | 配置和历史 | 日志 |
 |---|---|---|
-| Windows | `%APPDATA%\CopyBoard\` | `%APPDATA%\CopyBoard\copyboard.log` |
-| macOS | `~/Library/Application Support/CopyBoard/` | `~/Library/Logs/CopyBoard/copyboard.log` |
-| Linux | `~/.config/copyboard/` | `~/.local/share/copyboard/copyboard.log` |
+| Windows | `%APPDATA%\ClipSync\` | `%APPDATA%\ClipSync\clipsync.log` |
+| macOS | `~/Library/Application Support/ClipSync/` | `~/Library/Logs/ClipSync/clipsync.log` |
+| Linux | `~/.config/clipsync/` | `~/.local/share/clipsync/clipsync.log` |
 
 - `config.json` — 设备身份、设备列表、设置（私钥加密存储）
 - `clipboard_history.json` — 最近 N 条剪贴板记录（所有内容静态加密）
@@ -276,7 +276,7 @@ pyinstaller copyboard.spec
 
 1. 确保两台设备连接在**同一子网**（同一 WiFi 网络）
 2. 企业网络可能开启了**客户端隔离**，阻止了 mDNS —— 可尝试使用手机热点
-3. 检查防火墙是否放行 **UDP 5353 端口**（mDNS）和 **TCP 19990 端口**（CopyBoard）
+3. 检查防火墙是否放行 **UDP 5353 端口**（mDNS）和 **TCP 19990 端口**（ClipSync）
 4. 如跨越子网，可尝试在设置中配置**中继 URL**
 
 ### 同步不生效？
@@ -293,7 +293,7 @@ pyinstaller copyboard.spec
   - 橙色圆点 + "已配对" = 已信任但离线
   - 蓝色圆点 + "已发现" = 已发现但尚未配对
 - 如果设备显示"已发现"但无法连接，尝试**移除**后重新发现
-- 重启两台设备上的 CopyBoard 通常能解决临时性的 mDNS 问题
+- 重启两台设备上的 ClipSync 通常能解决临时性的 mDNS 问题
 
 ### 如何获取日志？
 
@@ -306,7 +306,7 @@ pyinstaller copyboard.spec
 ## 项目结构
 
 ```
-copyboard/
+clipsync/
 ├── src/
 │   └── main.py                      # 应用入口
 ├── internal/
@@ -345,7 +345,7 @@ copyboard/
 ├── docs/                            # GitHub Pages 站点
 │   ├── index.html                   # 英文 Landing Page
 │   └── index_zh.html                # 中文 Landing Page
-├── copyboard.spec                   # PyInstaller 构建配置
+├── clipsync.spec                   # PyInstaller 构建配置
 ├── requirements.txt                 # Python 依赖
 ├── README.md
 ├── README_zh.md

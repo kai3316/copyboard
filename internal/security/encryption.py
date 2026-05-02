@@ -1,8 +1,8 @@
 """AES-256-GCM encryption utilities for at-rest and app-layer encryption.
 
 Key hierarchy:
-  storage_key = HKDF(device_fingerprint, salt="storage", info="copyboard-at-rest")
-  frame_key   = HKDF(sorted(fp_A, fp_B), salt="frame", info="copyboard-payload")
+  storage_key = HKDF(device_fingerprint, salt="storage", info="clipsync-at-rest")
+  frame_key   = HKDF(sorted(fp_A, fp_B), salt="frame", info="clipsync-payload")
 
 When a pre-shared password is set, PBKDF2(password, fingerprint) is used as
 additional input material to HKDF for both keys.
@@ -27,7 +27,7 @@ _PW_VERIFY_ITERATIONS = 100_000  # for password verification token
 _PW_VERIFY_LEN = 32  # hex chars
 
 # Sentinels for distinguishing encrypted data from plaintext (legacy)
-_ENCRYPTED_PREFIX = b"\x01CBE"  # 4-byte marker: version 1 + "CBE" for CopyBoard Encrypted
+_ENCRYPTED_PREFIX = b"\x01CBE"  # 4-byte marker: version 1 + "CBE" for ClipSync Encrypted
 
 
 def derive_key(password: str, salt: bytes) -> bytes:
@@ -78,12 +78,12 @@ def _hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
 def _compute_storage_key(device_fingerprint: str, password: str = "") -> bytes:
     """Derive the at-rest storage key from device fingerprint + optional password."""
     ikm = device_fingerprint.encode("ascii")
-    salt = b"copyboard-at-rest-salt"
+    salt = b"clipsync-at-rest-salt"
     if password:
         pw_key = derive_key(password, device_fingerprint.encode("ascii"))
         ikm = bytes(a ^ b for a, b in zip(ikm.ljust(32, b"\x00"), pw_key))
     prk = _hkdf_extract(salt, ikm)
-    return _hkdf_expand(prk, b"copyboard-storage-key", _AES_KEY_LEN)
+    return _hkdf_expand(prk, b"clipsync-storage-key", _AES_KEY_LEN)
 
 
 def _compute_frame_key(my_fingerprint: str, peer_fingerprint: str, password: str = "") -> bytes:
@@ -93,12 +93,12 @@ def _compute_frame_key(my_fingerprint: str, peer_fingerprint: str, password: str
     """
     fps = sorted([my_fingerprint, peer_fingerprint])
     ikm = (fps[0] + fps[1]).encode("ascii")
-    salt = b"copyboard-frame-salt"
+    salt = b"clipsync-frame-salt"
     if password:
         pw_key = derive_key(password, fps[0].encode("ascii"))
         ikm = bytes(a ^ b for a, b in zip(ikm.ljust(32, b"\x00"), pw_key))
     prk = _hkdf_extract(salt, ikm)
-    return _hkdf_expand(prk, b"copyboard-frame-key", _AES_KEY_LEN)
+    return _hkdf_expand(prk, b"clipsync-frame-key", _AES_KEY_LEN)
 
 
 def encrypt(plaintext: bytes, key: bytes) -> bytes:

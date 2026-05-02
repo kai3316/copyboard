@@ -293,7 +293,7 @@ class PairingManager:
 
         subject = issuer = x509.Name([
             x509.NameAttribute(NameOID.COMMON_NAME, self._device_id),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "CopyBoard"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ClipSync"),
             x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, self._device_name),
         ])
 

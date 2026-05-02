@@ -277,12 +277,12 @@ class _ClipboardReader(ClipboardReader):
                 'set pb to current application\'s NSPasteboard\'s generalPasteboard()\n'
                 'set htmlData to pb\'s dataForType:"public.html"\n'
                 'if htmlData = missing value then\n'
-                '    return "COPYBOARD_NO_HTML"\n'
+                '    return "CLIPSYNC_NO_HTML"\n'
                 'end if\n'
                 'set htmlStr to current application\'s NSString\'s alloc()\'s '
                 'initWithData:htmlData encoding:current application\'s NSUTF8StringEncoding\n'
                 'if htmlStr = missing value then\n'
-                '    return "COPYBOARD_NO_HTML"\n'
+                '    return "CLIPSYNC_NO_HTML"\n'
                 'end if\n'
                 'return htmlStr as text'
             )
@@ -292,7 +292,7 @@ class _ClipboardReader(ClipboardReader):
             )
             if result.returncode == 0 and result.stdout:
                 data = result.stdout
-                if data != b"COPYBOARD_NO_HTML" and b"<" in data and b">" in data:
+                if data != b"CLIPSYNC_NO_HTML" and b"<" in data and b">" in data:
                     logger.debug("Read HTML via osascript fallback (%d bytes)", len(data))
                     return data
         except Exception:

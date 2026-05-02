@@ -1,7 +1,7 @@
-"""mDNS service discovery for finding CopyBoard peers on the LAN.
+"""mDNS service discovery for finding ClipSync peers on the LAN.
 
-Registers this device as a _copyboard._tcp service and discovers
-other devices running CopyBoard on the same local network.
+Registers this device as a _clipsync._tcp service and discovers
+other devices running ClipSync on the same local network.
 """
 
 import hashlib
@@ -122,7 +122,7 @@ class Discovery:
         self._device_id = device_id
         self._device_name = device_name
         self._device_id_hash = self._hash_device_id(device_id)
-        self._display_name = device_name[:8] if device_name else "CopyBoard"
+        self._display_name = device_name[:8] if device_name else "ClipSync"
         self._port = port
         self._service_type = service_type
         self._zc: Zeroconf | None = None
@@ -309,7 +309,7 @@ class Discovery:
         port = info.port
 
         # Derive a privacy-safe display name from the service name.
-        # The service name is e.g. "<display_name>._copyboard._tcp.local."
+        # The service name is e.g. "<display_name>._clipsync._tcp.local."
         try:
             peer_display = name.split(".")[0]
         except (IndexError, TypeError):

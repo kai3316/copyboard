@@ -1,4 +1,4 @@
-"""Main dashboard window for CopyBoard — sidebar navigation with rich panels.
+"""Main dashboard window for ClipSync — sidebar navigation with rich panels.
 
 Panels: Overview, Devices (with pairing), History, Transfers.
 Settings is a separate window accessed via the sidebar button.
@@ -205,13 +205,13 @@ class DashboardWindow:
             except tk.TclError:
                 self._window = None
 
-        logger.info("Opening CopyBoard dashboard")
+        logger.info("Opening ClipSync dashboard")
         self._dark_mode = self._get_config().appearance_mode == "dark"
         ctk.set_appearance_mode("dark" if self._dark_mode else "light")
         ctk.set_default_color_theme("blue")
 
         self._window = ctk.CTkToplevel(self._root)
-        self._window.title("CopyBoard")
+        self._window.title("ClipSync")
         self._window.geometry("900x640")
         self._window.minsize(780, 560)
         self._window.protocol("WM_DELETE_WINDOW", self._on_hide)
@@ -627,7 +627,7 @@ class DashboardWindow:
         for label, value in [
             (T("device_info.id"), cfg.device_id),
             (T("device_info.platform"), platform.system() + " " + platform.machine()),
-            (T("device_info.service"), cfg.service_type.replace("_copyboard._tcp.local.", "copyboard")),
+            (T("device_info.service"), cfg.service_type.replace("_clipsync._tcp.local.", "clipsync")),
         ]:
             row = ctk.CTkFrame(d_grid, fg_color="transparent")
             row.pack(fill="x", pady=2)

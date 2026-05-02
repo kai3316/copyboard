@@ -1,6 +1,6 @@
 """Cross-platform integration tests — end-to-end sync between two devices.
 
-Simulates two CopyBoard nodes (representing different OS platforms)
+Simulates two ClipSync nodes (representing different OS platforms)
 exchanging clipboard content through the full pipeline:
   clipboard change → encode → network → decode → remote clipboard write.
 
@@ -63,7 +63,7 @@ class MockClipboardWriter:
 
 @dataclass
 class _SimDevice:
-    """A simulated CopyBoard node representing one platform."""
+    """A simulated ClipSync node representing one platform."""
     mgr: SyncManager
     reader: MockClipboardReader
     writer: MockClipboardWriter

@@ -1,10 +1,10 @@
-# Contributing to CopyBoard
+# Contributing to ClipSync
 
 ## Setup
 
 ```bash
-git clone https://github.com/kai3316/copyboard.git
-cd copyboard
+git clone https://github.com/kai3316/clipsync.git
+cd clipsync
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"

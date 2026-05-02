@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CopyBoard — Cross-platform clipboard sharing.
+"""ClipSync — Cross-platform clipboard sharing.
 
 Real-time clipboard sync between Windows, macOS, and Linux on the same local network.
 Runs as a system tray application with an optional settings GUI.
@@ -74,15 +74,15 @@ def _get_log_dir() -> "Path":
 
     system = _p.system()
     if system == "Windows":
-        return Path(os.environ.get("APPDATA", str(Path.home()))) / "CopyBoard"
+        return Path(os.environ.get("APPDATA", str(Path.home()))) / "ClipSync"
     elif system == "Darwin":
-        return Path.home() / "Library" / "Logs" / "CopyBoard"
+        return Path.home() / "Library" / "Logs" / "ClipSync"
     else:
-        return Path.home() / ".local" / "share" / "copyboard"
+        return Path.home() / ".local" / "share" / "clipsync"
 
 
 def _get_log_path() -> "Path":
-    return _get_log_dir() / "copyboard.log"
+    return _get_log_dir() / "clipsync.log"
 
 
 def _hide_dock():
@@ -163,7 +163,7 @@ def _run_tray(device_name: str, pipe):
 
 
 class Application:
-    """Central controller for CopyBoard lifecycle.
+    """Central controller for ClipSync lifecycle.
 
     Lifecycle phases (called in order):
       1. setup_logging()   — static, configures root logger
@@ -223,7 +223,7 @@ class Application:
         log_dir = _get_log_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        raw = os.environ.get("COPYBOARD_LOG_LEVEL", "").upper()
+        raw = os.environ.get("CLIPSYNC_LOG_LEVEL", "").upper()
         level_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO,
                      "WARNING": logging.WARNING, "ERROR": logging.ERROR}
         app_level = level_map.get(raw, logging.INFO)
@@ -242,7 +242,7 @@ class Application:
         root_logger.setLevel(app_level)
 
         file_handler = logging.handlers.RotatingFileHandler(
-            log_dir / "copyboard.log",
+            log_dir / "clipsync.log",
             maxBytes=5 * 1024 * 1024,
             backupCount=3,
             encoding="utf-8",
@@ -267,11 +267,11 @@ class Application:
         self.cfg = load()
         set_locale(self.cfg.language)
         logger.info("=" * 72)
-        logger.info("  CopyBoard v1.0.0 — session start  %s",
+        logger.info("  ClipSync v1.1.0 — session start  %s",
                     time.strftime("%Y-%m-%d %H:%M:%S"))
         logger.info("  Platform: %s  |  PID: %d", sys.platform, os.getpid())
         logger.info("=" * 72)
-        logger.info("CopyBoard starting...")
+        logger.info("ClipSync starting...")
         logger.info("Device: %s (%s)", self.cfg.device_name, self.cfg.device_id)
 
     # ═══════════════════════════════════════════════════════════════
@@ -571,7 +571,7 @@ class Application:
 
         self.root = tk.Tk()
         _hide_dock()
-        self.root.title("CopyBoard")
+        self.root.title("ClipSync")
         self.root.geometry("1x1+0+0")
         self.root.withdraw()
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
@@ -603,7 +603,7 @@ class Application:
         updater = threading.Thread(target=self._update_peers_loop, daemon=True)
         updater.start()
 
-        logger.info("CopyBoard is ready. System tray icon should appear.")
+        logger.info("ClipSync is ready. System tray icon should appear.")
 
         # Auto-open dashboard on startup
         self.root.after(500, self.open_dashboard)
@@ -763,7 +763,7 @@ class Application:
         dest = filedialog.asksaveasfilename(
             parent=self.root,
             title="Save Log File As",
-            initialfile=f"copyboard_{time.strftime('%Y%m%d_%H%M%S')}.log",
+            initialfile=f"clipsync_{time.strftime('%Y%m%d_%H%M%S')}.log",
             filetypes=[("Log files", "*.log"), ("Text files", "*.txt"), ("All files", "*.*")],
             defaultextension=".log",
         )
@@ -777,7 +777,7 @@ class Application:
             show_warning(
                 self.root, "Not Found",
                 f"No log file found at:\n{log_path}\n\n"
-                "CopyBoard may not have been running long enough to generate logs.",
+                "ClipSync may not have been running long enough to generate logs.",
             )
         except PermissionError:
             show_error(self.root, "Error",

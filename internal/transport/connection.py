@@ -276,11 +276,11 @@ class TransportManager:
         system = platform.system()
         if system == "Windows":
             base = os.environ.get("APPDATA", str(Path.home()))
-            scratch = Path(base) / "CopyBoard" / ".scratch"
+            scratch = Path(base) / "ClipSync" / ".scratch"
         elif system == "Darwin":
-            scratch = Path.home() / "Library" / "Application Support" / "CopyBoard" / ".scratch"
+            scratch = Path.home() / "Library" / "Application Support" / "ClipSync" / ".scratch"
         else:
-            scratch = Path.home() / ".config" / "copyboard" / ".scratch"
+            scratch = Path.home() / ".config" / "clipsync" / ".scratch"
         scratch.mkdir(parents=True, exist_ok=True)
         # On Unix, restrict permissions so only the owner can read
         if system != "Windows":

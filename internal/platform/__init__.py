@@ -1,1 +1,1 @@
-"""Platform-specific utilities for CopyBoard."""
+"""Platform-specific utilities for ClipSync."""

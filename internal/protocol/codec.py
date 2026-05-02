@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 from internal.clipboard.format import ClipboardContent, ContentType, SyncMessage
 
-MAGIC = 0x4342  # "CB" for CopyBoard
+MAGIC = 0x4353  # "CS" for ClipSync
 VERSION = 2
 HEADER_FMT = ">H B I"  # magic, version, payload_length
 HEADER_SIZE = 7
@@ -71,7 +71,7 @@ def encode_frame(payload_dict: dict, msg_id: str = "", source_device: str = "") 
 
     This is the low-level encoder used by both clipboard sync and file transfers.
     Any dict can be passed as the payload; it will be JSON-serialized and wrapped
-    in the standard CopyBoard binary frame.
+    in the standard ClipSync binary frame.
     """
     payload_bytes = json.dumps(payload_dict, ensure_ascii=False).encode("utf-8")
 

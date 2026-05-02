@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "copyboard"
+name = "clipsync"
 version = "1.1.0"
 description = "Cross-platform clipboard sharing over LAN"
 readme = "README.md"
@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-copyboard = "src.main:main"
+clipsync = "src.main:main"
 
 [tool.ruff]
 line-length = 100

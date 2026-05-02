@@ -1,4 +1,4 @@
-"""Settings window for CopyBoard — Network, Content Filter, and About.
+"""Settings window for ClipSync — Network, Content Filter, and About.
 
 This is a secondary window accessed from the dashboard. It contains
 configuration that users rarely change: network settings, content
@@ -92,7 +92,7 @@ class SettingsWindow:
             except tk.TclError:
                 self._window = None
 
-        logger.info("Opening CopyBoard settings")
+        logger.info("Opening ClipSync settings")
         ctk.set_appearance_mode("dark" if self._dark_mode else "light")
         ctk.set_default_color_theme("blue")
 
@@ -674,7 +674,7 @@ class SettingsWindow:
         dir_row.pack(fill="x", padx=16, pady=(0, 2))
         self._file_receive_dir_var = tk.StringVar(value=cfg.file_receive_dir)
         ctk.CTkEntry(dir_row, textvariable=self._file_receive_dir_var,
-                     height=32, placeholder_text="~/Downloads/CopyBoard").pack(
+                     height=32, placeholder_text="~/Downloads/ClipSync").pack(
             side="left", fill="x", expand=True, padx=(0, 8))
         ctk.CTkButton(
             dir_row, text=T("ui.browse"), width=80, height=32,
@@ -756,7 +756,7 @@ class SettingsWindow:
         directory = filedialog.askdirectory(
             parent=self._window,
             title=T("settings_window.receive_dir"),
-            initialdir=self._file_receive_dir_var.get() or str(Path.home() / "Downloads" / "CopyBoard"),
+            initialdir=self._file_receive_dir_var.get() or str(Path.home() / "Downloads" / "ClipSync"),
         )
         if directory:
             self._file_receive_dir_var.set(directory)
@@ -907,7 +907,7 @@ class SettingsWindow:
         ).pack(pady=(0, 8))
 
         ctk.CTkLabel(
-            center, text="CopyBoard",
+            center, text="ClipSync",
             font=ctk.CTkFont(size=22, weight="bold"),
         ).pack(pady=(0, 4))
 

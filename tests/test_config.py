@@ -20,7 +20,7 @@ class TestConfigDefaults:
         assert len(cfg.device_id) == 12  # uuid4 hex[:12]
         assert isinstance(cfg.device_name, str)
         assert cfg.port == 19990
-        assert cfg.service_type == "_copyboard._tcp.local."
+        assert cfg.service_type == "_clipsync._tcp.local."
         assert cfg.sync_enabled is True
         assert cfg.auto_start is False
         assert cfg.relay_url == ""

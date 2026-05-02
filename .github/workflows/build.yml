@@ -15,11 +15,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: copyboard-windows
+            artifact: clipsync-windows
           - os: macos-latest
-            artifact: copyboard-macos
+            artifact: clipsync-macos
           - os: ubuntu-latest
-            artifact: copyboard-linux
+            artifact: clipsync-linux
 
     runs-on: ${{ matrix.os }}
 
@@ -45,23 +45,23 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller copyboard.spec
+          pyinstaller clipsync.spec
 
       - name: Package for release (macOS ditto preserves symlinks)
         if: runner.os == 'macOS'
         run: |
-          ditto -c -k --keepParent dist/copyboard.app copyboard-macos.zip
+          ditto -c -k --keepParent dist/clipsync.app clipsync-macos.zip
 
       - name: Package for release (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/copyboard.exe -DestinationPath copyboard-windows.zip
+          Compress-Archive -Path dist/clipsync.exe -DestinationPath clipsync-windows.zip
 
       - name: Package for release (Linux)
         if: runner.os == 'Linux'
         run: |
-          cd dist && tar -czf ../copyboard-linux.tar.gz *
+          cd dist && tar -czf ../clipsync-linux.tar.gz *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -82,19 +82,19 @@ jobs:
       - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
-          name: copyboard-windows
+          name: clipsync-windows
           path: dist
 
       - name: Download macOS build
         uses: actions/download-artifact@v4
         with:
-          name: copyboard-macos
+          name: clipsync-macos
           path: dist
 
       - name: Download Linux build
         uses: actions/download-artifact@v4
         with:
-          name: copyboard-linux
+          name: clipsync-linux
           path: dist
 
       - name: Create Release
@@ -103,11 +103,11 @@ jobs:
         run: |
           gh release delete "${{ github.ref_name }}" --yes 2>/dev/null || true
           gh release create "${{ github.ref_name }}" \
-            --title "CopyBoard ${{ github.ref_name }}" \
+            --title "ClipSync ${{ github.ref_name }}" \
             --notes "Automated build for ${{ github.ref_name }}.
-            - \`copyboard-windows.zip\` — Windows \`.exe\`
-            - \`copyboard-macos.zip\` — macOS \`.app\` bundle
-            - \`copyboard-linux.tar.gz\` — Linux binary" \
-            dist/copyboard-windows.zip \
-            dist/copyboard-macos.zip \
-            dist/copyboard-linux.tar.gz
+            - \`clipsync-windows.zip\` — Windows \`.exe\`
+            - \`clipsync-macos.zip\` — macOS \`.app\` bundle
+            - \`clipsync-linux.tar.gz\` — Linux binary" \
+            dist/clipsync-windows.zip \
+            dist/clipsync-macos.zip \
+            dist/clipsync-linux.tar.gz

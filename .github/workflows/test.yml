@@ -40,7 +40,7 @@ jobs:
         with:
           name: test-failure-${{ matrix.os }}-py${{ matrix.python-version }}
           path: |
-            /tmp/copyboard*.log
-            ~/Library/Logs/CopyBoard/*.log
-            ~/.local/share/copyboard/*.log
+            /tmp/clipsync*.log
+            ~/Library/Logs/ClipSync/*.log
+            ~/.local/share/clipsync/*.log
             ${{ runner.temp }}/*.log

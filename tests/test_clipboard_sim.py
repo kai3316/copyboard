@@ -113,13 +113,13 @@ class TestWindowsClipboardSim:
         """
         cb = SimClipboard()
         # Windows clipboard: UTF-16-LE text + U+0000 null terminator (2 bytes)
-        raw_utf16 = "CopyBoard".encode("utf-16-le") + b"\x00\x00"
+        raw_utf16 = "ClipSync".encode("utf-16-le") + b"\x00\x00"
         assert len(raw_utf16) % 2 == 0  # must be even for valid UTF-16-LE
         cb._content["text.cf_unicodetext"] = raw_utf16
 
         # Strip null (U+0000) characters
         cleaned = raw_utf16.decode("utf-16-le").rstrip("\x00")
-        assert cleaned == "CopyBoard"
+        assert cleaned == "ClipSync"
         assert "\x00" not in cleaned
 
     def test_image_dib_to_png(self):

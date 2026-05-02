@@ -54,7 +54,7 @@ class TestSafeRemove:
         assert not path.exists()
 
     def test_remove_nonexistent(self):
-        path = Path(tempfile.gettempdir()) / "nonexistent_copyboard_test_file"
+        path = Path(tempfile.gettempdir()) / "nonexistent_clipsync_test_file"
         _safe_remove(path)  # should not raise
 
     def test_remove_directory(self, tmp_path):
@@ -272,7 +272,7 @@ class TestFileTransferManager:
 
     def test_receive_small_file(self):
         """End-to-end: receive a small file (single chunk)."""
-        file_data = b"Hello CopyBoard file transfer!"
+        file_data = b"Hello ClipSync file transfer!"
         tid = "recv001"
 
         # Step 1: file_request arrives

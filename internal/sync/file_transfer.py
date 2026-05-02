@@ -1,4 +1,4 @@
-"""Peer-to-peer file transfer for CopyBoard.
+"""Peer-to-peer file transfer for ClipSync.
 
 Handles chunked file transfers between paired devices over the existing
 TLS-encrypted transport. Messages are encoded with the standard binary
@@ -135,7 +135,7 @@ class FileTransferManager:
         The local device identifier (used as the source in frame headers).
     output_dir:
         Directory where received files are saved.
-        Defaults to ``~/Downloads/CopyBoard``.
+        Defaults to ``~/Downloads/ClipSync``.
     """
 
     CHUNK_SIZE = CHUNK_SIZE
@@ -145,7 +145,7 @@ class FileTransferManager:
         self._device_id = device_id
 
         if output_dir is None:
-            output_dir = str(Path.home() / "Downloads" / "CopyBoard")
+            output_dir = str(Path.home() / "Downloads" / "ClipSync")
         self._output_dir = Path(output_dir)
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._transfer_timeout = transfer_timeout

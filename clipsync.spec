@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec file for CopyBoard.
+"""PyInstaller spec file for ClipSync.
 
 Build locally:
     pip install pyinstaller
-    pyinstaller copyboard.spec
+    pyinstaller clipsync.spec
 """
 
 import os
@@ -80,7 +80,7 @@ if sys.platform == "darwin":
         a.scripts,
         [],
         exclude_binaries=True,
-        name="copyboard",
+        name="clipsync",
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
@@ -100,13 +100,13 @@ if sys.platform == "darwin":
         strip=False,
         upx=True,
         upx_exclude=[],
-        name="copyboard",
+        name="clipsync",
     )
     app = BUNDLE(
         coll,
-        name="copyboard.app",
+        name="clipsync.app",
         icon=None,
-        bundle_identifier="com.copyboard.app",
+        bundle_identifier="com.clipsync.app",
         info_plist={
             "NSHighResolutionCapable": True,
             "LSUIElement": True,
@@ -123,7 +123,7 @@ else:
         a.zipfiles,
         a.datas,
         [],
-        name="copyboard",
+        name="clipsync",
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
