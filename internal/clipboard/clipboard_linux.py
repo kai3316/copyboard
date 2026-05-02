@@ -115,32 +115,48 @@ class _ClipboardReader(ClipboardReader):
         return b""
 
     def _get_html(self) -> bytes:
-        # Try to get HTML via xclip with target
         try:
-            if _BACKEND == "x11" and _has_xclip():
+            if _BACKEND == "wayland" and _has_wl_copy():
+                result = subprocess.run(
+                    ["wl-paste", "--type", "text/html"],
+                    capture_output=True, timeout=2,
+                )
+            elif _BACKEND == "x11" and _has_xclip():
                 result = subprocess.run(
                     ["xclip", "-selection", "clipboard", "-o", "-t", "text/html"],
                     capture_output=True, timeout=2,
                 )
-                if result.returncode == 0 and result.stdout.strip():
-                    data = result.stdout
-                    if b"<" in data:
-                        return data
+            else:
+                return b""
+            if result.returncode == 0 and result.stdout.strip():
+                data = result.stdout
+                if b"<" in data:
+                    return data
         except Exception:
             logger.debug("Failed to read HTML from clipboard")
         return b""
 
     def _get_rtf(self) -> bytes:
         try:
-            if _BACKEND == "x11" and _has_xclip():
+            if _BACKEND == "wayland" and _has_wl_copy():
+                result = subprocess.run(
+                    ["wl-paste", "--type", "text/rtf"],
+                    capture_output=True, timeout=2,
+                )
+            elif _BACKEND == "x11" and _has_xclip():
                 result = subprocess.run(
                     ["xclip", "-selection", "clipboard", "-o", "-t", "text/rtf"],
                     capture_output=True, timeout=2,
                 )
-                if result.returncode == 0 and result.stdout.strip():
-                    data = result.stdout
-                    if data.startswith(b"{\\rtf"):
-                        return data
+            else:
+                return b""
+            if result.returncode == 0 and result.stdout.strip():
+                data = result.stdout
+                # Relaxed check matching macOS — some apps emit RTF with
+                # a leading BOM or whitespace before the {\rtf header.
+                head = data[:200]
+                if b"\\rtf" in head or b"{\\rtf" in head:
+                    return data
         except Exception:
             logger.debug("Failed to read RTF from clipboard")
         return b""
@@ -160,18 +176,25 @@ class _ClipboardReader(ClipboardReader):
             except Exception:
                 logger.debug("ImageGrab.grabclipboard failed")
 
-        # Fallback: try xclip with image/png target
+        # Fallback: try clipboard CLI tools with image/png target
         try:
-            if _BACKEND == "x11" and _has_xclip():
+            if _BACKEND == "wayland" and _has_wl_copy():
+                result = subprocess.run(
+                    ["wl-paste", "--type", "image/png"],
+                    capture_output=True, timeout=2,
+                )
+            elif _BACKEND == "x11" and _has_xclip():
                 result = subprocess.run(
                     ["xclip", "-selection", "clipboard", "-o", "-t", "image/png"],
                     capture_output=True, timeout=2,
                 )
-                if result.returncode == 0 and result.stdout:
-                    if result.stdout[:8] == b"\x89PNG\r\n\x1a\n":
-                        return result.stdout
+            else:
+                return b""
+            if result.returncode == 0 and result.stdout:
+                if result.stdout[:8] == b"\x89PNG\r\n\x1a\n":
+                    return result.stdout
         except Exception:
-            logger.debug("Failed to read image from clipboard via xclip")
+            logger.debug("Failed to read image from clipboard via %s", _BACKEND)
 
         return b""
 
@@ -206,23 +229,33 @@ class _ClipboardWriter(ClipboardWriter):
 
     def _set_html(self, data: bytes):
         try:
-            if _BACKEND == "x11" and _has_xclip():
+            if _BACKEND == "wayland" and _has_wl_copy():
+                subprocess.run(
+                    ["wl-copy", "--type", "text/html"],
+                    input=data, timeout=2,
+                )
+            elif _BACKEND == "x11" and _has_xclip():
                 subprocess.run(
                     ["xclip", "-selection", "clipboard", "-in", "-t", "text/html"],
                     input=data, timeout=2,
                 )
         except Exception:
-            logger.debug("Failed to write HTML to clipboard via xclip")
+            logger.debug("Failed to write HTML to clipboard via %s", _BACKEND)
 
     def _set_rtf(self, data: bytes):
         try:
-            if _BACKEND == "x11" and _has_xclip():
+            if _BACKEND == "wayland" and _has_wl_copy():
+                subprocess.run(
+                    ["wl-copy", "--type", "text/rtf"],
+                    input=data, timeout=2,
+                )
+            elif _BACKEND == "x11" and _has_xclip():
                 subprocess.run(
                     ["xclip", "-selection", "clipboard", "-in", "-t", "text/rtf"],
                     input=data, timeout=2,
                 )
         except Exception:
-            logger.debug("Failed to write RTF to clipboard via xclip")
+            logger.debug("Failed to write RTF to clipboard via %s", _BACKEND)
 
     def _set_image(self, data: bytes):
         try:

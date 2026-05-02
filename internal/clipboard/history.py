@@ -28,6 +28,7 @@ _CONTENT_TYPE_LABELS: dict[ContentType, str] = {
     ContentType.HTML: "HTML",
     ContentType.RTF: "RTF",
     ContentType.IMAGE_PNG: "IMAGE",
+    ContentType.IMAGE_EMF: "IMAGE_EMF",
 }
 
 
@@ -47,6 +48,8 @@ def _build_preview(types: dict[ContentType, bytes]) -> str:
         html = types[ContentType.HTML].decode("utf-8", errors="replace")
         plain = _strip_html(html)
         return plain[:200] if plain else "[HTML]"
+    if ContentType.IMAGE_EMF in types:
+        return "[Vector Image]"
     if ContentType.IMAGE_PNG in types:
         return "[Image]"
     if ContentType.RTF in types:
