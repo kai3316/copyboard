@@ -910,14 +910,20 @@ class WebServer:
                 inner_self.send_header("Content-Type", "application/json; charset=utf-8")
                 inner_self.send_header("Cache-Control", "no-cache")
                 inner_self.end_headers()
-                inner_self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+                try:
+                    inner_self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+                except OSError:
+                    pass
 
             def _send_html(inner_self, html: str, status=200):
                 inner_self.send_response(status)
                 inner_self.send_header("Content-Type", "text/html; charset=utf-8")
                 inner_self.send_header("Cache-Control", "no-cache")
                 inner_self.end_headers()
-                inner_self.wfile.write(html.encode("utf-8"))
+                try:
+                    inner_self.wfile.write(html.encode("utf-8"))
+                except OSError:
+                    pass
 
             def _send_file(inner_self, filepath: str, mime: str = "application/octet-stream"):
                 if not os.path.isfile(filepath):
@@ -938,8 +944,11 @@ class WebServer:
                 inner_self.send_header("Content-Disposition", disp)
                 inner_self.send_header("Cache-Control", "no-cache")
                 inner_self.end_headers()
-                with open(filepath, "rb") as f:
-                    inner_self.wfile.write(f.read())
+                try:
+                    with open(filepath, "rb") as f:
+                        inner_self.wfile.write(f.read())
+                except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                    pass
 
             def do_OPTIONS(inner_self):
                 inner_self.send_response(204)
@@ -1062,7 +1071,10 @@ class WebServer:
                     inner_self.send_header("Content-Length", str(len(icon_192)))
                     inner_self.send_header("Cache-Control", "public, max-age=86400")
                     inner_self.end_headers()
-                    inner_self.wfile.write(icon_192)
+                    try:
+                        inner_self.wfile.write(icon_192)
+                    except OSError:
+                        pass
 
                 elif path == "/icon-512.png":
                     inner_self.send_response(200)
@@ -1070,7 +1082,10 @@ class WebServer:
                     inner_self.send_header("Content-Length", str(len(icon_512)))
                     inner_self.send_header("Cache-Control", "public, max-age=86400")
                     inner_self.end_headers()
-                    inner_self.wfile.write(icon_512)
+                    try:
+                        inner_self.wfile.write(icon_512)
+                    except OSError:
+                        pass
 
                 else:
                     inner_self._send_json({"error": "not found"}, 404)
