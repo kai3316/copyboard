@@ -473,6 +473,9 @@ class FileTransferManager:
                     state, transfer_id[:8],
                 )
                 return
+            # Receiver-side pause: drop chunk; sender will retransmit on resume
+            if transfer.get("paused"):
+                return
 
         # Binary frame path (no base64 overhead) — preferred for new clients
         raw_data = payload.get("_raw_data")
@@ -816,25 +819,40 @@ class FileTransferManager:
                 logger.info("Transfer %s resumed by receiver", transfer_id[:8])
 
     def pause_transfer(self, transfer_id: str, send_fn: Callable[[bytes], None]) -> bool:
-        """Request the sender to pause this transfer. Returns True if found."""
+        """Pause this transfer (works for both sender and receiver).
+
+        - Sender side: pauses the local send loop immediately.
+        - Receiver side: sends ``file_pause`` to tell the remote sender to pause.
+        """
         with self._lock:
             transfer = self._transfers.get(transfer_id)
             if transfer is None:
                 return False
+            transfer["paused"] = True
+            is_outgoing = transfer.get("type") == "outgoing"
+        # Tell the other side to stop sending (only meaningful for receiver→sender)
         self._send_as_frame(
             {"msg_type": "file_pause", "transfer_id": transfer_id}, send_fn,
         )
+        logger.info("Transfer %s paused (outgoing=%s)", transfer_id[:8], is_outgoing)
         return True
 
     def resume_transfer(self, transfer_id: str, send_fn: Callable[[bytes], None]) -> bool:
-        """Request the sender to resume this transfer. Returns True if found."""
+        """Resume this transfer (works for both sender and receiver).
+
+        - Sender side: resumes the local send loop.
+        - Receiver side: sends ``file_resume`` to tell the remote sender to resume.
+        """
         with self._lock:
             transfer = self._transfers.get(transfer_id)
             if transfer is None:
                 return False
+            transfer["paused"] = False
+            is_outgoing = transfer.get("type") == "outgoing"
         self._send_as_frame(
             {"msg_type": "file_resume", "transfer_id": transfer_id}, send_fn,
         )
+        logger.info("Transfer %s resumed (outgoing=%s)", transfer_id[:8], is_outgoing)
         return True
 
     # ------------------------------------------------------------------

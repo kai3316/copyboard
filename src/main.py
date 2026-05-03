@@ -869,11 +869,7 @@ class Application:
         zip_name = f"{base}.zip"
 
         # ── Progress dialog ────────────────────────────────────────
-        dlg = _ctk.CTkToplevel(self.root)
-        dlg.title(T("transfer.creating_archive"))
-        dlg.resizable(False, False)
-        dlg.protocol("WM_DELETE_WINDOW", lambda: cancel_event.set())
-
+        # Compute geometry before creating the window
         dw, dh = 420, 170
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
@@ -883,44 +879,96 @@ class Application:
         else:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
-        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
 
-        body = _ctk.CTkFrame(dlg, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=24, pady=(20, 12))
+        import platform as _platform
+        _is_macos = _platform.system() == "Darwin"
 
-        _ctk.CTkLabel(
-            body, text=T("transfer.zipping", name=zip_name),
-            font=_ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", pady=(0, 12))
+        if _is_macos:
+            import tkinter as _tk
+            from tkinter import ttk as _ttk
 
-        progress_bar = _ctk.CTkProgressBar(body, width=370, height=14)
-        progress_bar.pack(fill="x", pady=(0, 8))
-        progress_bar.set(0)
+            _mac_dark = self.root._get_appearance_mode() == "dark"
+            _bg = "#2E2E2E" if _mac_dark else "#F0F0F0"
+            _fg = "#FFFFFF" if _mac_dark else "#000000"
+            _sub = "#AAAAAA" if _mac_dark else "#666666"
 
-        status_var = tk.StringVar(value=T("transfer.preparing"))
-        _ctk.CTkLabel(
-            body, textvariable=status_var,
-            font=_ctk.CTkFont(size=11),
-            text_color=("gray50", "gray60"),
-        ).pack(anchor="w")
+            dlg = _tk.Toplevel(self.root)
+            dlg.title(T("transfer.creating_archive"))
+            dlg.resizable(False, False)
+            dlg.configure(bg=_bg)
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+            dlg.protocol("WM_DELETE_WINDOW", lambda: cancel_event.set())
 
-        cancel_btn = _ctk.CTkButton(
-            dlg, text=T("ui.cancel"), width=90, height=30,
-            fg_color="transparent", border_width=1,
-            text_color=("gray40", "gray60"),
-            border_color=("gray60", "gray50"),
-            hover_color=("gray85", "gray25"),
-            font=_ctk.CTkFont(size=12),
-            command=lambda: cancel_event.set(),
-        )
-        cancel_btn.pack(pady=(0, 16))
+            _tk.Label(dlg, text=T("transfer.zipping", name=zip_name),
+                      font=("Helvetica", 13, "bold"),
+                      fg=_fg, bg=_bg).pack(pady=(20, 10))
 
-        # Render the dialog before starting background work.
-        # macOS in particular needs update() after all widgets are packed,
-        # and grab_set must come last to avoid blank windows.
-        dlg.update()
-        dlg.transient(self.root)
-        dlg.grab_set()
+            progress_bar = _ttk.Progressbar(dlg, length=370, mode="determinate")
+            progress_bar.pack(pady=(0, 8))
+
+            status_var = tk.StringVar(value=T("transfer.preparing"))
+            _tk.Label(dlg, textvariable=status_var,
+                      font=("Helvetica", 11),
+                      fg=_sub, bg=_bg).pack()
+
+            _tk.Button(dlg, text=T("ui.cancel"),
+                       command=lambda: cancel_event.set()).pack(pady=(12, 16))
+
+            def _set_progress(val):
+                progress_bar["value"] = val * 100
+            def _set_status(text):
+                status_var.set(text)
+
+            dlg.update()
+            dlg.transient(self.root)
+            dlg.grab_set()
+        else:
+            dlg = _ctk.CTkToplevel(self.root)
+            dlg.title(T("transfer.creating_archive"))
+            dlg.resizable(False, False)
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+            dlg.protocol("WM_DELETE_WINDOW", lambda: cancel_event.set())
+
+            body = _ctk.CTkFrame(dlg, fg_color="transparent")
+            body.pack(fill="both", expand=True, padx=24, pady=(20, 12))
+
+            _ctk.CTkLabel(
+                body, text=T("transfer.zipping", name=zip_name),
+                font=_ctk.CTkFont(size=13, weight="bold"),
+            ).pack(anchor="w", pady=(0, 12))
+
+            progress_bar = _ctk.CTkProgressBar(body, width=370, height=14)
+            progress_bar.pack(fill="x", pady=(0, 8))
+            progress_bar.set(0)
+
+            status_var = tk.StringVar(value=T("transfer.preparing"))
+            _ctk.CTkLabel(
+                body, textvariable=status_var,
+                font=_ctk.CTkFont(size=11),
+                text_color=("gray50", "gray60"),
+            ).pack(anchor="w")
+
+            _ctk.CTkButton(
+                dlg, text=T("ui.cancel"), width=90, height=30,
+                fg_color="transparent", border_width=1,
+                text_color=("gray40", "gray60"),
+                border_color=("gray60", "gray50"),
+                hover_color=("gray85", "gray25"),
+                font=_ctk.CTkFont(size=12),
+                command=lambda: cancel_event.set(),
+            ).pack(pady=(0, 16))
+
+            def _set_progress(val):
+                progress_bar.set(val)
+            def _set_status(text):
+                status_var.set(text)
+
+            dlg.update()
+            dlg.transient(self.root)
+            dlg.grab_set()
+
+        # Keep a reference to prevent premature garbage collection on macOS
+        self._active_dialog = dlg
 
         # ── Background worker ──────────────────────────────────────
         def _worker():
@@ -941,8 +989,8 @@ class Application:
                             frac = file_count / total_files
                             cur = file_count  # capture for closure
                             self.root.after(0, lambda f=frac, c=cur: (
-                                progress_bar.set(f),
-                                status_var.set(
+                                _set_progress(f),
+                                _set_status(
                                     T("transfer.zipping_progress", current=c, total=total_files)),
                             ))
                         elif p.is_dir():
@@ -956,8 +1004,8 @@ class Application:
                                     frac = file_count / total_files
                                     cur = file_count
                                     self.root.after(0, lambda f=frac, c=cur: (
-                                        progress_bar.set(f),
-                                        status_var.set(
+                                        _set_progress(f),
+                                        _set_status(
                                             T("transfer.zipping_progress", current=c, total=total_files)),
                                     ))
 
