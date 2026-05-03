@@ -468,6 +468,7 @@ class WebServer:
         Returns (ok, detail) where detail is a human-readable status."""
         if sys.platform != "win32":
             return (True, "")
+        import re
         try:
             import subprocess
             check = subprocess.run(
@@ -479,8 +480,11 @@ class WebServer:
             )
             if check.returncode != 0 or WebServer.FW_RULE_NAME not in check.stdout:
                 return (False, "Blocked")
-            if port is not None and f"LocalPort:  {port}" not in check.stdout:
-                return (False, f"Wrong port (needs {port})")
+            if port is not None:
+                m = re.search(r"LocalPort:\s+(\S+)", check.stdout)
+                if not m or str(port) not in m.group(1).split(","):
+                    actual = m.group(1) if m else "none"
+                    return (False, f"Wrong port (got {actual}, needs {port})")
             return (True, "OK")
         except Exception:
             return (False, "Unknown")
@@ -491,12 +495,27 @@ class WebServer:
         if sys.platform != "win32":
             return True  # non-Windows: assume no firewall issue
 
-        ok, _ = WebServer.check_firewall_rule(port)
+        import subprocess
+
+        ok, detail = WebServer.check_firewall_rule(port)
         if ok:
             return True
 
+        # If a rule exists for the wrong port, delete it first
+        if detail.startswith("Wrong port"):
+            logger.info("Deleting stale firewall rule with wrong port")
+            try:
+                subprocess.run(
+                    ["netsh", "advfirewall", "firewall", "delete", "rule",
+                     f"name={WebServer.FW_RULE_NAME}"],
+                    capture_output=True, text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    timeout=10,
+                )
+            except Exception:
+                pass
+
         try:
-            import subprocess
             result = subprocess.run(
                 ["netsh", "advfirewall", "firewall", "add", "rule",
                  f"name={WebServer.FW_RULE_NAME}",
