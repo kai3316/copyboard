@@ -1063,11 +1063,11 @@ class SettingsWindow:
         danger_frame.pack(fill="x", padx=0, pady=(0, 10))
 
         ctk.CTkButton(
-            danger_frame, text=T("settings_window.restart_app"),
-            width=180, height=36, fg_color=("#F39C12", "#E67E22"),
-            hover_color=("#E67E22", "#D35400"),
-            command=self._on_restart,
-        ).pack(side="left", padx=16, pady=14)
+            danger_frame, text=T("settings_window.factory_reset"),
+            width=180, height=36, fg_color=("#7F8C8D", "#566573"),
+            hover_color=("#95A5A6", "#7F8C8D"),
+            command=self._on_factory_reset,
+        ).pack(padx=16, pady=(4, 4))
 
         if self._on_quit:
             ctk.CTkButton(
@@ -1075,14 +1075,14 @@ class SettingsWindow:
                 width=180, height=36, fg_color=("#E74C3C", "#C0392B"),
                 hover_color=("#C0392B", "#A93226"),
                 command=self._on_quit_from_settings,
-            ).pack(side="left", padx=16, pady=14)
+            ).pack(padx=16, pady=(4, 4))
 
         ctk.CTkButton(
-            danger_frame, text=T("settings_window.factory_reset"),
-            width=180, height=36, fg_color=("#7F8C8D", "#566573"),
-            hover_color=("#95A5A6", "#7F8C8D"),
-            command=self._on_factory_reset,
-        ).pack(side="right", padx=16, pady=14)
+            danger_frame, text=T("settings_window.restart_app"),
+            width=180, height=36, fg_color=("#F39C12", "#E67E22"),
+            hover_color=("#E67E22", "#D35400"),
+            command=self._on_restart,
+        ).pack(padx=16, pady=(4, 14))
 
         # ── Save button ──────────────────────────────────────────
         ctk.CTkButton(
