@@ -123,9 +123,15 @@ class PeerConnection:
             # pending, the remote has cleanly closed (EOF).
             ready, _, _ = select.select([self._sock], [], [], 0)
             if ready:
-                data = self._sock.recv(1, socket.MSG_PEEK)
-                if data == b"":
-                    return False
+                try:
+                    data = self._sock.recv(1, socket.MSG_PEEK)
+                    if data == b"":
+                        return False
+                except Exception:
+                    # SSL sockets may raise on MSG_PEEK (internal
+                    # buffering). If select() reported readable, the
+                    # connection is still alive — don't kill it.
+                    pass
             return True
         except Exception:
             return False

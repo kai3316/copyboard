@@ -56,7 +56,7 @@ def _mask_path(path: str) -> str:
 
 # ---- Constants -----------------------------------------------------------
 
-CHUNK_SIZE = 262144                    # 256 KB per chunk
+CHUNK_SIZE = 131072                    # 128 KB per chunk
 TRANSFER_TIMEOUT = 120.0               # seconds -- overall transfer deadline
 COMPLETION_WAIT_TIMEOUT = 60.0         # seconds -- wait for FILE_COMPLETE after last chunk
 SPEED_TEST_CHUNKS = 20                 # number of chunks for speed test (~1.3 MB)
@@ -391,6 +391,9 @@ class FileTransferManager:
             "file_ack": self._handle_file_ack,
             "file_reject": self._handle_file_reject,
             "file_complete": self._handle_file_complete,
+            "file_chunk_ack": self._handle_file_chunk_ack,
+            "file_pause": self._handle_file_pause,
+            "file_resume": self._handle_file_resume,
             "speed_test_data": self.handle_speed_test_data,
             "speed_test_result": self.handle_speed_test_result,
         }
@@ -463,10 +466,11 @@ class FileTransferManager:
             if transfer is None:
                 logger.debug("Chunk for unknown transfer: %s", transfer_id[:8])
                 return
-            if transfer.get("state") != "receiving":
+            state = transfer.get("state")
+            if state not in ("receiving", "awaiting_retransmit"):
                 logger.debug(
                     "Chunk for transfer in state %s: %s",
-                    transfer.get("state"), transfer_id[:8],
+                    state, transfer_id[:8],
                 )
                 return
 
@@ -480,11 +484,17 @@ class FileTransferManager:
         with self._lock:
             # Re-acquire -- transfer may have been removed while we were decoding
             transfer = self._transfers.get(transfer_id)
-            if transfer is None or transfer.get("state") != "receiving":
+            if transfer is None:
+                return
+            state = transfer.get("state")
+            if state not in ("receiving", "awaiting_retransmit"):
                 return
 
+            # Avoid double-counting retransmitted chunks
+            if chunk_index not in transfer["chunks"]:
+                transfer["received_bytes"] += len(chunk_data)
+
             transfer["chunks"][chunk_index] = chunk_data
-            transfer["received_bytes"] += len(chunk_data)
             transfer["received_chunks"] = len(transfer["chunks"])
             transfer["_last_activity"] = time.time()
             total = transfer.get("total_chunks", total_chunks)
@@ -520,33 +530,70 @@ class FileTransferManager:
                 self._on_transfer_complete(transfer_id, False)
             return
 
+        # Guard against concurrent finalization from _handle_file_chunk and
+        # _retransmit_wait racing on the same transfer.
+        with self._lock:
+            fresh = self._transfers.get(transfer_id)
+            if fresh is None:
+                return
+            if fresh.get("_finalizing"):
+                return
+            fresh["_finalizing"] = True
+
         temp_path = self._output_dir / f".{transfer_id}.part"
 
         try:
-            # Write chunks in sequential order to the temp file
+            # Write chunks in sequential order; collect any missing indices
+            missing_chunks = []
             for idx in range(total_chunks):
                 chunk_data = transfer["chunks"].get(idx)
                 if chunk_data is None:
+                    missing_chunks.append(idx)
+                    continue
+                temp_fh.write(chunk_data)
+
+            if missing_chunks:
+                ack_round = transfer.get("_ack_rounds", 0)
+                if ack_round >= 3:
                     logger.error(
-                        "Missing chunk %d/%d for transfer %s",
-                        idx, total_chunks, transfer_id[:8],
+                        "Missing %d chunks after %d ACK rounds for transfer %s -- giving up",
+                        len(missing_chunks), ack_round, transfer_id[:8],
                     )
                     temp_fh.close()
                     _safe_remove(temp_path)
                     with self._lock:
                         self._transfers.pop(transfer_id, None)
                     self._send_as_frame(
-                        {
-                            "msg_type": "file_complete",
-                            "transfer_id": transfer_id,
-                            "status": "error_missing_chunks",
-                        },
+                        {"msg_type": "file_complete", "transfer_id": transfer_id, "status": "error_missing_chunks"},
                         send_fn,
                     )
                     if self._on_transfer_complete:
                         self._on_transfer_complete(transfer_id, False)
                     return
-                temp_fh.write(chunk_data)
+
+                logger.info(
+                    "Transfer %s: %d/%d chunks missing, requesting retransmit (round %d)",
+                    transfer_id[:8], len(missing_chunks), total_chunks, ack_round + 1,
+                )
+                transfer["_ack_rounds"] = ack_round + 1
+                transfer["state"] = "awaiting_retransmit"
+                transfer["_send_fn"] = send_fn
+                self._send_as_frame(
+                    {
+                        "msg_type": "file_chunk_ack",
+                        "transfer_id": transfer_id,
+                        "missing_chunks": missing_chunks,
+                    },
+                    send_fn,
+                )
+                # Spawn retry thread to re-finalize after waiting for retransmitted chunks
+                threading.Thread(
+                    target=self._retransmit_wait,
+                    args=(transfer_id, total_chunks),
+                    daemon=True,
+                    name=f"retransmit-wait-{transfer_id[:8]}",
+                ).start()
+                return  # retry thread will re-call _finalize_received_file
 
             temp_fh.close()
             transfer["temp_fh"] = None
@@ -631,6 +678,43 @@ class FileTransferManager:
             if self._on_transfer_complete:
                 self._on_transfer_complete(transfer_id, False)
 
+    def _retransmit_wait(self, transfer_id: str, total_chunks: int) -> None:
+        """Wait for retransmitted chunks, then re-trigger finalization.
+
+        Called from a daemon thread spawned by :meth:`_finalize_received_file`
+        when chunks are missing.  Waits up to 30 s for all chunks to arrive,
+        then re-calls finalization (which will send another ``file_chunk_ack``
+        if chunks are still missing, up to 3 rounds).
+        """
+        RETRANSMIT_TIMEOUT = 30.0
+
+        deadline = time.time() + RETRANSMIT_TIMEOUT
+        send_fn = None
+        while time.time() < deadline:
+            with self._lock:
+                transfer = self._transfers.get(transfer_id)
+                if transfer is None:
+                    return
+                if transfer.get("received_chunks", 0) >= total_chunks:
+                    send_fn = transfer.get("_send_fn")
+                    break
+            time.sleep(0.5)
+        else:
+            # Timeout — check one final time
+            with self._lock:
+                transfer = self._transfers.get(transfer_id)
+                if transfer is None:
+                    return
+                send_fn = transfer.get("_send_fn")
+
+        if send_fn is not None:
+            with self._lock:
+                transfer = self._transfers.get(transfer_id)
+                if transfer is None:
+                    return
+                total = transfer.get("total_chunks", total_chunks)
+            self._finalize_received_file(transfer_id, transfer, total, send_fn)
+
     # ------------------------------------------------------------------
     # Message handlers (sender side)
     # ------------------------------------------------------------------
@@ -692,6 +776,62 @@ class FileTransferManager:
             if self._on_transfer_complete is not None:
                 self._on_transfer_complete(transfer_id, success)
 
+    def _handle_file_chunk_ack(self, payload: dict, send_fn: Callable[[bytes], None]) -> None:
+        """Sender: receiver reports missing chunks → retransmit them."""
+        transfer_id = payload.get("transfer_id", "")
+        missing = payload.get("missing_chunks", [])
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+        if transfer is None or transfer.get("type") != "outgoing":
+            return
+        if not missing:
+            return  # all good, nothing to retransmit
+        transfer["_retransmit_queue"] = missing
+        logger.info(
+            "Transfer %s: receiver requests %d missing chunks",
+            transfer_id[:8], len(missing),
+        )
+
+    def _handle_file_pause(self, payload: dict, _send_fn=None) -> None:
+        """Receiver requests pause."""
+        transfer_id = payload.get("transfer_id", "")
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+            if transfer:
+                transfer["paused"] = True
+                logger.info("Transfer %s paused by receiver", transfer_id[:8])
+
+    def _handle_file_resume(self, payload: dict, _send_fn=None) -> None:
+        """Receiver requests resume."""
+        transfer_id = payload.get("transfer_id", "")
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+            if transfer:
+                transfer["paused"] = False
+                logger.info("Transfer %s resumed by receiver", transfer_id[:8])
+
+    def pause_transfer(self, transfer_id: str, send_fn: Callable[[bytes], None]) -> bool:
+        """Request the sender to pause this transfer. Returns True if found."""
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+            if transfer is None:
+                return False
+        self._send_as_frame(
+            {"msg_type": "file_pause", "transfer_id": transfer_id}, send_fn,
+        )
+        return True
+
+    def resume_transfer(self, transfer_id: str, send_fn: Callable[[bytes], None]) -> bool:
+        """Request the sender to resume this transfer. Returns True if found."""
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+            if transfer is None:
+                return False
+        self._send_as_frame(
+            {"msg_type": "file_resume", "transfer_id": transfer_id}, send_fn,
+        )
+        return True
+
     # ------------------------------------------------------------------
     # Chunked send logic (runs in background thread)
     # ------------------------------------------------------------------
@@ -711,29 +851,44 @@ class FileTransferManager:
             total_chunks, transfer_id[:8], _mask_file_name(file_name),
         )
 
+        MAX_RETRANSMIT_ROUNDS = 3
+
+        def _send_one_chunk(fh, chunk_index: int, total: int) -> None:
+            """Seek + read + encode + send a single chunk from the open file handle."""
+            fh.seek(chunk_index * self.CHUNK_SIZE)
+            chunk_data = fh.read(self.CHUNK_SIZE)
+            b64_data = base64.b64encode(chunk_data).decode("ascii")
+            self._send_as_frame(
+                {
+                    "msg_type": "file_chunk",
+                    "transfer_id": transfer_id,
+                    "chunk_index": chunk_index,
+                    "total_chunks": total,
+                    "data": b64_data,
+                },
+                broadcast_fn,
+            )
+
         try:
             with open(file_path, "rb") as fh:
+                # ---- first pass: send all chunks in order ----
                 for chunk_index in range(total_chunks):
-                    # Check for cancellation
-                    with self._lock:
-                        transfer = self._transfers.get(transfer_id)
-                        if transfer is None or transfer.get("cancelled"):
-                            logger.info("Transfer %s cancelled mid-send", transfer_id[:8])
-                            if self._on_transfer_complete is not None:
-                                self._on_transfer_complete(transfer_id, False)
-                            return
+                    # Pause check — wait while paused (with cancellation check)
+                    while True:
+                        with self._lock:
+                            transfer = self._transfers.get(transfer_id)
+                            if transfer is None or transfer.get("cancelled"):
+                                logger.info(
+                                    "Transfer %s cancelled mid-send", transfer_id[:8],
+                                )
+                                if self._on_transfer_complete is not None:
+                                    self._on_transfer_complete(transfer_id, False)
+                                return
+                            if not transfer.get("paused"):
+                                break
+                        time.sleep(0.5)
 
-                    chunk_data = fh.read(self.CHUNK_SIZE)
-                    b64_data = base64.b64encode(chunk_data).decode("ascii")
-
-                    file_chunk_payload = {
-                        "msg_type": "file_chunk",
-                        "transfer_id": transfer_id,
-                        "chunk_index": chunk_index,
-                        "total_chunks": total_chunks,
-                        "data": b64_data,
-                    }
-                    self._send_as_frame(file_chunk_payload, broadcast_fn)
+                    _send_one_chunk(fh, chunk_index, total_chunks)
 
                     progress = (chunk_index + 1) / total_chunks
                     bytes_sent = (chunk_index + 1) * self.CHUNK_SIZE
@@ -745,6 +900,41 @@ class FileTransferManager:
                             t["_last_activity"] = time.time()
                     if self._on_transfer_progress is not None:
                         self._on_transfer_progress(transfer_id, progress)
+
+                # ---- retransmit rounds: resend missing chunks reported by receiver ----
+                for round_num in range(MAX_RETRANSMIT_ROUNDS):
+                    time.sleep(1.0)  # brief wait for file_chunk_ack to arrive
+
+                    with self._lock:
+                        transfer = self._transfers.get(transfer_id)
+                        if transfer is None or transfer.get("cancelled"):
+                            return
+                        missing = transfer.pop("_retransmit_queue", None)
+
+                    if not missing:
+                        break
+
+                    logger.info(
+                        "Transfer %s retransmit round %d: %d missing chunks",
+                        transfer_id[:8], round_num + 1, len(missing),
+                    )
+
+                    for chunk_index in missing:
+                        while True:
+                            with self._lock:
+                                transfer = self._transfers.get(transfer_id)
+                                if transfer is None or transfer.get("cancelled"):
+                                    return
+                                if not transfer.get("paused"):
+                                    break
+                            time.sleep(0.5)
+
+                        _send_one_chunk(fh, chunk_index, total_chunks)
+
+                        with self._lock:
+                            t = self._transfers.get(transfer_id)
+                            if t:
+                                t["_last_activity"] = time.time()
 
         except Exception as exc:
             logger.error(
@@ -767,11 +957,9 @@ class FileTransferManager:
         while time.time() < deadline:
             with self._lock:
                 if transfer_id not in self._transfers:
-                    # Transfer was cleaned up by _handle_file_complete
                     return
             time.sleep(0.5)
 
-        # Timeout -- receiver never acknowledged completion
         with self._lock:
             stale = self._transfers.pop(transfer_id, None)
         if stale is not None:

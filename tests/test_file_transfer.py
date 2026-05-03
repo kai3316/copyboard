@@ -461,12 +461,9 @@ class TestFileTransferManager:
         assert any(c.get("status") == "error_size_mismatch" for c in completes)
 
     def test_missing_chunk_detected(self):
-        """If a chunk index is missing (gap) but received_chunks >= total, report error."""
+        """Missing chunks trigger file_chunk_ack retransmit request, not immediate failure."""
         tid = "missing_chunk"
 
-        # total_chunks = (CHUNK_SIZE*2 + CHUNK_SIZE-1)//CHUNK_SIZE = 2
-        # send indices 0 and 2 (skipping 1), received_chunks=2 >= total=2 → finalize
-        # idx=1 is missing → error_missing_chunks
         self.mgr.handle_message(
             "file_request",
             {
@@ -486,13 +483,25 @@ class TestFileTransferManager:
 
         time.sleep(0.1)
 
+        # File should NOT have been saved
         assert not (Path(self.output_dir) / "gap.bin").exists()
+
+        # Should have sent file_chunk_ack with missing chunks instead of immediate error
+        ack_msgs = [
+            self._decode_sent(i)
+            for i in range(len(self.sent_frames))
+            if self._decode_sent(i).get("msg_type") == "file_chunk_ack"
+        ]
+        assert len(ack_msgs) >= 1
+        assert ack_msgs[0].get("missing_chunks") == [1]
+
+        # Verify no immediate file_complete error
         completes = [
             self._decode_sent(i)
             for i in range(len(self.sent_frames))
             if self._decode_sent(i).get("msg_type") == "file_complete"
         ]
-        assert any(c.get("status") == "error_missing_chunks" for c in completes)
+        assert not any(c.get("status") == "error_missing_chunks" for c in completes)
 
     # ------------------------------------------------------------------
     # Invalid chunk data

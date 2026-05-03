@@ -834,42 +834,158 @@ class Application:
             logger.error("Failed to send file: %s", e)
 
     def _send_as_zip(self, paths: list[str]) -> None:
-        """Zip one or more files/folders into a temp archive and send it."""
+        """Zip one or more files/folders into a temp archive and send it.
+
+        Shows a progress dialog so the user can track the archiving and
+        cancel if needed.  Zipping runs in a background thread to keep
+        the UI responsive.
+        """
         import tempfile, zipfile
+        import customtkinter as _ctk
         from pathlib import Path
-        try:
-            # Determine a base name for the zip from the selected items
-            names = [os.path.basename(p.rstrip(os.sep).rstrip("/")) for p in paths]
-            base = names[0] if len(names) == 1 else f"files-{len(names)}"
-            zip_name = f"{base}.zip"
 
-            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-                tmp_path = Path(tmp.name)
+        def _safe_remove(path):
+            try:
+                if path and path.exists():
+                    path.unlink()
+            except OSError:
+                pass
 
-            with zipfile.ZipFile(str(tmp_path), "w", zipfile.ZIP_DEFLATED) as zf:
-                for path in paths:
-                    p = Path(path)
-                    if p.is_file():
-                        zf.write(str(p), p.name)
-                    elif p.is_dir():
-                        for fpath in sorted(p.rglob("*")):
-                            if fpath.is_file():
-                                arcname = str(fpath.relative_to(p.parent))
-                                zf.write(str(fpath), arcname)
+        # ── Count files for progress tracking ──────────────────────
+        total_files = 0
+        for path in paths:
+            p = Path(path)
+            if p.is_file():
+                total_files += 1
+            elif p.is_dir():
+                total_files += sum(1 for fp in p.rglob("*") if fp.is_file())
+        if total_files == 0:
+            show_error(self.root, "Error", "No files found to send")
+            return
 
-            transfer_id = self.file_transfer_mgr.send_file(
-                str(tmp_path), self.transport_mgr.broadcast,
-            )
-            logger.info("Zip transfer initiated: %s (%d items)", transfer_id[:8], len(paths))
-            notification_mgr.show("File Transfer",
-                                  T("transfer.sending_file", name=zip_name))
-        except FileNotFoundError:
-            show_error(self.root, "Error", f"File not found")
-        except PermissionError:
-            show_error(self.root, "Error", "Permission denied")
-        except OSError as e:
-            show_error(self.root, "Error", f"Failed to create archive:\n{e}")
-            logger.error("Failed to zip and send: %s", e)
+        cancel_event = threading.Event()
+        names = [os.path.basename(p.rstrip(os.sep).rstrip("/")) for p in paths]
+        base = names[0] if len(names) == 1 else f"files-{len(names)}"
+        zip_name = f"{base}.zip"
+
+        # ── Progress dialog ────────────────────────────────────────
+        dlg = _ctk.CTkToplevel(self.root)
+        dlg.title(T("transfer.creating_archive"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.protocol("WM_DELETE_WINDOW", lambda: cancel_event.set())
+
+        dlg.update_idletasks()
+        dw, dh = 420, 170
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - dw) // 2
+            y = ry + (rh - dh) // 2
+        else:
+            x = (self.root.winfo_screenwidth() - dw) // 2
+            y = (self.root.winfo_screenheight() - dh) // 2
+        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+        body = _ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=24, pady=(20, 12))
+
+        _ctk.CTkLabel(
+            body, text=T("transfer.zipping", name=zip_name),
+            font=_ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(0, 12))
+
+        progress_bar = _ctk.CTkProgressBar(body, width=370, height=14)
+        progress_bar.pack(fill="x", pady=(0, 8))
+        progress_bar.set(0)
+
+        status_var = tk.StringVar(value=T("transfer.preparing"))
+        _ctk.CTkLabel(
+            body, textvariable=status_var,
+            font=_ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        ).pack(anchor="w")
+
+        cancel_btn = _ctk.CTkButton(
+            dlg, text=T("ui.cancel"), width=90, height=30,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray60"),
+            border_color=("gray60", "gray50"),
+            hover_color=("gray85", "gray25"),
+            font=_ctk.CTkFont(size=12),
+            command=lambda: cancel_event.set(),
+        )
+        cancel_btn.pack(pady=(0, 16))
+
+        # ── Background worker ──────────────────────────────────────
+        def _worker():
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                    tmp_path = Path(tmp.name)
+
+                with zipfile.ZipFile(str(tmp_path), "w", zipfile.ZIP_DEFLATED) as zf:
+                    file_count = 0
+                    for path in paths:
+                        if cancel_event.is_set():
+                            break
+                        p = Path(path)
+                        if p.is_file():
+                            zf.write(str(p), p.name)
+                            file_count += 1
+                            frac = file_count / total_files
+                            cur = file_count  # capture for closure
+                            self.root.after(0, lambda f=frac, c=cur: (
+                                progress_bar.set(f),
+                                status_var.set(
+                                    T("transfer.zipping_progress", current=c, total=total_files)),
+                            ))
+                        elif p.is_dir():
+                            for fpath in sorted(p.rglob("*")):
+                                if cancel_event.is_set():
+                                    break
+                                if fpath.is_file():
+                                    arcname = str(fpath.relative_to(p.parent))
+                                    zf.write(str(fpath), arcname)
+                                    file_count += 1
+                                    frac = file_count / total_files
+                                    cur = file_count
+                                    self.root.after(0, lambda f=frac, c=cur: (
+                                        progress_bar.set(f),
+                                        status_var.set(
+                                            T("transfer.zipping_progress", current=c, total=total_files)),
+                                    ))
+
+                if cancel_event.is_set():
+                    _safe_remove(tmp_path)
+                    self.root.after(0, dlg.destroy)
+                    return
+
+                transfer_id = self.file_transfer_mgr.send_file(
+                    str(tmp_path), self.transport_mgr.broadcast,
+                )
+                logger.info("Zip transfer initiated: %s (%d files)", transfer_id[:8], total_files)
+                self.root.after(0, lambda: (
+                    dlg.destroy(),
+                    notification_mgr.show(
+                        "File Transfer", T("transfer.sending_file", name=zip_name)),
+                ))
+            except FileNotFoundError:
+                _safe_remove(tmp_path)
+                self.root.after(0, lambda: (dlg.destroy(), show_error(
+                    self.root, "Error", "File not found")))
+            except PermissionError:
+                _safe_remove(tmp_path)
+                self.root.after(0, lambda: (dlg.destroy(), show_error(
+                    self.root, "Error", "Permission denied")))
+            except OSError as e:
+                logger.error("Failed to zip and send: %s", e)
+                _safe_remove(tmp_path)
+                self.root.after(0, lambda e=e: (dlg.destroy(), show_error(
+                    self.root, "Error", f"Failed to create archive:\n{e}")))
+
+        threading.Thread(target=_worker, daemon=True, name="zip-sender").start()
 
     def open_settings(self) -> None:
         self.root.after(0, self._create_settings_window)
@@ -1186,7 +1302,10 @@ class Application:
             return
         try:
             if _sys.platform == "win32":
-                os.startfile(folder)
+                # Use explorer.exe directly instead of os.startfile()
+                # to avoid any file-association misrouting that could
+                # launch a new instance of the app.
+                subprocess.Popen(["explorer", folder])
             elif _sys.platform == "darwin":
                 subprocess.run(["open", folder], check=True)
             else:

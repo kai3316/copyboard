@@ -63,6 +63,7 @@ _NAME_TYPE_MAP = {v: k for k, v in _TYPE_NAME_MAP.items()}
 # Valid message types for file transfer routing
 FILE_TRANSFER_MSG_TYPES = frozenset({
     "file_request", "file_chunk", "file_ack", "file_reject", "file_complete",
+    "file_chunk_ack", "file_pause", "file_resume",
 })
 
 
