@@ -128,7 +128,7 @@ def decrypt(data: bytes, key: bytes) -> bytes | None:
         logger.debug("Decrypted %d bytes → %d bytes", len(data), len(pt))
         return pt
     except Exception as exc:
-        logger.warning("Decryption auth failure: %s", exc)
+        logger.debug("Decryption auth failure: %s", exc)
         return None
 
 

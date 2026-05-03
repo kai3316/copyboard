@@ -450,8 +450,15 @@ class Application:
                 cfg.encryption_password = entered
                 logger.info("Encryption password verified")
             elif entered:
-                logger.warning("Encryption password verification FAILED — wrong password")
-                cfg.encryption_password = entered
+                import tkinter.messagebox as messagebox
+                messagebox.showerror(
+                    "Wrong Password",
+                    "The encryption password you entered is incorrect.\n\n"
+                    "ClipSync cannot start without the correct password "
+                    "because your device identity (private key) is encrypted with it.\n\n"
+                    "The application will now exit.",
+                )
+                sys.exit(1)
 
         logger.info(
             "Encryption config: enabled=%s, password=%s",
