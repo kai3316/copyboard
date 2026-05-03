@@ -5,6 +5,7 @@ Real-time clipboard sync between Windows, macOS, and Linux on the same local net
 Runs as a system tray application with an optional settings GUI.
 """
 
+import atexit
 import base64 as _b64
 import logging
 import os
@@ -24,7 +25,7 @@ from internal.clipboard.filter import ContentFilter
 from internal.clipboard.format import ClipboardContent, ContentType as _CT
 from internal.clipboard.history import ClipboardHistory
 from internal.clipboard.platform import create_monitor, create_reader, create_writer
-from internal.config.config import Config, PeerInfo, load, save
+from internal.config.config import Config, PeerInfo, _config_dir, load, save
 from internal.i18n import T, set_locale
 from internal.platform.autostart import disable_autostart, enable_autostart, is_autostart_enabled
 from internal.platform.notify import notification_mgr
@@ -47,6 +48,7 @@ from internal.ui.dashboard import DashboardWindow
 from internal.ui.dialogs import show_error, show_info, show_warning
 from internal.ui.settings_window import SettingsWindow
 from internal.ui.systray import SystrayApp
+from internal.web.server import WebServer
 
 logger = logging.getLogger(__name__)
 
@@ -125,16 +127,104 @@ def _hide_dock():
         pass
 
 
-def _run_tray(device_name: str, pipe):
+def _lock_file() -> "Path":
+    return _config_dir() / ".lock"
+
+
+def _read_lock() -> dict | None:
+    """Read the lock file. Returns None if no lock or corrupted."""
+    import json
+
+    lf = _lock_file()
+    if not lf.exists():
+        return None
+    try:
+        return json.loads(lf.read_text())
+    except Exception:
+        return None
+
+
+def _write_lock(main_pid: int, tray_pid: int | None = None):
+    """Write the lock file with main and optional tray PID."""
+    import json
+
+    _config_dir().mkdir(parents=True, exist_ok=True)
+    data: dict = {"pid": main_pid}
+    if tray_pid is not None:
+        data["tray_pid"] = tray_pid
+    _lock_file().write_text(json.dumps(data))
+
+
+def _remove_lock():
+    try:
+        lf = _lock_file()
+        if lf.exists():
+            lf.unlink()
+    except Exception:
+        pass
+
+
+def _pid_alive(pid: int) -> bool:
+    """Return True if the given PID is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        # PermissionError on Windows means process exists
+        return True
+
+
+def _check_and_cleanup_stale_lock() -> bool:
+    """Check for stale lock files from crashed instances.
+
+    Kills orphaned tray processes and removes stale lock files.
+    Returns True if startup should proceed, False if another instance is running.
+    """
+    lock = _read_lock()
+    if lock is None:
+        return True  # No lock file, proceed
+
+    main_pid = lock.get("pid")
+    tray_pid = lock.get("tray_pid")
+
+    main_alive = main_pid is not None and _pid_alive(main_pid)
+    tray_alive = tray_pid is not None and _pid_alive(tray_pid)
+
+    if main_alive:
+        # Another instance is actively running
+        logger.warning("Another instance is already running (PID %d)", main_pid)
+        return False
+
+    # Main process is dead — kill orphaned tray if it exists
+    if tray_alive:
+        logger.info("Killing orphaned tray process (PID %d)", tray_pid)
+        try:
+            import signal
+            os.kill(tray_pid, signal.SIGKILL)
+        except Exception:
+            pass  # SIGKILL not available on Windows, but tray subprocess is macOS-only
+
+    # Clean up stale lock file
+    _remove_lock()
+    return True
+
+
+def _run_tray(device_name: str, pipe, parent_pid: int):
     """Run the system tray in a subprocess (macOS only). Must be module-level for multiprocessing."""
     Application.setup_logging()
     _hide_dock()
+
+    # Write tray PID to lock file so it can be cleaned up on force quit
+    _write_lock(parent_pid, tray_pid=os.getpid())
     child_systray = SystrayApp(
         device_name=device_name,
         on_enable_toggle=lambda v: pipe.send(("toggle_sync", v)),
         on_open_dashboard=lambda: pipe.send(("open_dashboard",)),
         on_open_settings=lambda: pipe.send(("open_settings",)),
         on_export_logs=lambda: pipe.send(("export_logs",)),
+        on_show_web_qr=lambda: pipe.send(("show_web_qr",)),
         on_quit=lambda: pipe.send(("quit",)),
     )
 
@@ -153,7 +243,18 @@ def _run_tray(device_name: str, pipe):
             except Exception:
                 pass
 
+    def _parent_watchdog():
+        """Monitor parent process; stop tray if parent dies (e.g. force quit)."""
+        while True:
+            if not _pid_alive(parent_pid):
+                logger.info("Parent process %d died, stopping tray", parent_pid)
+                if child_systray._tray:
+                    child_systray._tray.stop()
+                break
+            time.sleep(3)
+
     threading.Thread(target=_recv_notifications, daemon=True).start()
+    threading.Thread(target=_parent_watchdog, daemon=True).start()
     child_systray.run()
 
 
@@ -192,6 +293,7 @@ class Application:
         self.transport_mgr: TransportManager | None = None
         self.file_transfer_mgr: FileTransferManager | None = None
         self.discovery: Discovery | None = None
+        self.web_server: WebServer | None = None
 
         # ── UI ──────────────────────────────────────────────────────
         self.root: tk.Tk | None = None
@@ -445,6 +547,9 @@ class Application:
             cfg.device_id, cfg.device_name, cfg.port, cfg.service_type,
         )
 
+        # ── Web Companion ───────────────────────────────────────
+        self.web_server = WebServer(cfg, self.clipboard_history, self.sync_mgr)
+
     # ═══════════════════════════════════════════════════════════════
     # Phase 6: Callback wiring
     # ═══════════════════════════════════════════════════════════════
@@ -583,8 +688,10 @@ class Application:
             on_open_dashboard=self.open_dashboard,
             on_open_settings=self.open_settings,
             on_export_logs=self.export_logs,
+            on_show_web_qr=self._show_web_qr,
             on_quit=self.shutdown,
         )
+        self.systray.set_web_enabled(self.cfg.web_enabled)
 
     # ═══════════════════════════════════════════════════════════════
     # Phase 9: Start services
@@ -594,6 +701,13 @@ class Application:
         self.sync_mgr.start()
         self.transport_mgr.start_server()
         self.discovery.start()
+        if self.cfg.web_enabled:
+            if not self.cfg.web_token:
+                self.cfg.web_token = secrets.token_urlsafe(16)
+                self._save_cfg_encrypted()
+                logger.info("Generated new web companion token")
+            self.web_server.start()
+            logger.info("Web companion auto-started (persisted preference)")
 
     # ═══════════════════════════════════════════════════════════════
     # Phase 10: Background threads
@@ -621,7 +735,7 @@ class Application:
         parent_conn, child_conn = multiprocessing.Pipe()
         notification_mgr.set_pipe(parent_conn)
         self._tray_proc = multiprocessing.Process(
-            target=_run_tray, args=(self.cfg.device_name, child_conn),
+            target=_run_tray, args=(self.cfg.device_name, child_conn, os.getpid()),
             daemon=True,
         )
         self._tray_proc.start()
@@ -644,6 +758,8 @@ class Application:
             self.open_settings()
         elif cmd == "export_logs":
             self.export_logs()
+        elif cmd == "show_web_qr":
+            self._show_web_qr()
         elif cmd == "quit":
             self.shutdown()
 
@@ -719,6 +835,8 @@ class Application:
         self.sync_mgr.stop()
         self.discovery.stop()
         self.transport_mgr.stop_server()
+        if self.web_server:
+            self.web_server.stop()
 
         for peer in self.pairing_mgr.get_known_peers():
             self.cfg.peers[peer.device_id] = PeerInfo(
@@ -728,6 +846,17 @@ class Application:
                 paired=peer.paired,
             )
         self._save_cfg_encrypted()
+
+        # Terminate macOS tray subprocess
+        if sys.platform == "darwin" and self._tray_proc is not None:
+            try:
+                self._tray_proc.terminate()
+                self._tray_proc.join(timeout=3)
+            except Exception:
+                pass
+
+        _remove_lock()
+
         if self.root:
             self.root.quit()
 
@@ -753,6 +882,71 @@ class Application:
 
     # ═══════════════════════════════════════════════════════════════
     # UI action handlers
+    # ═══════════════════════════════════════════════════════════════
+
+    def _show_web_qr(self) -> None:
+        """Show a popup window with the web companion QR code."""
+        self.root.after(0, self._do_show_web_qr)
+
+    def _do_show_web_qr(self) -> None:
+        import customtkinter as ctk
+        import qrcode
+        from io import BytesIO
+        from PIL import Image
+
+        token = self.cfg.web_token
+        port = self.cfg.web_port
+        ip = WebServer._get_lan_ip()
+        url = f"http://{ip}:{port}?token={token}" if token else f"http://{ip}:{port}"
+
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title(T("web.qr_title"))
+        dlg.resizable(False, False)
+        w, h = 320, 380
+        sw, sh = dlg.winfo_screenwidth(), dlg.winfo_screenheight()
+        dlg.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=24, pady=20)
+
+        ctk.CTkLabel(
+            body, text=T("web.qr_title"),
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(pady=(0, 12))
+
+        if token:
+            img = qrcode.make(url)
+            img = img.resize((220, 220), Image.LANCZOS)
+            qr_img = ctk.CTkImage(light_image=img, dark_image=img, size=(220, 220))
+            qr_label = ctk.CTkLabel(body, image=qr_img, text="")
+            qr_label.image = qr_img  # keep reference
+            qr_label.pack(pady=(0, 12))
+        else:
+            ctk.CTkLabel(
+                body, text="(no token)",
+                font=ctk.CTkFont(size=14), text_color=("gray50", "gray60"),
+            ).pack(pady=(0, 12))
+
+        url_frame = ctk.CTkFrame(body, corner_radius=8, fg_color=("gray90", "gray17"))
+        url_frame.pack(fill="x", pady=(0, 10))
+        url_label = ctk.CTkLabel(
+            url_frame, text=url,
+            font=ctk.CTkFont(size=11), wraplength=260,
+            text_color=("gray50", "gray70"),
+        )
+        url_label.pack(padx=12, pady=10)
+
+        ctk.CTkButton(
+            body, text=T("ui.close"), width=90, height=32,
+            fg_color="transparent", border_width=1,
+            border_color=("gray60", "gray50"),
+            text_color=("gray40", "gray70"),
+            command=dlg.destroy,
+        ).pack(pady=(4, 0))
+
+        dlg.transient(self.root)
+        dlg.grab_set()
+
     # ═══════════════════════════════════════════════════════════════
 
     def export_logs(self) -> None:
@@ -1419,6 +1613,17 @@ class Application:
 
 def main():
     Application.setup_logging()
+
+    # Prevent duplicate instances (macOS tray icon bug)
+    if not _check_and_cleanup_stale_lock():
+        # Another instance is running — show error and exit
+        import tkinter.messagebox as _mb
+        _r = tk.Tk()
+        _r.withdraw()
+        _mb.showerror("ClipSync", "Another instance is already running.")
+        _r.destroy()
+        sys.exit(1)
+
     app = Application()
     app.load_config()
     app._bootstrap_crypto()
@@ -1429,6 +1634,11 @@ def main():
     app._create_ui()
     app._start_services()
     app._start_threads()
+
+    # Write lock file with main PID
+    _write_lock(os.getpid())
+    atexit.register(_remove_lock)
+
     app.run()
 
 
