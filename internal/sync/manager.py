@@ -84,6 +84,9 @@ class SyncManager:
         if content.is_empty():
             return
 
+        # Stamp the sender's device ID so history shows the correct source.
+        content.source_device = msg.source_device
+
         content_hash = content.hash_key()
 
         with self._lock:

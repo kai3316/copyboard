@@ -142,12 +142,27 @@ class _ClipboardReader(ClipboardReader):
         if fmt in (CF_TEXT, CF_UNICODETEXT):
             return self._read_text_handle(handle, fmt == CF_UNICODETEXT)
         elif fmt in (CF_HTML, CF_RTF):
-            return self._read_text_handle(handle, wide=False)
+            # CF_HTML is UTF-8 per spec (Version 0.9+); CF_RTF is
+            # self-describing ASCII or contains \'xx escapes.  Read raw
+            # bytes — do NOT round-trip through the system ANSI code page.
+            return self._read_raw_handle(handle)
         elif fmt == CF_DIB:
             return self._read_dib_handle(handle)
         elif fmt == CF_ENHMETAFILE:
             return self._read_emf_handle(handle)
         return None
+
+    @staticmethod
+    def _read_raw_handle(handle) -> bytes:
+        """Read raw bytes from a global memory handle (no encoding conversion)."""
+        ptr = kernel32.GlobalLock(handle)
+        if not ptr:
+            return b""
+        size = kernel32.GlobalSize(handle)
+        try:
+            return ctypes.string_at(ptr, size).rstrip(b"\x00")
+        finally:
+            kernel32.GlobalUnlock(handle)
 
     def _read_text_handle(self, handle, wide: bool) -> bytes:
         ptr = kernel32.GlobalLock(handle)

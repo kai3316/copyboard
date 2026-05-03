@@ -152,7 +152,7 @@ class PeerConnection:
                 if self._enc_mgr and self._peer_fingerprint:
                     pt = self._enc_mgr.decrypt_frame(payload, self._peer_fingerprint)
                     if pt is not None:
-                        logger.info(
+                        logger.debug(
                             "[%s] App-layer decrypted frame payload (%d bytes plaintext)",
                             self.device_name, len(pt),
                         )
