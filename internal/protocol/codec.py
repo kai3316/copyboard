@@ -38,6 +38,7 @@ import base64
 import json
 import logging
 import struct
+import time
 import uuid
 import zlib
 from io import BytesIO
@@ -46,7 +47,8 @@ logger = logging.getLogger(__name__)
 
 from internal.clipboard.format import ClipboardContent, ContentType, SyncMessage
 
-MAGIC = 0x4353  # "CS" for ClipSync
+MAGIC = 0x4353  # "CS" for ClipSync (JSON frames)
+BINARY_MAGIC = 0x4253  # "BS" for binary payload frames (file chunks)
 VERSION = 2
 HEADER_FMT = ">H B I"  # magic, version, payload_length
 HEADER_SIZE = 7
@@ -125,6 +127,66 @@ def encode_message(msg: SyncMessage, msg_type: str = "clipboard") -> bytes:
     return encode_frame(payload, msg.msg_id, msg.source_device)
 
 
+def encode_binary_chunk(transfer_id: str, chunk_index: int,
+                        total_chunks: int, raw_data: bytes) -> bytes:
+    """Encode a file chunk as a compact binary frame (no base64/JSON overhead).
+
+    Binary frame format::
+
+      [2 bytes]  magic: 0x4253 ("BS")
+      [32 bytes] transfer_id (ascii hex UUID)
+      [4 bytes]  chunk_index (uint32, big-endian)
+      [4 bytes]  total_chunks (uint32, big-endian)
+      [4 bytes]  data_length (uint32, big-endian)
+      [N bytes]  raw chunk data
+
+    Total header: 46 bytes.
+    """
+    tid_bytes = transfer_id.encode("ascii")
+    if len(tid_bytes) != 32:
+        raise ValueError(f"transfer_id must be 32 hex chars, got {len(tid_bytes)}")
+    header = struct.pack(
+        ">H32sIII",
+        BINARY_MAGIC,
+        tid_bytes,
+        chunk_index,
+        total_chunks,
+        len(raw_data),
+    )
+    return header + raw_data
+
+
+def _decode_binary_frame(data: bytes):
+    """Decode a binary frame into a SyncMessage, or return None."""
+    BIN_HEADER_SIZE = 2 + 32 + 4 + 4 + 4  # 46 bytes
+    if len(data) < BIN_HEADER_SIZE:
+        return None
+    magic, tid_bytes, chunk_index, total_chunks, data_len = struct.unpack_from(
+        ">H32sIII", data, 0,
+    )
+    if magic != BINARY_MAGIC:
+        return None
+    if BIN_HEADER_SIZE + data_len > len(data):
+        return None
+    try:
+        transfer_id = tid_bytes.decode("ascii")
+    except (UnicodeDecodeError, ValueError):
+        return None
+    raw_data = data[BIN_HEADER_SIZE:BIN_HEADER_SIZE + data_len]
+
+    content = ClipboardContent(timestamp=time.time())
+    result = SyncMessage(content=content, msg_id=transfer_id, source_device="")
+    result.msg_type = "file_chunk"
+    result._raw_payload = {
+        "msg_type": "file_chunk",
+        "transfer_id": transfer_id,
+        "chunk_index": chunk_index,
+        "total_chunks": total_chunks,
+        "_raw_data": raw_data,
+    }
+    return result
+
+
 def decode_message(data: bytes) -> SyncMessage | None:
     """Decode wire format bytes to a SyncMessage, or None if invalid.
 
@@ -140,6 +202,12 @@ def decode_message(data: bytes) -> SyncMessage | None:
     """
     if len(data) < HEADER_SIZE:
         return None
+
+    # Route binary frames to the dedicated decoder
+    if len(data) >= 2:
+        first_two = struct.unpack_from(">H", data, 0)[0]
+        if first_two == BINARY_MAGIC:
+            return _decode_binary_frame(data)
 
     magic, version, payload_len = struct.unpack_from(HEADER_FMT, data, 0)
     if magic != MAGIC:

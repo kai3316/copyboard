@@ -35,7 +35,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from internal.protocol.codec import encode_frame
+from internal.protocol.codec import encode_binary_chunk, encode_frame
 
 logger = logging.getLogger(__name__)
 
@@ -474,12 +474,17 @@ class FileTransferManager:
                 )
                 return
 
-        # Decode outside the lock (b64decode can be slow for large chunks)
-        try:
-            chunk_data = base64.b64decode(b64_data)
-        except Exception:
-            logger.warning("Invalid base64 in chunk %d for transfer %s", chunk_index, transfer_id[:8])
-            return
+        # Binary frame path (no base64 overhead) — preferred for new clients
+        raw_data = payload.get("_raw_data")
+        if raw_data is not None:
+            chunk_data = raw_data
+        else:
+            # Legacy base64 path for backward compatibility
+            try:
+                chunk_data = base64.b64decode(b64_data)
+            except Exception:
+                logger.warning("Invalid base64 in chunk %d for transfer %s", chunk_index, transfer_id[:8])
+                return
 
         with self._lock:
             # Re-acquire -- transfer may have been removed while we were decoding
@@ -862,23 +867,15 @@ class FileTransferManager:
         def _send_one_chunk(fh, chunk_index: int, total: int, *, seek: bool = True) -> None:
             """Read + encode + send a single chunk from the open file handle.
 
+            Uses the compact binary frame format (no base64/JSON overhead).
             Only seeks when *seek* is True (retransmit path); the sequential
             first pass lets the file pointer advance naturally.
             """
             if seek:
                 fh.seek(chunk_index * self.CHUNK_SIZE)
             chunk_data = fh.read(self.CHUNK_SIZE)
-            b64_data = base64.b64encode(chunk_data).decode("ascii")
-            self._send_as_frame(
-                {
-                    "msg_type": "file_chunk",
-                    "transfer_id": transfer_id,
-                    "chunk_index": chunk_index,
-                    "total_chunks": total,
-                    "data": b64_data,
-                },
-                broadcast_fn,
-            )
+            frame = encode_binary_chunk(transfer_id, chunk_index, total, chunk_data)
+            broadcast_fn(frame)
 
         try:
             with open(file_path, "rb") as fh:

@@ -130,8 +130,12 @@ class TestFileTransferManager:
         assert len(chunk_msgs) == 1
         assert chunk_msgs[0]["chunk_index"] == 0
         assert chunk_msgs[0]["total_chunks"] == 1
-        # Decode base64 data
-        assert len(base64.b64decode(chunk_msgs[0]["data"])) == 100
+        # Accept both binary (_raw_data) and legacy base64 (data) formats
+        raw = chunk_msgs[0].get("_raw_data")
+        if raw is not None:
+            assert len(raw) == 100
+        else:
+            assert len(base64.b64decode(chunk_msgs[0]["data"])) == 100
 
     def test_send_file_multi_chunk(self):
         """File spanning multiple chunks."""
@@ -802,7 +806,11 @@ class TestFileTransferManager:
             if self._decode_sent(i).get("msg_type") == "file_chunk"
         ]
         assert len(chunk_msgs) == 1
-        assert base64.b64decode(chunk_msgs[0]["data"]) == b""
+        raw = chunk_msgs[0].get("_raw_data")
+        if raw is not None:
+            assert raw == b""
+        else:
+            assert base64.b64decode(chunk_msgs[0]["data"]) == b""
 
     def test_receive_zero_length_file(self):
         tid = "zero_len"
