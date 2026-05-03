@@ -18,6 +18,13 @@ from internal.i18n import T, available_locales, set_locale
 
 logger = logging.getLogger(__name__)
 
+
+def _confirm_danger(parent: tk.Tk, title: str, message: str) -> bool:
+    """Show a confirmation dialog for dangerous actions. Returns True if confirmed."""
+    import tkinter.messagebox as messagebox
+    return messagebox.askyesno(title, message, parent=parent, icon="warning")
+
+
 class SettingsWindow:
     """Settings window with sidebar navigation — separate from the main dashboard."""
 
@@ -990,6 +997,36 @@ class SettingsWindow:
             font=ctk.CTkFont(size=13),
         ).pack(anchor="w", padx=16, pady=(8, 14))
 
+        # ── Danger Zone ───────────────────────────────────────────
+        danger_label = ctk.CTkLabel(
+            scroll, text=T("settings_window.danger_zone"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=("#E74C3C", "#E74C3C"),
+        )
+        danger_label.pack(anchor="w", pady=(20, 4))
+        ctk.CTkLabel(
+            scroll, text=T("settings_window.danger_zone_desc"),
+            font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+        ).pack(anchor="w", pady=(0, 10))
+
+        danger_frame = ctk.CTkFrame(scroll, corner_radius=12, border_width=1,
+                                     border_color=("#E74C3C", "#C0392B"), fg_color="transparent")
+        danger_frame.pack(fill="x", padx=0, pady=(0, 10))
+
+        ctk.CTkButton(
+            danger_frame, text=T("settings_window.restart_app"),
+            width=180, height=36, fg_color=("#F39C12", "#E67E22"),
+            hover_color=("#E67E22", "#D35400"),
+            command=self._on_restart,
+        ).pack(side="left", padx=16, pady=14)
+
+        ctk.CTkButton(
+            danger_frame, text=T("settings_window.factory_reset"),
+            width=180, height=36, fg_color=("#E74C3C", "#C0392B"),
+            hover_color=("#C0392B", "#A93226"),
+            command=self._on_factory_reset,
+        ).pack(side="right", padx=16, pady=14)
+
         # ── Save button ──────────────────────────────────────────
         ctk.CTkButton(
             scroll, text=T("settings_window.save_advanced"),
@@ -1081,6 +1118,63 @@ class SettingsWindow:
             T("dialog.saved"),
             T("settings_window.advanced_saved"),
         )
+
+    def _restart_app(self) -> None:
+        import subprocess
+        import sys
+        # Spawn a new instance and exit
+        try:
+            subprocess.Popen([sys.executable] + sys.argv)
+        except Exception:
+            pass
+        self._window.destroy()
+        sys.exit(0)
+
+    def _on_restart(self) -> None:
+        if not _confirm_danger(
+            self._window,
+            T("settings_window.restart_app"),
+            T("settings_window.restart_confirm"),
+        ):
+            return
+        self._save_config()
+        self._restart_app()
+
+    def _on_factory_reset(self) -> None:
+        if not _confirm_danger(
+            self._window,
+            T("settings_window.factory_reset"),
+            T("settings_window.factory_reset_confirm"),
+        ):
+            return
+        from internal.config.config import _config_dir
+        config_dir = _config_dir()
+        deleted = []
+        errors = []
+        for fname in ["config.json", "clipboard_history.json", "clipsync.log"]:
+            fpath = config_dir / fname
+            try:
+                if fpath.exists():
+                    fpath.unlink()
+                    deleted.append(fname)
+            except OSError as e:
+                errors.append(f"{fname}: {e}")
+        # Clean up stale temp files
+        for pattern in [".config_tmp_*.json", ".history_tmp_*.json"]:
+            for tmpf in list(config_dir.glob(pattern)):
+                try:
+                    tmpf.unlink()
+                except OSError:
+                    pass
+        if errors:
+            show_warning(
+                self._window, T("dialog.error"),
+                T("settings_window.factory_reset_error") + "\n" + "\n".join(errors),
+            )
+        logger.info(
+            "Factory reset: deleted %s from %s", deleted, str(config_dir),
+        )
+        self._restart_app()
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Logs
