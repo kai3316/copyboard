@@ -25,13 +25,19 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
     dlg.transient(parent)
     dlg.grab_set()
 
-    # Position centered over parent
+    # Position centered over parent, or screen-center if parent is withdrawn
     dlg.update_idletasks()
-    pw, ph = parent.winfo_width(), parent.winfo_height()
-    px, py = parent.winfo_rootx(), parent.winfo_rooty()
     w, h = 420, 180
-    x = px + (pw - w) // 2
-    y = py + (ph - h) // 2
+    if parent.winfo_viewable():
+        pw, ph = parent.winfo_width(), parent.winfo_height()
+        px, py = parent.winfo_rootx(), parent.winfo_rooty()
+        x = px + (pw - w) // 2
+        y = py + (ph - h) // 2
+    else:
+        sw = parent.winfo_screenwidth()
+        sh = parent.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
     dlg.geometry(f"{w}x{h}+{x}+{y}")
 
     result = [False]

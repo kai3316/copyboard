@@ -82,6 +82,10 @@ class DashboardWindow:
         on_speed_test: Callable | None = None,
         get_speed_test_result: Callable | None = None,
         clear_transfer_history: Callable | None = None,
+        delete_transfer_history_item: Callable | None = None,
+        on_open_file: Callable | None = None,
+        on_open_folder: Callable | None = None,
+        on_retry_transfer: Callable | None = None,
         # Notes
         on_edit_note: Callable | None = None,
     ):
@@ -115,6 +119,10 @@ class DashboardWindow:
         self._on_speed_test = on_speed_test
         self._get_speed_test_result = get_speed_test_result
         self._clear_transfer_history = clear_transfer_history
+        self._delete_transfer_history_item = delete_transfer_history_item
+        self._on_open_file = on_open_file
+        self._on_open_folder = on_open_folder
+        self._on_retry_transfer = on_retry_transfer
         self._on_edit_note = on_edit_note
 
         self._window: ctk.CTkToplevel | None = None
@@ -1900,6 +1908,9 @@ class DashboardWindow:
         arrow = "\U0001F4E4" if direction == "up" else "\U0001F4E5"
         size_str = self._format_size(file_size)
 
+        # Truncate long filenames
+        display_name = file_name if len(file_name) <= 28 else file_name[:25] + "..."
+
         card = ctk.CTkFrame(self._transfer_scroll, corner_radius=8,
                            fg_color=("gray95", "gray17"))
         card.pack(fill="x", pady=2, padx=2)
@@ -1911,7 +1922,7 @@ class DashboardWindow:
         r1 = ctk.CTkFrame(inner, fg_color="transparent")
         r1.pack(fill="x")
         ctk.CTkLabel(
-            r1, text=f"{arrow}  {file_name}",
+            r1, text=f"{arrow}  {display_name}",
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(side="left")
         ctk.CTkLabel(
@@ -1970,6 +1981,8 @@ class DashboardWindow:
         file_size = entry.get("file_size", 0)
         success = entry.get("success", False)
         timestamp = entry.get("timestamp", 0)
+        saved_path = entry.get("saved_path", "")
+        source_path = entry.get("source_path", "")
 
         arrow = "\U0001F4E4" if direction == "up" else "\U0001F4E5"
         status_icon = "✅" if success else "❌"
@@ -1979,6 +1992,9 @@ class DashboardWindow:
         else:
             time_str = ""
 
+        # Truncate long filenames to keep the time/size visible
+        display_name = file_name if len(file_name) <= 30 else file_name[:27] + "..."
+
         card = ctk.CTkFrame(self._transfer_history_scroll, corner_radius=6,
                            fg_color=("gray95", "gray17"))
         card.pack(fill="x", pady=2, padx=2)
@@ -1986,10 +2002,11 @@ class DashboardWindow:
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=8)
 
+        # Row 1: icon + filename (left), size + time (right)
         r1 = ctk.CTkFrame(inner, fg_color="transparent")
         r1.pack(fill="x")
         ctk.CTkLabel(
-            r1, text=f"{status_icon}  {arrow}  {file_name}",
+            r1, text=f"{status_icon}  {arrow}  {display_name}",
             font=ctk.CTkFont(size=12),
         ).pack(side="left")
         ctk.CTkLabel(
@@ -1997,6 +2014,43 @@ class DashboardWindow:
             font=ctk.CTkFont(size=10),
             text_color=("gray50", "gray60"),
         ).pack(side="right")
+
+        # Row 2: action buttons
+        resolve_path = saved_path or source_path
+        has_actions = (
+            (resolve_path and success and self._on_open_file and self._on_open_folder)
+            or self._delete_transfer_history_item
+        )
+        if has_actions:
+            btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+            btn_row.pack(fill="x", pady=(6, 0))
+            if resolve_path and success and self._on_open_file and self._on_open_folder:
+                ctk.CTkButton(
+                    btn_row, text=T("ui.open_file"), width=70, height=22,
+                    fg_color=("gray85", "gray25"),
+                    text_color=("gray20", "gray80"),
+                    hover_color=("gray75", "gray35"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda p=resolve_path: self._on_open_file(p),
+                ).pack(side="left", padx=(0, 4))
+                ctk.CTkButton(
+                    btn_row, text=T("ui.open_folder"), width=80, height=22,
+                    fg_color=("gray85", "gray25"),
+                    text_color=("gray20", "gray80"),
+                    hover_color=("gray75", "gray35"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda p=resolve_path: self._on_open_folder(p),
+                ).pack(side="left")
+            if self._delete_transfer_history_item:
+                ctk.CTkButton(
+                    btn_row, text=T("ui.delete"), width=50, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#E74C3C", "#C0392B"),
+                    border_color=("#E74C3C", "#C0392B"),
+                    hover_color=("#FADBD8", "#5B2C2C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda e=entry: self._delete_transfer_history_item(e),
+                ).pack(side="right")
 
     @staticmethod
     def _format_size(size: int) -> str:

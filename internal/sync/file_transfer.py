@@ -227,8 +227,10 @@ class FileTransferManager:
         mime_type = _guess_mime_type(file_name)
         total_chunks = max((file_size + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE, 1)
 
+        now = time.time()
         with self._lock:
             self._transfers[transfer_id] = {
+                "transfer_id": transfer_id,
                 "type": "outgoing",
                 "file_path": str(file_path),
                 "file_name": file_name,
@@ -236,7 +238,8 @@ class FileTransferManager:
                 "mime_type": mime_type,
                 "total_chunks": total_chunks,
                 "state": "awaiting_ack",
-                "start_time": time.time(),
+                "start_time": now,
+                "_last_activity": now,
                 "acked": False,
                 "_last_progress": 0.0,
                 "_bytes_sent": 0,
@@ -424,8 +427,10 @@ class FileTransferManager:
 
         total_chunks = max((file_size + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE, 1) if file_size > 0 else 1
 
+        now = time.time()
         with self._lock:
             self._transfers[transfer_id] = {
+                "transfer_id": transfer_id,
                 "type": "incoming",
                 "file_name": file_name,
                 "file_size": file_size,
@@ -435,7 +440,8 @@ class FileTransferManager:
                 "received_bytes": 0,
                 "temp_fh": None,
                 "state": "pending",
-                "start_time": time.time(),
+                "start_time": now,
+                "_last_activity": now,
                 "chunks": {},  # chunk_index -> bytes (sparse; supports out-of-order)
             }
 
@@ -480,6 +486,7 @@ class FileTransferManager:
             transfer["chunks"][chunk_index] = chunk_data
             transfer["received_bytes"] += len(chunk_data)
             transfer["received_chunks"] = len(transfer["chunks"])
+            transfer["_last_activity"] = time.time()
             total = transfer.get("total_chunks", total_chunks)
             progress = transfer["received_chunks"] / max(total, 1)
             is_last = transfer["received_chunks"] >= total
@@ -598,11 +605,12 @@ class FileTransferManager:
                 {"msg_type": "file_complete", "transfer_id": transfer_id, "status": "success"},
                 send_fn,
             )
-            logger.info("File received successfully: %s -> %s", _mask_file_name(file_name), _mask_path(str(dest_path)))
-            self._add_to_history(transfer, True)
+            saved = str(dest_path)
+            logger.info("File received successfully: %s -> %s", _mask_file_name(file_name), _mask_path(saved))
+            self._add_to_history(transfer, True, saved_path=saved)
 
             if self._on_file_received is not None:
-                self._on_file_received(transfer_id, str(dest_path), file_name)
+                self._on_file_received(transfer_id, saved, file_name)
             if self._on_transfer_complete is not None:
                 self._on_transfer_complete(transfer_id, True)
 
@@ -734,6 +742,7 @@ class FileTransferManager:
                         if t:
                             t["_last_progress"] = progress
                             t["_bytes_sent"] = min(bytes_sent, t.get("file_size", bytes_sent))
+                            t["_last_activity"] = time.time()
                     if self._on_transfer_progress is not None:
                         self._on_transfer_progress(transfer_id, progress)
 
@@ -831,19 +840,31 @@ class FileTransferManager:
         with self._lock:
             self._history.clear()
 
+    def delete_history_item(self, entry: dict) -> bool:
+        """Remove a single history entry. Returns True if deleted."""
+        with self._lock:
+            try:
+                self._history.remove(entry)
+                return True
+            except ValueError:
+                return False
+
     def get_speed_test(self) -> dict | None:
         """Return current speed test state, if any."""
         with self._lock:
             return dict(self._speed_test) if self._speed_test else None
 
-    def _add_to_history(self, transfer: dict, success: bool):
+    def _add_to_history(self, transfer: dict, success: bool, saved_path: str = ""):
         """Record a completed transfer in the history list."""
         entry = {
+            "transfer_id": transfer.get("transfer_id", uuid.uuid4().hex),
             "file_name": transfer.get("file_name", "?"),
             "file_size": transfer.get("file_size", 0),
             "direction": "up" if transfer.get("type") == "outgoing" else "down",
             "success": success,
             "state": transfer.get("state", "unknown"),
+            "source_path": transfer.get("file_path", ""),
+            "saved_path": saved_path,
             "timestamp": time.time(),
         }
         with self._lock:
@@ -948,14 +969,16 @@ class FileTransferManager:
     def cleanup_stale_transfers(self) -> None:
         """Remove transfers that have exceeded ``TRANSFER_TIMEOUT``.
 
-        Call this periodically (e.g. every 30 s) to prevent memory leaks from
+        Uses ``_last_activity`` (updated on each chunk sent/received) so
+        actively progressing transfers are not killed mid-flight.  Call
+        this periodically (e.g. every 30 s) to prevent memory leaks from
         abandoned transfers. Partial temp files are deleted.
         """
         now = time.time()
         with self._lock:
             stale_ids = [
                 tid for tid, t in self._transfers.items()
-                if now - t.get("start_time", 0) > self._transfer_timeout
+                if now - t.get("_last_activity", t.get("start_time", 0)) > self._transfer_timeout
             ]
 
         for tid in stale_ids:

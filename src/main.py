@@ -803,10 +803,10 @@ class Application:
                 file_path, self.transport_mgr.broadcast,
             )
             logger.info("File transfer initiated: %s", transfer_id[:8])
-            show_info(
-                self.root, "File Transfer",
-                T("transfer.sending_file", name=os.path.basename(file_path)),
-            )
+            # Use a non-blocking notification instead of a modal dialog
+            # to avoid white/blank popup on macOS and main-thread blocking.
+            notification_mgr.show("File Transfer",
+                                  T("transfer.sending_file", name=os.path.basename(file_path)))
         except FileNotFoundError:
             show_error(self.root, "Error", f"File not found:\n{file_path}")
         except PermissionError:
@@ -889,6 +889,13 @@ class Application:
             ),
             get_speed_test_result=lambda: self.file_transfer_mgr.get_speed_test(),
             clear_transfer_history=self._clear_transfer_history,
+            delete_transfer_history_item=lambda entry: (
+                self.file_transfer_mgr.delete_history_item(entry)
+                and self.dashboard_win._refresh_transfers()
+            ),
+            on_open_file=self._open_file,
+            on_open_folder=self._open_folder,
+            on_retry_transfer=self._retry_file_transfer,
             on_edit_note=self._on_edit_note,
         )
         self.dashboard_win.show()
@@ -1077,6 +1084,49 @@ class Application:
 
     def _clear_transfer_history(self) -> None:
         self.file_transfer_mgr.clear_history()
+
+    @staticmethod
+    def _open_file(file_path: str) -> None:
+        """Open a file with the default OS application."""
+        import subprocess, sys as _sys
+        try:
+            if _sys.platform == "win32":
+                os.startfile(file_path)
+            elif _sys.platform == "darwin":
+                subprocess.run(["open", file_path], check=True)
+            else:
+                subprocess.run(["xdg-open", file_path], check=True)
+        except Exception as e:
+            logger.error("Failed to open file %s: %s", file_path, e)
+
+    @staticmethod
+    def _open_folder(file_path: str) -> None:
+        """Open the containing folder in the OS file manager."""
+        import subprocess, sys as _sys
+        folder = os.path.dirname(file_path)
+        if not folder or not os.path.isdir(folder):
+            folder = os.path.expanduser("~")
+        try:
+            if _sys.platform == "win32":
+                os.startfile(folder)
+            elif _sys.platform == "darwin":
+                subprocess.run(["open", folder], check=True)
+            else:
+                subprocess.run(["xdg-open", folder], check=True)
+        except Exception as e:
+            logger.error("Failed to open folder %s: %s", folder, e)
+
+    def _retry_file_transfer(self, file_path: str) -> None:
+        """Retry sending a file that previously failed."""
+        try:
+            transfer_id = self.file_transfer_mgr.send_file(
+                file_path, self.transport_mgr.broadcast,
+            )
+            logger.info("Retried file transfer: %s (%s)", file_path, transfer_id[:8])
+            notification_mgr.show("File Transfer",
+                                  T("transfer.sending_file", name=os.path.basename(file_path)))
+        except OSError as e:
+            logger.error("Failed to retry sending file %s: %s", file_path, e)
 
     # ═══════════════════════════════════════════════════════════════
     # Discovery / visibility toggles

@@ -637,6 +637,7 @@ class TestFileTransferManager:
         with self.mgr._lock:
             if "stale001" in self.mgr._transfers:
                 self.mgr._transfers["stale001"]["start_time"] = 0  # epoch
+                self.mgr._transfers["stale001"]["_last_activity"] = 0  # epoch
 
         complete_calls: list[tuple] = []
         self.mgr.set_on_transfer_complete(lambda tid, ok: complete_calls.append((tid, ok)))

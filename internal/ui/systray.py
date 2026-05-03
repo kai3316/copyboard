@@ -88,10 +88,6 @@ class SystrayApp:
         self._peers: list[str] = []
 
         # Custom message for thread-safe menu updates on Windows.
-        # pystray._update_menu() destroys the current menu handle via
-        # DestroyMenu, which conflicts with TrackPopupMenuEx when the
-        # context menu is displayed.  Posting a message guarantees
-        # _update_menu() runs on the tray thread after the menu closes.
         if sys.platform == "win32":
             self._WM_UPDATE_MENU = 0x8000 + 0x100  # WM_APP + 256
 
@@ -102,27 +98,29 @@ class SystrayApp:
         self._peers = peers
         if self._tray is None:
             return
-        if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
-            hwnd = getattr(self._tray, "_hwnd", None)
-            if hwnd:
-                ctypes.windll.user32.PostMessageW(
-                    hwnd, self._WM_UPDATE_MENU, 0, 0)
-                return
-        self._tray.update_menu()
+        # Rebuild the full menu with current peer list so the submenu
+        # items are static — avoids issues with pystray callable-based
+        # dynamic submenus not refreshing on _update_menu().
+        self._tray.menu = self._build_full_menu()
 
-    def run(self):
-        """Run the system tray. Blocks until quit."""
-        menu = pystray.Menu(
+    def _build_peer_menu(self) -> pystray.Menu:
+        """Build the peer submenu with static items."""
+        if not self._peers:
+            return pystray.Menu(
+                pystray.MenuItem(T("tray.no_devices"), None, enabled=False),
+            )
+        items = [
+            pystray.MenuItem(peer, None, enabled=False)
+            for peer in self._peers
+        ]
+        return pystray.Menu(*items)
+
+    def _build_full_menu(self) -> pystray.Menu:
+        """Build the complete tray menu."""
+        return pystray.Menu(
+            pystray.MenuItem("ClipSync", None, enabled=False),
             pystray.MenuItem(
-                "ClipSync",
-                None,
-                enabled=False,
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                T("tray.device", name=self._device_name),
-                None,
-                enabled=False,
+                T("tray.device", name=self._device_name), None, enabled=False,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
@@ -132,10 +130,9 @@ class SystrayApp:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(T("tray.show_dashboard"), self._on_open_dashboard_click),
-            pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 T("tray.connected_devices"),
-                pystray.Menu(self._build_peer_menu),
+                self._build_peer_menu(),
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(T("tray.settings"), self._on_open_settings_click),
@@ -145,6 +142,10 @@ class SystrayApp:
             pystray.MenuItem(T("tray.quit"), self._on_quit),
         )
 
+    def run(self):
+        """Run the system tray. Blocks until quit."""
+        menu = self._build_full_menu()
+
         logger.info("Starting system tray")
         self._tray = pystray.Icon(
             "clipsync",
@@ -153,36 +154,12 @@ class SystrayApp:
             menu,
         )
 
-        # Register a custom message handler so set_peers() can safely
-        # trigger menu updates from the peer updater thread.  The
-        # handler runs on the pystray thread (via the Windows message
-        # pump), avoiding DestroyMenu / TrackPopupMenuEx races.
-        if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
-            self._tray._message_handlers[self._WM_UPDATE_MENU] = (
-                lambda w, l: self._tray._update_menu() or 0
-            )
-
         notification_mgr.set_tray(self._tray)
-
         self._tray.run()
 
     def stop(self):
         if self._tray:
             self._tray.stop()
-
-    def _build_peer_menu(self):
-        """Build submenu for connected peers."""
-        items = []
-        if not self._peers:
-            items.append(
-                pystray.MenuItem(T("tray.no_devices"), None, enabled=False),
-            )
-        else:
-            for peer in self._peers:
-                items.append(
-                    pystray.MenuItem(peer, None, enabled=False),
-                )
-        return items
 
     def _on_toggle_sync(self, icon, item):
         self._syncing = not self._syncing
@@ -205,7 +182,6 @@ class SystrayApp:
             self._on_export_logs()
 
     def _on_about(self, icon, item):
-        # Show a simple notification
         if self._tray:
             self._tray.notify(
                 T("tray.about_message"),
