@@ -205,9 +205,14 @@ class _ClipboardReader(ClipboardReader):
 
 class _ClipboardWriter(ClipboardWriter):
     def write(self, content: ClipboardContent):
-        # Write ALL available formats so the receiving application
-        # can choose the richest one it supports.
-        for fmt_type, data in content.types.items():
+        # Write formats sorted so TEXT lands last — each xclip/wl-copy
+        # call replaces the entire clipboard, and plain text is the
+        # most important fallback for the receiving side.
+        _TEXT_LAST = {ContentType.TEXT: 1}
+        for fmt_type, data in sorted(
+            content.types.items(),
+            key=lambda item: _TEXT_LAST.get(item[0], 0),
+        ):
             logger.debug("Writing %s to clipboard (%d bytes)", fmt_type.name, len(data))
             if fmt_type == ContentType.TEXT:
                 self._set_text(data)
@@ -336,7 +341,25 @@ class LinuxClipboardMonitor(ClipboardMonitor):
                     ["xclip", "-selection", "clipboard", "-o"],
                     capture_output=True, timeout=2,
                 )
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout:
+                return hashlib.sha256(result.stdout).hexdigest()
+        except Exception:
+            pass
+
+        # Text read returned nothing — clipboard may contain an image.
+        # Try reading image data so image-only clipboard changes are detected.
+        try:
+            if _BACKEND == "wayland" and _has_wl_copy():
+                result = subprocess.run(
+                    ["wl-paste", "--type", "image/png"],
+                    capture_output=True, timeout=2,
+                )
+            else:
+                result = subprocess.run(
+                    ["xclip", "-selection", "clipboard", "-o", "-t", "image/png"],
+                    capture_output=True, timeout=2,
+                )
+            if result.returncode == 0 and result.stdout:
                 return hashlib.sha256(result.stdout).hexdigest()
         except Exception:
             pass

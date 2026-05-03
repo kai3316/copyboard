@@ -121,6 +121,8 @@ class DashboardWindow:
         self._dark_mode = get_config().appearance_mode == "dark"
         self._current_panel = "overview"
         self._refresh_job: str | None = None
+        self._breathing = False
+        self._breath_timer: str | None = None
         self._anim_frame = 0
 
         # Sidebar

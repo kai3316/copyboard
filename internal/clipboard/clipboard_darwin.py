@@ -33,6 +33,7 @@ POLL_INTERVAL = 0.4
 
 _nspasteboard_objc = None
 _nspasteboard_instance = None
+_objc_lock = threading.Lock()
 
 _IMAGE_UTIS = frozenset({
     b"public.tiff", b"public.png", b"public.jpeg",
@@ -85,37 +86,38 @@ def _pb_types() -> set[bytes]:
     if not pb:
         return set()
 
-    try:
-        sel_types = objc.sel_registerName(b"types")
-        types_arr = objc.objc_msgSend(pb, sel_types)
-        if not types_arr:
-            return set()
+    with _objc_lock:
+        try:
+            sel_types = objc.sel_registerName(b"types")
+            types_arr = objc.objc_msgSend(pb, sel_types)
+            if not types_arr:
+                return set()
 
-        sel_count = objc.sel_registerName(b"count")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        count = objc.objc_msgSend(types_arr, sel_count)
-
-        sel_object = objc.sel_registerName(b"objectAtIndex:")
-        sel_utf8 = objc.sel_registerName(b"UTF8String")
-
-        result = set()
-        for i in range(count):
-            objc.objc_msgSend.argtypes = [
-                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong,
-            ]
+            sel_count = objc.sel_registerName(b"count")
+            objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
             objc.objc_msgSend.restype = ctypes.c_void_p
-            ns_str = objc.objc_msgSend(types_arr, sel_object, i)
-            if ns_str:
-                objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            count = objc.objc_msgSend(types_arr, sel_count)
+
+            sel_object = objc.sel_registerName(b"objectAtIndex:")
+            sel_utf8 = objc.sel_registerName(b"UTF8String")
+
+            result = set()
+            for i in range(count):
+                objc.objc_msgSend.argtypes = [
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong,
+                ]
                 objc.objc_msgSend.restype = ctypes.c_void_p
-                c_str = objc.objc_msgSend(ns_str, sel_utf8)
-                if c_str:
-                    result.add(ctypes.c_char_p(c_str).value)
-        return result
-    except Exception:
-        logger.debug("_pb_types failed", exc_info=True)
-        return set()
+                ns_str = objc.objc_msgSend(types_arr, sel_object, i)
+                if ns_str:
+                    objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+                    objc.objc_msgSend.restype = ctypes.c_void_p
+                    c_str = objc.objc_msgSend(ns_str, sel_utf8)
+                    if c_str:
+                        result.add(ctypes.c_char_p(c_str).value)
+            return result
+        except Exception:
+            logger.debug("_pb_types failed", exc_info=True)
+            return set()
 
 
 def _pb_data_for_type(uti: bytes) -> bytes | None:
@@ -124,35 +126,36 @@ def _pb_data_for_type(uti: bytes) -> bytes | None:
     if not pb:
         return None
 
-    try:
-        ns_uti = _nsstring(objc, uti)
-        if not ns_uti:
+    with _objc_lock:
+        try:
+            ns_uti = _nsstring(objc, uti)
+            if not ns_uti:
+                return None
+
+            sel_data = objc.sel_registerName(b"dataForType:")
+            objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+            ns_data = objc.objc_msgSend(pb, sel_data, ns_uti)
+            if not ns_data:
+                return None
+
+            sel_length = objc.sel_registerName(b"length")
+            sel_bytes = objc.sel_registerName(b"bytes")
+            objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+
+            length = objc.objc_msgSend(ns_data, sel_length)
+            if not length:
+                return None
+
+            ptr = objc.objc_msgSend(ns_data, sel_bytes)
+            if not ptr:
+                return None
+
+            return ctypes.string_at(ptr, length)
+        except Exception:
+            logger.debug("_pb_data_for_type(%s) failed", uti, exc_info=True)
             return None
-
-        sel_data = objc.sel_registerName(b"dataForType:")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        ns_data = objc.objc_msgSend(pb, sel_data, ns_uti)
-        if not ns_data:
-            return None
-
-        sel_length = objc.sel_registerName(b"length")
-        sel_bytes = objc.sel_registerName(b"bytes")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-
-        length = objc.objc_msgSend(ns_data, sel_length)
-        if not length:
-            return None
-
-        ptr = objc.objc_msgSend(ns_data, sel_bytes)
-        if not ptr:
-            return None
-
-        return ctypes.string_at(ptr, length)
-    except Exception:
-        logger.debug("_pb_data_for_type(%s) failed", uti, exc_info=True)
-        return None
 
 
 def _nsstring(objc, s: bytes):
@@ -184,25 +187,78 @@ def _pb_change_count() -> int | None:
     if not pb:
         return None
 
-    try:
-        key = _nsstring(objc, b"changeCount")
-        if not key:
+    with _objc_lock:
+        try:
+            key = _nsstring(objc, b"changeCount")
+            if not key:
+                return None
+
+            sel_value = objc.sel_registerName(b"valueForKey:")
+            objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+            ns_number = objc.objc_msgSend(pb, sel_value, key)
+            if not ns_number:
+                return None
+
+            sel_int = objc.sel_registerName(b"integerValue")
+            objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            objc.objc_msgSend.restype = ctypes.c_long
+            return objc.objc_msgSend(ns_number, sel_int)
+        except Exception:
+            logger.debug("_pb_change_count failed", exc_info=True)
             return None
 
-        sel_value = objc.sel_registerName(b"valueForKey:")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_void_p
-        ns_number = objc.objc_msgSend(pb, sel_value, key)
-        if not ns_number:
-            return None
 
-        sel_int = objc.sel_registerName(b"integerValue")
-        objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        objc.objc_msgSend.restype = ctypes.c_long
-        return objc.objc_msgSend(ns_number, sel_int)
-    except Exception:
-        logger.debug("_pb_change_count failed", exc_info=True)
-        return None
+def _pb_clear_contents() -> bool:
+    """Clear all items from the general pasteboard."""
+    objc, pb = _init_nspasteboard()
+    if not pb:
+        return False
+
+    with _objc_lock:
+        try:
+            sel_clear = objc.sel_registerName(b"clearContents")
+            objc.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+            objc.objc_msgSend(pb, sel_clear)
+            return True
+        except Exception:
+            logger.debug("_pb_clear_contents failed", exc_info=True)
+            return False
+
+
+def _pb_set_data_for_type(uti: bytes, data: bytes) -> bool:
+    """Set pasteboard data for a UTI type."""
+    objc, pb = _init_nspasteboard()
+    if not pb:
+        return False
+
+    with _objc_lock:
+        try:
+            ns_uti = _nsstring(objc, uti)
+            if not ns_uti:
+                return False
+
+            sel_data_with_bytes = objc.sel_registerName(b"dataWithBytes:length:")
+            ns_data_cls = objc.objc_getClass(b"NSData")
+            objc.objc_msgSend.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_ulong,
+            ]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+            ns_data = objc.objc_msgSend(ns_data_cls, sel_data_with_bytes, data, len(data))
+            if not ns_data:
+                return False
+
+            sel_set_data = objc.sel_registerName(b"setData:forType:")
+            objc.objc_msgSend.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ]
+            objc.objc_msgSend.restype = ctypes.c_void_p
+            objc.objc_msgSend(pb, sel_set_data, ns_data, ns_uti)
+            return True
+        except Exception:
+            logger.debug("_pb_set_data_for_type(%s) failed", uti, exc_info=True)
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -369,8 +425,7 @@ class _ClipboardReader(ClipboardReader):
             return raw
         return b""
 
-    @staticmethod
-    def _get_image_via_applescript() -> bytes:
+    def _get_image_via_applescript(self) -> bytes:
         """Read clipboard image using plain AppleScript — no AppKit needed.
 
         This avoids macOS TCC (Transparency, Consent, and Control)
@@ -510,7 +565,18 @@ class _ClipboardReader(ClipboardReader):
 
 class _ClipboardWriter(ClipboardWriter):
     def write(self, content: ClipboardContent):
-        for fmt_type, data in content.types.items():
+        # Try atomic multi-format write via ctypes NSPasteboard bridge.
+        if self._write_atomic(content):
+            return
+
+        # Fallback: write formats individually (best-effort, TEXT last).
+        # Each subprocess call replaces the entire clipboard, so write
+        # the most important format (TEXT) last so it survives.
+        _TEXT_LAST = {ContentType.TEXT: 1}
+        for fmt_type, data in sorted(
+            content.types.items(),
+            key=lambda item: _TEXT_LAST.get(item[0], 0),
+        ):
             if fmt_type == ContentType.TEXT:
                 self._set_text(data)
             elif fmt_type == ContentType.HTML:
@@ -519,6 +585,57 @@ class _ClipboardWriter(ClipboardWriter):
                 self._set_rtf(data)
             elif fmt_type == ContentType.IMAGE_PNG:
                 self._set_image(data, content.image_fmt)
+
+    def _write_atomic(self, content: ClipboardContent) -> bool:
+        """Write all formats atomically via ctypes NSPasteboard.
+
+        Uses clearContents + setData:forType: so every format lands
+        on the pasteboard together.  Returns False (fall through to
+        subprocess fallback) if the ctypes bridge is unavailable.
+        """
+        objc, pb = _init_nspasteboard()
+        if not pb:
+            return False
+
+        # Build list of (UTI, data) pairs with format conversion.
+        write_ops = []
+        for fmt_type, data in content.types.items():
+            if fmt_type == ContentType.TEXT:
+                write_ops.append((b"public.utf8-plain-text", data))
+            elif fmt_type == ContentType.HTML:
+                write_ops.append((b"public.html", data))
+            elif fmt_type == ContentType.RTF:
+                write_ops.append((b"public.rtf", data))
+            elif fmt_type == ContentType.IMAGE_PNG:
+                if content.image_fmt == "tiff":
+                    write_ops.append((b"public.tiff", data))
+                elif content.image_fmt == "bmp":
+                    try:
+                        from PIL import Image
+                        img = Image.open(BytesIO(data))
+                        buf = BytesIO()
+                        img.save(buf, format="PNG")
+                        write_ops.append((b"public.png", buf.getvalue()))
+                    except Exception:
+                        logger.debug("BMP→PNG conversion failed for atomic write")
+                        continue
+                else:
+                    write_ops.append((b"public.png", data))
+            # IMAGE_EMF is Windows-only, skip.
+
+        if not write_ops:
+            return False
+
+        if not _pb_clear_contents():
+            logger.debug("atomic write: clearContents failed, falling back")
+            return False
+
+        for uti, fmt_data in write_ops:
+            logger.debug("Atomic write: %s (%d bytes)", uti, len(fmt_data))
+            _pb_set_data_for_type(uti, fmt_data)
+
+        logger.debug("Atomic multi-format write: %d format(s)", len(write_ops))
+        return True
 
     def _set_text(self, data: bytes):
         try:
@@ -584,7 +701,6 @@ class _ClipboardWriter(ClipboardWriter):
         tmp_path = None
         try:
             if image_fmt == "tiff":
-                # TIFF passthrough: write natively via «class TIFF» (zero loss)
                 with tempfile.NamedTemporaryFile(
                     suffix=".tiff", delete=False,
                 ) as f:
@@ -595,7 +711,6 @@ class _ClipboardWriter(ClipboardWriter):
                     f'as «class TIFF»)'
                 )
             elif image_fmt == "bmp":
-                # BMP → PNG conversion for macOS pasteboard
                 from PIL import Image
                 img = Image.open(BytesIO(data))
                 with tempfile.NamedTemporaryFile(
@@ -608,7 +723,6 @@ class _ClipboardWriter(ClipboardWriter):
                     f'as «class PNGf»)'
                 )
             else:
-                # PNG or legacy: write raw bytes directly (PIL validation only)
                 from PIL import Image
                 Image.open(BytesIO(data))
                 with tempfile.NamedTemporaryFile(

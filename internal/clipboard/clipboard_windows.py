@@ -157,7 +157,15 @@ class _ClipboardReader(ClipboardReader):
                 text = ctypes.string_at(ptr, size).decode("utf-16-le")
                 return text.rstrip("\x00").encode("utf-8")
             else:
-                return ctypes.string_at(ptr, size).rstrip(b"\x00")
+                # CF_TEXT is in the system ANSI code page; decode to Unicode
+                # and encode as UTF-8 for cross-platform consistency.
+                raw = ctypes.string_at(ptr, size).rstrip(b"\x00")
+                try:
+                    import locale
+                    codepage = locale.getpreferredencoding()
+                except Exception:
+                    codepage = "utf-8"
+                return raw.decode(codepage, errors="replace").encode("utf-8")
         finally:
             kernel32.GlobalUnlock(handle)
 

@@ -642,10 +642,16 @@ class LocaleManager:
 
     @active.setter
     def active(self, locale: str) -> None:
-        if locale not in LOCALES:
+        # Normalize case: "zh-cn" → "zh-CN", "en-us" → "en-US"
+        parts = locale.split("-", 1)
+        if len(parts) == 2:
+            normalized = f"{parts[0].lower()}-{parts[1].upper()}"
+        else:
+            normalized = locale.lower()
+        if normalized not in LOCALES and locale not in LOCALES:
             logger.warning("Unknown locale '%s', falling back to '%s'", locale, DEFAULT_LOCALE)
-            locale = DEFAULT_LOCALE
-        self._active = locale
+            normalized = DEFAULT_LOCALE
+        self._active = normalized if normalized in LOCALES else locale
 
     @property
     def available(self) -> list[str]:
