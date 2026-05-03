@@ -188,6 +188,18 @@ class SystrayApp:
             menu,
         )
 
+        # Left-click opens dashboard; right-click still shows the menu.
+        # Works on Windows (_win32.py → _on_notify → self()) and GTK Linux
+        # (_gtk.py → _on_status_icon_activate → self()). AppIndicator
+        # doesn't support separate left-click — menu is always shown.
+        _orig_call = self._tray.__call__
+        def _left_click():
+            if self._on_open_dashboard:
+                self._on_open_dashboard()
+            else:
+                _orig_call()
+        self._tray.__call__ = _left_click
+
         # Register custom message handler so set_peers() can safely
         # trigger menu updates from the peer updater thread.
         if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):

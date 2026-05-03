@@ -52,6 +52,8 @@ from internal.web.server import WebServer
 
 logger = logging.getLogger(__name__)
 
+_console_handler: logging.StreamHandler | None = None
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Module-level helpers (must be picklable for macOS multiprocessing)
@@ -351,13 +353,15 @@ class Application:
     def setup_logging() -> None:
         import logging.handlers
 
+        global _console_handler
+
         log_dir = _get_log_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
 
         raw = os.environ.get("CLIPSYNC_LOG_LEVEL", "").upper()
         level_map = {"DEBUG": logging.DEBUG, "INFO": logging.INFO,
                      "WARNING": logging.WARNING, "ERROR": logging.ERROR}
-        app_level = level_map.get(raw, logging.INFO)
+        console_level = level_map.get(raw, logging.INFO)
 
         file_fmt = logging.Formatter(
             "%(asctime)s.%(msecs)03d [%(levelname)-8s] %(threadName)-12s "
@@ -369,8 +373,11 @@ class Application:
             datefmt="%H:%M:%S",
         )
 
+        # Root at DEBUG so all messages reach handlers; each handler
+        # filters at its own level. File always gets DEBUG; console is
+        # controlled by CLIPSYNC_LOG_LEVEL env or settings.
         root_logger = logging.getLogger()
-        root_logger.setLevel(app_level)
+        root_logger.setLevel(logging.DEBUG)
 
         file_handler = logging.handlers.RotatingFileHandler(
             log_dir / "clipsync.log",
@@ -382,10 +389,10 @@ class Application:
         file_handler.setFormatter(file_fmt)
         root_logger.addHandler(file_handler)
 
-        console_handler = logging.StreamHandler(sys.stderr)
-        console_handler.setLevel(app_level)
-        console_handler.setFormatter(console_fmt)
-        root_logger.addHandler(console_handler)
+        _console_handler = logging.StreamHandler(sys.stderr)
+        _console_handler.setLevel(console_level)
+        _console_handler.setFormatter(console_fmt)
+        root_logger.addHandler(_console_handler)
 
         for noisy in ("zeroconf", "PIL", "cryptography", "urllib3"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
@@ -708,7 +715,11 @@ class Application:
         if cfg.log_level:
             level = getattr(logging, cfg.log_level.upper(), None)
             if level is not None:
-                logging.getLogger().setLevel(level)
+                # Only change console handler; file handler stays at DEBUG
+                for h in logging.getLogger().handlers:
+                    if h is _console_handler:
+                        h.setLevel(level)
+                        break
 
     # ═══════════════════════════════════════════════════════════════
     # Phase 8: UI
@@ -1332,6 +1343,7 @@ class Application:
             get_config=self._get_cfg,
             save_config=self._save_cfg_and_peers,
             on_closed=_on_closed,
+            on_quit=self.shutdown,
             on_export_logs=self.export_logs,
             get_filter_categories=lambda: self.content_filter.enabled_categories,
             set_filter_categories=lambda cats: (

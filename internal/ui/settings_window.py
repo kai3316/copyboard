@@ -37,6 +37,7 @@ class SettingsWindow:
         get_filter_categories: Callable | None = None,
         set_filter_categories: Callable | None = None,
         get_log_text: Callable | None = None,
+        on_quit: Callable | None = None,
     ):
         self._root = root
         self._get_config = get_config
@@ -46,6 +47,7 @@ class SettingsWindow:
         self._get_filter_categories = get_filter_categories
         self._set_filter_categories = set_filter_categories
         self._get_log_text = get_log_text
+        self._on_quit = on_quit
 
         self._window: ctk.CTkToplevel | None = None
         self._dark_mode = get_config().appearance_mode == "dark"
@@ -142,6 +144,10 @@ class SettingsWindow:
         if self._on_closed is not None:
             self._on_closed()
 
+    def _on_quit_click(self):
+        if self._on_quit:
+            self._on_quit()
+
     # ═══════════════════════════════════════════════════════════════
     # UI construction
     # ═══════════════════════════════════════════════════════════════
@@ -208,6 +214,13 @@ class SettingsWindow:
         )
         self._status_label.pack(side="left")
 
+        if self._on_quit:
+            ctk.CTkButton(
+                f_inner, text=T("tray.quit"), width=60, height=28,
+                fg_color="#E74C3C", text_color="white",
+                hover_color="#C0392B",
+                command=self._on_quit_click,
+            ).pack(side="right", padx=(6, 0))
         ctk.CTkButton(
             f_inner, text=T("ui.close"), width=60, height=28,
             fg_color="transparent", border_width=1,
@@ -578,10 +591,17 @@ class SettingsWindow:
             card2, text=T("settings_window.web_local_url"),
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(12, 4))
+        url_row = ctk.CTkFrame(card2, fg_color="transparent")
+        url_row.pack(fill="x", padx=16, pady=(4, 14))
         self._web_url_label = ctk.CTkLabel(
-            card2, text="", font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+            url_row, text="", font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
         )
-        self._web_url_label.pack(anchor="w", padx=16, pady=(0, 14))
+        self._web_url_label.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(
+            url_row, text=T("ui.copy"), width=60, height=28,
+            font=ctk.CTkFont(size=11),
+            command=self._on_copy_url,
+        ).pack(side="right")
 
         # Refresh QR and URL
         self._refresh_web_qr()
@@ -652,6 +672,13 @@ class SettingsWindow:
         if self._web_token_var:
             self._web_token_var.set("")
         self._refresh_web_qr()
+
+    def _on_copy_url(self):
+        url = self._web_url_label.cget("text") if self._web_url_label else ""
+        if url:
+            self._window.clipboard_clear()
+            self._window.clipboard_append(url)
+            show_info(self._window, T("dialog.info"), T("footer.copied"))
 
     def _on_save_web(self):
         cfg = self._get_config()
