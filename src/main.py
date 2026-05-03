@@ -1049,6 +1049,12 @@ class Application:
             on_cancel_transfer=lambda tid: self.file_transfer_mgr.cancel_transfer(
                 tid, self.transport_mgr.broadcast,
             ),
+            on_pause_transfer=lambda tid: self.file_transfer_mgr.pause_transfer(
+                tid, self.transport_mgr.broadcast,
+            ),
+            on_resume_transfer=lambda tid: self.file_transfer_mgr.resume_transfer(
+                tid, self.transport_mgr.broadcast,
+            ),
             get_pending_pairings=self._get_pending,
             on_pair=self._on_pair,
             on_unpair=self._on_unpair,

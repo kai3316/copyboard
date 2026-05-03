@@ -59,6 +59,8 @@ class DashboardWindow:
         on_toggle_autostart: Callable | None = None,
         get_transfers: Callable | None = None,
         on_cancel_transfer: Callable | None = None,
+        on_pause_transfer: Callable | None = None,
+        on_resume_transfer: Callable | None = None,
         # Pairing
         get_pending_pairings: Callable | None = None,
         on_pair: Callable | None = None,
@@ -102,6 +104,8 @@ class DashboardWindow:
         self._on_toggle_autostart_cb = on_toggle_autostart
         self._get_transfers = get_transfers
         self._on_cancel_transfer = on_cancel_transfer
+        self._on_pause_transfer = on_pause_transfer
+        self._on_resume_transfer = on_resume_transfer
         self._get_pending = get_pending_pairings
         self._on_pair = on_pair
         self._on_unpair = on_unpair
@@ -1945,11 +1949,15 @@ class DashboardWindow:
             "receiving": T("transfer.state.receiving"),
             "sending": T("transfer.state.sending"),
             "cancelled": T("transfer.state.cancelled"),
+            "paused": T("transfer.state.paused"),
+            "awaiting_retransmit": T("transfer.state.awaiting_retransmit"),
         }
+        if transfer.get("paused"):
+            state = "paused"
         status_text = state_labels.get(state, state.replace("_", " ").title())
 
         extras = []
-        if state in ("receiving", "sending"):
+        if state in ("receiving", "sending", "paused"):
             extras.append(f"{int(progress * 100)}%")
         if speed > 0:
             extras.append(self._format_speed(speed))
@@ -1970,17 +1978,47 @@ class DashboardWindow:
             bar.pack(fill="x", pady=(6, 0))
             bar.set(progress)
 
-        # Cancel button
-        if self._on_cancel_transfer and state not in ("complete", "failed", "cancelled", "error"):
-            ctk.CTkButton(
-                inner, text=T("ui.cancel"), width=60, height=22,
-                fg_color="transparent", border_width=1,
-                text_color=("#E74C3C", "#C0392B"),
-                border_color=("#E74C3C", "#C0392B"),
-                hover_color=("#FADBD8", "#5B2C2C"),
-                font=ctk.CTkFont(size=10),
-                command=lambda tid=transfer.get("transfer_id", ""): self._on_cancel_transfer(tid),
-            ).pack(anchor="e", pady=(4, 0))
+        # Action buttons (pause / resume / cancel)
+        paused = transfer.get("paused", False)
+        if state in ("sending", "receiving") and (
+            self._on_pause_transfer or self._on_resume_transfer or self._on_cancel_transfer
+        ):
+            btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+            btn_row.pack(fill="x", pady=(4, 0))
+            tid = transfer.get("transfer_id", "")
+
+            if self._on_pause_transfer and not paused:
+                ctk.CTkButton(
+                    btn_row, text=T("ui.pause"), width=56, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#E67E22", "#F0A04B"),
+                    border_color=("#E67E22", "#F0A04B"),
+                    hover_color=("#FDEBD0", "#5B3A1C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda t=tid: self._on_pause_transfer(t),
+                ).pack(side="left", padx=(0, 4))
+
+            if self._on_resume_transfer and paused:
+                ctk.CTkButton(
+                    btn_row, text=T("ui.resume"), width=56, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#27AE60", "#2ECC71"),
+                    border_color=("#27AE60", "#2ECC71"),
+                    hover_color=("#D5F5E3", "#1C4A2C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda t=tid: self._on_resume_transfer(t),
+                ).pack(side="left", padx=(0, 4))
+
+            if self._on_cancel_transfer:
+                ctk.CTkButton(
+                    btn_row, text=T("ui.cancel"), width=56, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#E74C3C", "#C0392B"),
+                    border_color=("#E74C3C", "#C0392B"),
+                    hover_color=("#FADBD8", "#5B2C2C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda t=tid: self._on_cancel_transfer(t),
+                ).pack(side="left")
 
     def _create_transfer_history_card(self, entry: dict):
         direction = entry.get("direction", "down")

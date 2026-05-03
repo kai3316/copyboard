@@ -56,7 +56,7 @@ def _mask_path(path: str) -> str:
 
 # ---- Constants -----------------------------------------------------------
 
-CHUNK_SIZE = 131072                    # 128 KB per chunk
+CHUNK_SIZE = 262144                    # 256 KB per chunk
 TRANSFER_TIMEOUT = 120.0               # seconds -- overall transfer deadline
 COMPLETION_WAIT_TIMEOUT = 60.0         # seconds -- wait for FILE_COMPLETE after last chunk
 SPEED_TEST_CHUNKS = 20                 # number of chunks for speed test (~1.3 MB)
@@ -851,11 +851,22 @@ class FileTransferManager:
             total_chunks, transfer_id[:8], _mask_file_name(file_name),
         )
 
+        # Mark state so get_transfers() shows progress / speed / ETA
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+            if transfer:
+                transfer["state"] = "sending"
+
         MAX_RETRANSMIT_ROUNDS = 3
 
-        def _send_one_chunk(fh, chunk_index: int, total: int) -> None:
-            """Seek + read + encode + send a single chunk from the open file handle."""
-            fh.seek(chunk_index * self.CHUNK_SIZE)
+        def _send_one_chunk(fh, chunk_index: int, total: int, *, seek: bool = True) -> None:
+            """Read + encode + send a single chunk from the open file handle.
+
+            Only seeks when *seek* is True (retransmit path); the sequential
+            first pass lets the file pointer advance naturally.
+            """
+            if seek:
+                fh.seek(chunk_index * self.CHUNK_SIZE)
             chunk_data = fh.read(self.CHUNK_SIZE)
             b64_data = base64.b64encode(chunk_data).decode("ascii")
             self._send_as_frame(
@@ -871,7 +882,7 @@ class FileTransferManager:
 
         try:
             with open(file_path, "rb") as fh:
-                # ---- first pass: send all chunks in order ----
+                # ---- first pass: send all chunks in order (no seek needed) ----
                 for chunk_index in range(total_chunks):
                     # Pause check — wait while paused (with cancellation check)
                     while True:
@@ -888,7 +899,7 @@ class FileTransferManager:
                                 break
                         time.sleep(0.5)
 
-                    _send_one_chunk(fh, chunk_index, total_chunks)
+                    _send_one_chunk(fh, chunk_index, total_chunks, seek=False)
 
                     progress = (chunk_index + 1) / total_chunks
                     bytes_sent = (chunk_index + 1) * self.CHUNK_SIZE
@@ -1012,6 +1023,7 @@ class FileTransferManager:
                     "progress": min(progress, 1.0),
                     "speed_bytes_per_sec": speed,
                     "eta_seconds": eta,
+                    "paused": t.get("paused", False),
                 })
         return result
 
