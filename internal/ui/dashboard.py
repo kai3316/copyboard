@@ -55,6 +55,7 @@ class DashboardWindow:
         set_sync_enabled: Callable,
         on_open_settings: Callable | None = None,
         on_send_file: Callable | None = None,
+        on_send_folder: Callable | None = None,
         on_toggle_autostart: Callable | None = None,
         get_transfers: Callable | None = None,
         on_cancel_transfer: Callable | None = None,
@@ -97,6 +98,7 @@ class DashboardWindow:
         self._set_sync = set_sync_enabled
         self._on_open_settings = on_open_settings
         self._on_send_file = on_send_file
+        self._on_send_folder = on_send_folder
         self._on_toggle_autostart_cb = on_toggle_autostart
         self._get_transfers = get_transfers
         self._on_cancel_transfer = on_cancel_transfer
@@ -1650,6 +1652,11 @@ class DashboardWindow:
             ctk.CTkButton(
                 header, text=T("ui.send_file"), width=90, height=30,
                 command=self._on_send_file,
+            ).pack(side="right", padx=(4, 0))
+        if self._on_send_folder:
+            ctk.CTkButton(
+                header, text=T("ui.send_folder"), width=90, height=30,
+                command=self._on_send_folder,
             ).pack(side="right")
 
         # ── Speed Test card ──────────────────────────────────────

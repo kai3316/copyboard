@@ -88,6 +88,10 @@ class SystrayApp:
         self._peers: list[str] = []
 
         # Custom message for thread-safe menu updates on Windows.
+        # _update_menu() calls DestroyMenu on the current HMENU, which
+        # conflicts with TrackPopupMenuEx if the context menu is open.
+        # Posting WM_UPDATE_MENU guarantees _update_menu() runs on the
+        # tray thread after any open menu has closed.
         if sys.platform == "win32":
             self._WM_UPDATE_MENU = 0x8000 + 0x100  # WM_APP + 256
 
@@ -98,10 +102,19 @@ class SystrayApp:
         self._peers = peers
         if self._tray is None:
             return
-        # Rebuild the full menu with current peer list so the submenu
-        # items are static — avoids issues with pystray callable-based
-        # dynamic submenus not refreshing on _update_menu().
+        if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
+            hwnd = getattr(self._tray, "_hwnd", None)
+            if hwnd:
+                ctypes.windll.user32.PostMessageW(
+                    hwnd, self._WM_UPDATE_MENU, 0, 0)
+                return
+        # Non-Windows (or fallback): direct update
         self._tray.menu = self._build_full_menu()
+
+    def _apply_pending_menu(self):
+        """Apply the latest peer menu on the tray thread (WM_UPDATE_MENU handler)."""
+        if self._tray:
+            self._tray.menu = self._build_full_menu()
 
     def _build_peer_menu(self) -> pystray.Menu:
         """Build the peer submenu with static items."""
@@ -153,6 +166,13 @@ class SystrayApp:
             "ClipSync",
             menu,
         )
+
+        # Register custom message handler so set_peers() can safely
+        # trigger menu updates from the peer updater thread.
+        if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
+            self._tray._message_handlers[self._WM_UPDATE_MENU] = (
+                lambda w, l: self._apply_pending_menu() or 0
+            )
 
         notification_mgr.set_tray(self._tray)
         self._tray.run()

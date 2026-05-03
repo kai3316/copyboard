@@ -62,6 +62,17 @@ class SyncManager:
         with self._lock:
             self._enabled = enabled
 
+    def reset_dedup_for_restore(self):
+        """Clear dedup state so a history-restore write is not suppressed.
+
+        Call before manually writing content to the clipboard (e.g. from
+        the history panel) so the ensuing monitor event will be synced to
+        peers instead of being filtered as a duplicate.
+        """
+        with self._lock:
+            self._last_local_hash = None
+            self._suppress_monitor_until = 0.0
+
     def start(self):
         self._monitor.start(self._on_clipboard_change)
         logger.info("SyncManager started on %s", self._device_name)
@@ -169,6 +180,8 @@ class SyncManager:
         """Read clipboard after debounce, then broadcast if content is new."""
         with self._lock:
             self._pending_timer = None
+            if not self._enabled:
+                return
 
         content = self._reader.read()
         if content.is_empty():

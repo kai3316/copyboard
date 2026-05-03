@@ -790,21 +790,38 @@ class Application:
     def send_file(self) -> None:
         self.root.after(0, self._do_send_file)
 
+    def send_folder(self) -> None:
+        self.root.after(0, self._do_send_folder)
+
     def _do_send_file(self) -> None:
-        file_path = filedialog.askopenfilename(
+        file_paths = filedialog.askopenfilenames(
             parent=self.root,
-            title="Select File to Send",
+            title="Select Files to Send",
             filetypes=[("All files", "*")],
         )
-        if not file_path:
+        if not file_paths:
             return
+        if len(file_paths) == 1:
+            self._send_single_path(file_paths[0])
+        else:
+            self._send_as_zip(file_paths)
+
+    def _do_send_folder(self) -> None:
+        folder = filedialog.askdirectory(
+            parent=self.root,
+            title="Select Folder to Send",
+        )
+        if not folder:
+            return
+        self._send_as_zip([folder])
+
+    def _send_single_path(self, file_path: str) -> None:
+        """Send a single file directly (no zipping)."""
         try:
             transfer_id = self.file_transfer_mgr.send_file(
                 file_path, self.transport_mgr.broadcast,
             )
             logger.info("File transfer initiated: %s", transfer_id[:8])
-            # Use a non-blocking notification instead of a modal dialog
-            # to avoid white/blank popup on macOS and main-thread blocking.
             notification_mgr.show("File Transfer",
                                   T("transfer.sending_file", name=os.path.basename(file_path)))
         except FileNotFoundError:
@@ -815,6 +832,44 @@ class Application:
         except OSError as e:
             show_error(self.root, "Error", f"Failed to send file:\n{e}")
             logger.error("Failed to send file: %s", e)
+
+    def _send_as_zip(self, paths: list[str]) -> None:
+        """Zip one or more files/folders into a temp archive and send it."""
+        import tempfile, zipfile
+        from pathlib import Path
+        try:
+            # Determine a base name for the zip from the selected items
+            names = [os.path.basename(p.rstrip(os.sep).rstrip("/")) for p in paths]
+            base = names[0] if len(names) == 1 else f"files-{len(names)}"
+            zip_name = f"{base}.zip"
+
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+
+            with zipfile.ZipFile(str(tmp_path), "w", zipfile.ZIP_DEFLATED) as zf:
+                for path in paths:
+                    p = Path(path)
+                    if p.is_file():
+                        zf.write(str(p), p.name)
+                    elif p.is_dir():
+                        for fpath in sorted(p.rglob("*")):
+                            if fpath.is_file():
+                                arcname = str(fpath.relative_to(p.parent))
+                                zf.write(str(fpath), arcname)
+
+            transfer_id = self.file_transfer_mgr.send_file(
+                str(tmp_path), self.transport_mgr.broadcast,
+            )
+            logger.info("Zip transfer initiated: %s (%d items)", transfer_id[:8], len(paths))
+            notification_mgr.show("File Transfer",
+                                  T("transfer.sending_file", name=zip_name))
+        except FileNotFoundError:
+            show_error(self.root, "Error", f"File not found")
+        except PermissionError:
+            show_error(self.root, "Error", "Permission denied")
+        except OSError as e:
+            show_error(self.root, "Error", f"Failed to create archive:\n{e}")
+            logger.error("Failed to zip and send: %s", e)
 
     def open_settings(self) -> None:
         self.root.after(0, self._create_settings_window)
@@ -866,6 +921,7 @@ class Application:
             on_toggle_visibility=self._on_toggle_visibility,
             on_open_settings=self.open_settings,
             on_send_file=self.send_file,
+            on_send_folder=self.send_folder,
             on_toggle_autostart=lambda enabled: (
                 enable_autostart() if enabled else disable_autostart()
             ),
@@ -1065,13 +1121,20 @@ class Application:
         if entry is None or "types" not in entry:
             return False
         types: dict = {}
-        _type_map = {"TEXT": _CT.TEXT, "HTML": _CT.HTML, "IMAGE": _CT.IMAGE_PNG, "RTF": _CT.RTF}
+        _type_map = {
+            "TEXT": _CT.TEXT, "HTML": _CT.HTML,
+            "IMAGE": _CT.IMAGE_PNG, "IMAGE_EMF": _CT.IMAGE_EMF,
+            "RTF": _CT.RTF,
+        }
         for key, b64_data in entry["types"].items():
             ct = _type_map.get(key)
             if ct is not None:
                 types[ct] = _b64.b64decode(b64_data)
         if types:
             content = ClipboardContent(types=types)
+            # Clear dedup state so the monitor event from this write
+            # is not suppressed — the restored content will sync to peers.
+            self.sync_mgr.reset_dedup_for_restore()
             create_writer().write(content)
             return True
         return False
@@ -1085,27 +1148,42 @@ class Application:
     def _clear_transfer_history(self) -> None:
         self.file_transfer_mgr.clear_history()
 
-    @staticmethod
-    def _open_file(file_path: str) -> None:
+    def _open_file(self, file_path: str) -> None:
         """Open a file with the default OS application."""
         import subprocess, sys as _sys
+        resolved = os.path.abspath(file_path) if file_path else ""
+        if not os.path.isfile(resolved):
+            show_error(self.root, T("ui.file_not_found_title"),
+                       T("ui.file_not_found_msg", path=file_path))
+            return
         try:
             if _sys.platform == "win32":
-                os.startfile(file_path)
+                os.startfile(resolved)
             elif _sys.platform == "darwin":
-                subprocess.run(["open", file_path], check=True)
+                subprocess.run(["open", resolved], check=True)
             else:
-                subprocess.run(["xdg-open", file_path], check=True)
+                subprocess.run(["xdg-open", resolved], check=True)
         except Exception as e:
-            logger.error("Failed to open file %s: %s", file_path, e)
+            logger.error("Failed to open file %s: %s", resolved, e)
+            show_error(self.root, T("ui.open_failed_title"),
+                       T("ui.open_failed_msg", path=resolved))
 
-    @staticmethod
-    def _open_folder(file_path: str) -> None:
+    def _open_folder(self, file_path: str) -> None:
         """Open the containing folder in the OS file manager."""
         import subprocess, sys as _sys
-        folder = os.path.dirname(file_path)
-        if not folder or not os.path.isdir(folder):
-            folder = os.path.expanduser("~")
+        resolved = os.path.abspath(file_path) if file_path else ""
+        if os.path.isfile(resolved):
+            folder = os.path.dirname(resolved)
+        elif os.path.isdir(resolved):
+            folder = resolved
+        else:
+            show_error(self.root, T("ui.file_not_found_title"),
+                       T("ui.file_not_found_msg", path=file_path))
+            return
+        if not os.path.isdir(folder):
+            show_error(self.root, T("ui.folder_not_found_title"),
+                       T("ui.folder_not_found_msg", path=folder))
+            return
         try:
             if _sys.platform == "win32":
                 os.startfile(folder)
@@ -1115,6 +1193,8 @@ class Application:
                 subprocess.run(["xdg-open", folder], check=True)
         except Exception as e:
             logger.error("Failed to open folder %s: %s", folder, e)
+            show_error(self.root, T("ui.open_failed_title"),
+                       T("ui.open_failed_msg", path=folder))
 
     def _retry_file_transfer(self, file_path: str) -> None:
         """Retry sending a file that previously failed."""

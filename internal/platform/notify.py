@@ -1,4 +1,6 @@
 import logging
+import queue
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -8,6 +10,8 @@ class NotificationManager:
         self._tray_icon = None  # set later via set_tray()
         self._enabled = True
         self._pipe = None  # multiprocessing pipe (macOS subprocess)
+        self._send_queue: queue.Queue | None = None
+        self._send_thread: threading.Thread | None = None
 
     @property
     def enabled(self) -> bool:
@@ -24,22 +28,46 @@ class NotificationManager:
     def set_pipe(self, pipe):
         """Set a multiprocessing pipe for macOS subprocess notifications.
 
-        When set, ``show()`` sends the notification through the pipe
-        instead of calling ``_tray_icon.notify()`` directly.  This is
-        needed on macOS where the tray runs in a subprocess and the
-        main process has no pystray Icon reference.
+        Starts a background daemon thread that drains a queue and sends
+        notifications through the pipe.  This prevents ``pipe.send()``
+        from ever blocking a calling thread (e.g. the main thread) when
+        the pipe buffer is full.
         """
         self._pipe = pipe
+        self._send_queue = queue.Queue()
+        self._send_thread = threading.Thread(
+            target=self._pipe_sender, daemon=True,
+            name="notify-pipe-sender",
+        )
+        self._send_thread.start()
+
+    def _pipe_sender(self):
+        """Background thread: drain _send_queue and forward to the pipe."""
+        while True:
+            try:
+                title, message = self._send_queue.get()
+                if title is None:  # sentinel to stop the thread
+                    break
+                try:
+                    self._pipe.send(("show_notification", title, message))
+                except Exception:
+                    logger.debug("Notification via pipe failed", exc_info=True)
+            except Exception:
+                break
 
     def show(self, title: str, message: str):
-        """Show a desktop notification if tray is available."""
+        """Show a desktop notification if tray is available.
+
+        On macOS the notification is queued for a background thread so
+        ``pipe.send()`` never blocks the calling thread.
+        """
         if not self._enabled:
             return
-        if self._pipe:
+        if self._send_queue is not None:
             try:
-                self._pipe.send(("show_notification", title, message))
-            except Exception:
-                logger.debug("Notification via pipe failed", exc_info=True)
+                self._send_queue.put_nowait((title, message))
+            except queue.Full:
+                pass  # drop notification if the queue is full (shouldn't happen)
             return
         if self._tray_icon:
             try:

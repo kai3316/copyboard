@@ -56,7 +56,7 @@ def _mask_path(path: str) -> str:
 
 # ---- Constants -----------------------------------------------------------
 
-CHUNK_SIZE = 65536                     # 64 KB per chunk
+CHUNK_SIZE = 262144                    # 256 KB per chunk
 TRANSFER_TIMEOUT = 120.0               # seconds -- overall transfer deadline
 COMPLETION_WAIT_TIMEOUT = 60.0         # seconds -- wait for FILE_COMPLETE after last chunk
 SPEED_TEST_CHUNKS = 20                 # number of chunks for speed test (~1.3 MB)
@@ -745,9 +745,6 @@ class FileTransferManager:
                             t["_last_activity"] = time.time()
                     if self._on_transfer_progress is not None:
                         self._on_transfer_progress(transfer_id, progress)
-
-                    # Small yield to avoid flooding socket buffers
-                    time.sleep(0.005)
 
         except Exception as exc:
             logger.error(

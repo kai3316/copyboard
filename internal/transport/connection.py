@@ -919,6 +919,10 @@ class TransportManager:
                         )
                         conn.set_on_disconnect(None)
                         conn.stop()
+                        # Clean up and schedule reconnect — we bypassed
+                        # _on_peer_disconnected so the stale entry won't
+                        # linger in _peers and cause repeated failures.
+                        self._on_peer_disconnected(peer_id, conn)
 
     def _handle_wake(self):
         """Disconnect stale connections and reconnect to previously known peers."""
