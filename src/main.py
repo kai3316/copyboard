@@ -887,29 +887,20 @@ class Application:
             import tkinter as _tk
             from tkinter import ttk as _ttk
 
-            _mac_dark = self.root._get_appearance_mode() == "dark"
-            _bg = "#2E2E2E" if _mac_dark else "#F0F0F0"
-            _fg = "#FFFFFF" if _mac_dark else "#000000"
-            _sub = "#AAAAAA" if _mac_dark else "#666666"
-
             dlg = _tk.Toplevel(self.root)
             dlg.title(T("transfer.creating_archive"))
             dlg.resizable(False, False)
-            dlg.configure(bg=_bg)
             dlg.geometry(f"{dw}x{dh}+{x}+{y}")
             dlg.protocol("WM_DELETE_WINDOW", lambda: cancel_event.set())
 
             _tk.Label(dlg, text=T("transfer.zipping", name=zip_name),
-                      font=("Helvetica", 13, "bold"),
-                      fg=_fg, bg=_bg).pack(pady=(20, 10))
+                      font=("Helvetica", 13, "bold")).pack(pady=(20, 10))
 
             progress_bar = _ttk.Progressbar(dlg, length=370, mode="determinate")
             progress_bar.pack(pady=(0, 8))
 
             status_var = tk.StringVar(value=T("transfer.preparing"))
-            _tk.Label(dlg, textvariable=status_var,
-                      font=("Helvetica", 11),
-                      fg=_sub, bg=_bg).pack()
+            _tk.Label(dlg, textvariable=status_var, font=("Helvetica", 11)).pack()
 
             _tk.Button(dlg, text=T("ui.cancel"),
                        command=lambda: cancel_event.set()).pack(pady=(12, 16))

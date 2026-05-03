@@ -1980,7 +1980,7 @@ class DashboardWindow:
 
         # Action buttons (pause / resume / cancel)
         paused = transfer.get("paused", False)
-        if state in ("sending", "receiving") and (
+        if state in ("sending", "receiving", "paused") and (
             self._on_pause_transfer or self._on_resume_transfer or self._on_cancel_transfer
         ):
             btn_row = ctk.CTkFrame(inner, fg_color="transparent")
