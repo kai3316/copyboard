@@ -872,11 +872,8 @@ class Application:
         dlg = _ctk.CTkToplevel(self.root)
         dlg.title(T("transfer.creating_archive"))
         dlg.resizable(False, False)
-        dlg.transient(self.root)
-        dlg.grab_set()
         dlg.protocol("WM_DELETE_WINDOW", lambda: cancel_event.set())
 
-        dlg.update_idletasks()
         dw, dh = 420, 170
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
@@ -917,6 +914,13 @@ class Application:
             command=lambda: cancel_event.set(),
         )
         cancel_btn.pack(pady=(0, 16))
+
+        # Render the dialog before starting background work.
+        # macOS in particular needs update() after all widgets are packed,
+        # and grab_set must come last to avoid blank windows.
+        dlg.update()
+        dlg.transient(self.root)
+        dlg.grab_set()
 
         # ── Background worker ──────────────────────────────────────
         def _worker():
