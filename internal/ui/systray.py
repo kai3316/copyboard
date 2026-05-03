@@ -75,6 +75,7 @@ class SystrayApp:
         on_open_settings: Callable | None = None,
         on_export_logs: Callable | None = None,
         on_quit: Callable | None = None,
+        on_show_web_qr: Callable | None = None,
     ):
         self._device_name = device_name
         self._on_enable_toggle = on_enable_toggle
@@ -82,7 +83,9 @@ class SystrayApp:
         self._on_open_settings = on_open_settings
         self._on_export_logs = on_export_logs
         self._on_quit_cb = on_quit
+        self._on_show_web_qr = on_show_web_qr
         self._syncing = True
+        self._web_enabled = False
         self._tray = None
         self._icon_image = _create_icon_image()
         self._peers: list[str] = []
@@ -97,6 +100,17 @@ class SystrayApp:
 
     def set_syncing(self, enabled: bool):
         self._syncing = enabled
+
+    def set_web_enabled(self, enabled: bool):
+        self._web_enabled = enabled
+        if self._tray is not None:
+            if sys.platform == "win32" and getattr(self, "_WM_UPDATE_MENU", None):
+                hwnd = getattr(self._tray, "_hwnd", None)
+                if hwnd:
+                    ctypes.windll.user32.PostMessageW(
+                        hwnd, self._WM_UPDATE_MENU, 0, 0)
+                    return
+            self._tray.menu = self._build_full_menu()
 
     def set_peers(self, peers: list[str]):
         self._peers = peers
@@ -130,7 +144,7 @@ class SystrayApp:
 
     def _build_full_menu(self) -> pystray.Menu:
         """Build the complete tray menu."""
-        return pystray.Menu(
+        menu_items = [
             pystray.MenuItem("ClipSync", None, enabled=False),
             pystray.MenuItem(
                 T("tray.device", name=self._device_name), None, enabled=False,
@@ -149,11 +163,18 @@ class SystrayApp:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(T("tray.settings"), self._on_open_settings_click),
+        ]
+        if self._web_enabled:
+            menu_items.append(
+                pystray.MenuItem(T("tray.show_web_qr"), self._on_show_web_qr_click),
+            )
+        menu_items.extend([
             pystray.MenuItem(T("tray.export_logs"), self._on_export_logs_click),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(T("tray.about"), self._on_about),
             pystray.MenuItem(T("tray.quit"), self._on_quit),
-        )
+        ])
+        return pystray.Menu(*menu_items)
 
     def run(self):
         """Run the system tray. Blocks until quit."""
@@ -200,6 +221,10 @@ class SystrayApp:
     def _on_export_logs_click(self, icon, item):
         if self._on_export_logs:
             self._on_export_logs()
+
+    def _on_show_web_qr_click(self, icon, item):
+        if self._on_show_web_qr:
+            self._on_show_web_qr()
 
     def _on_about(self, icon, item):
         if self._tray:

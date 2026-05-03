@@ -59,6 +59,11 @@ class Config:
     # UI preferences
     appearance_mode: str = "system"     # "system", "light", "dark"
     language: str = "en"                # locale code: "en", "zh-CN"
+    # Web companion
+    web_enabled: bool = False
+    web_port: int = 19991
+    web_token: str = ""
+    web_history_limit: int = 5
 
     def add_peer(self, peer: PeerInfo):
         self.peers[peer.device_id] = peer
@@ -118,6 +123,8 @@ def load() -> Config:
             "encryption_password_hash",
             "appearance_mode",
             "language",
+            "web_enabled", "web_port",
+            "web_token", "web_history_limit",
         ):
             if key in data:
                 setattr(cfg, key, data[key])
@@ -178,6 +185,10 @@ def save(cfg: Config, enc_mgr: "EncryptionManager | None" = None):
         "encryption_password_hash": cfg.encryption_password_hash,
         "appearance_mode": cfg.appearance_mode,
         "language": cfg.language,
+        "web_enabled": cfg.web_enabled,
+        "web_port": cfg.web_port,
+        "web_token": cfg.web_token,
+        "web_history_limit": cfg.web_history_limit,
         "peers": [
             {
                 "device_id": p.device_id,

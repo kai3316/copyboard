@@ -70,6 +70,15 @@ class SettingsWindow:
         self._log_level_var: tk.StringVar | None = None
         self._language_var: tk.StringVar | None = None
         self._notifications_var: tk.BooleanVar | None = None
+        # Web companion vars
+        self._web_enabled_var: tk.BooleanVar | None = None
+        self._web_port_var: tk.StringVar | None = None
+        self._web_history_limit_var: tk.StringVar | None = None
+        self._web_token_var: tk.StringVar | None = None
+        self._web_ip_label: ctk.CTkLabel | None = None
+        self._web_qr_label: ctk.CTkLabel | None = None
+        self._web_qr_image: ctk.CTkImage | None = None
+        self._web_url_label: ctk.CTkLabel | None = None
 
     # ═══════════════════════════════════════════════════════════════
     # Public API
@@ -172,6 +181,7 @@ class SettingsWindow:
         # Build panels
         self._panels["network"] = self._build_network_panel()
         self._panels["appearance"] = self._build_appearance_panel()
+        self._panels["web_companion"] = self._build_web_companion_panel()
         self._panels["filter"] = self._build_filter_panel()
         self._panels["security"] = self._build_security_panel()
         self._panels["advanced"] = self._build_advanced_panel()
@@ -212,13 +222,14 @@ class SettingsWindow:
         inner.pack(fill="both", expand=True, padx=8, pady=16)
 
         nav = [
-            ("network",    T("settings_nav.network")),
-            ("appearance", T("settings_nav.appearance")),
-            ("filter",     T("settings_nav.filter")),
-            ("security",   T("settings_nav.security")),
-            ("advanced",   T("settings_nav.advanced")),
-            ("logs",       T("settings_nav.logs")),
-            ("about",      T("settings_nav.about")),
+            ("network",       T("settings_nav.network")),
+            ("appearance",    T("settings_nav.appearance")),
+            ("web_companion", T("settings_nav.web_companion")),
+            ("filter",        T("settings_nav.filter")),
+            ("security",      T("settings_nav.security")),
+            ("advanced",      T("settings_nav.advanced")),
+            ("logs",          T("settings_nav.logs")),
+            ("about",         T("settings_nav.about")),
         ]
 
         for key, label in nav:
@@ -426,6 +437,243 @@ class SettingsWindow:
             self._status_label.configure(text=T("footer.settings_saved"))
         except Exception:
             pass
+
+    # ═══════════════════════════════════════════════════════════════
+    # Panel: Web Companion
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_web_companion_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        cfg = self._get_config()
+
+        scroll = ctk.CTkScrollableFrame(panel, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            scroll, text=T("settings_window.web_companion_title"),
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ctk.CTkLabel(
+            scroll, text=T("settings_window.web_companion_desc"),
+            font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+            wraplength=480,
+        ).pack(anchor="w", pady=(0, 16))
+
+        # ── Enable toggle ──────────────────────────────────────
+        card1 = ctk.CTkFrame(scroll, corner_radius=12)
+        card1.pack(fill="x", pady=(0, 12))
+
+        self._web_enabled_var = tk.BooleanVar(value=cfg.web_enabled)
+        sw = ctk.CTkSwitch(
+            card1, text=T("settings_window.web_enable"),
+            variable=self._web_enabled_var,
+            font=ctk.CTkFont(size=13),
+        )
+        sw.pack(anchor="w", padx=16, pady=(14, 14))
+
+        # ── Port ───────────────────────────────────────────────
+        card2 = ctk.CTkFrame(scroll, corner_radius=12)
+        card2.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_port"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 8))
+
+        row = ctk.CTkFrame(card2, fg_color="transparent")
+        row.pack(fill="x", padx=16, pady=(0, 4))
+        self._web_port_var = tk.StringVar(value=str(cfg.web_port))
+        ctk.CTkEntry(
+            row, textvariable=self._web_port_var, width=80, height=32,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(
+            row, text=T("settings_window.web_port_hint"),
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        ).pack(side="left")
+
+        # ── History limit ──────────────────────────────────────
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_history_limit"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+
+        row2 = ctk.CTkFrame(card2, fg_color="transparent")
+        row2.pack(fill="x", padx=16, pady=(0, 8))
+        self._web_history_limit_var = tk.StringVar(value=str(cfg.web_history_limit))
+        ctk.CTkEntry(
+            row2, textvariable=self._web_history_limit_var, width=80, height=32,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(
+            row2, text=T("settings_window.web_history_limit_desc"),
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        ).pack(side="left")
+
+        # ── Token management ────────────────────────────────────
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_token"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(16, 2))
+
+        token_row = ctk.CTkFrame(card2, fg_color="transparent")
+        token_row.pack(fill="x", padx=16, pady=(4, 4))
+        self._web_token_var = tk.StringVar(value=cfg.web_token or "")
+        token_entry = ctk.CTkEntry(
+            token_row, textvariable=self._web_token_var, height=32,
+            state="readonly", font=ctk.CTkFont(size=11),
+        )
+        token_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            token_row, text=T("settings_window.web_token_regenerate"),
+            width=90, height=32, font=ctk.CTkFont(size=11),
+            command=self._on_regenerate_token,
+        ).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(
+            token_row, text=T("settings_window.web_token_clear"),
+            width=60, height=32, font=ctk.CTkFont(size=11),
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray60"),
+            border_color=("gray60", "gray50"),
+            command=self._on_clear_token,
+        ).pack(side="left")
+
+        # ── LAN IP ────────────────────────────────────────────
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_ip"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        self._web_ip_label = ctk.CTkLabel(
+            card2, text=self._get_lan_ip(),
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+
+        # ── QR Code ───────────────────────────────────────────
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_qr"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 4))
+
+        qr_frame = ctk.CTkFrame(card2, corner_radius=8,
+                                fg_color=("gray95", "gray17"))
+        qr_frame.pack(padx=16, pady=(4, 4))
+        self._web_qr_label = ctk.CTkLabel(qr_frame, text="")
+        self._web_qr_label.pack(padx=20, pady=20)
+
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_qr_hint"),
+            font=ctk.CTkFont(size=11),
+            text_color=("gray55", "gray55"),
+        ).pack(anchor="w", padx=16, pady=(0, 2))
+
+        # ── URL ───────────────────────────────────────────────
+        ctk.CTkLabel(
+            card2, text=T("settings_window.web_local_url"),
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 4))
+        self._web_url_label = ctk.CTkLabel(
+            card2, text="", font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
+        )
+        self._web_url_label.pack(anchor="w", padx=16, pady=(0, 14))
+
+        # Refresh QR and URL
+        self._refresh_web_qr()
+
+        # ── Save button ───────────────────────────────────────
+        ctk.CTkButton(
+            scroll, text=T("settings_window.save_web"),
+            width=200, height=36, command=self._on_save_web,
+        ).pack(anchor="w", pady=(4, 16))
+
+        return panel
+
+    def _get_lan_ip(self) -> str:
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0)
+            s.connect(("10.254.254.254", 1))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    def _refresh_web_qr(self):
+        if not self._web_qr_label:
+            return
+        try:
+            import qrcode as _qrcode
+            from io import BytesIO
+            from PIL import Image, ImageTk
+
+            token = self._web_token_var.get() if self._web_token_var else ""
+            port = self._web_port_var.get() if self._web_port_var else "19991"
+            ip = self._get_lan_ip()
+            url = f"http://{ip}:{port}?token={token}" if token else f"http://{ip}:{port}"
+
+            if self._web_url_label:
+                self._web_url_label.configure(text=url)
+
+            if token:
+                img = _qrcode.make(url)
+                img = img.resize((200, 200), Image.LANCZOS)
+                self._web_qr_image = ctk.CTkImage(
+                    light_image=img, dark_image=img, size=(200, 200),
+                )
+                self._web_qr_label.configure(image=self._web_qr_image, text="")
+            else:
+                self._web_qr_label.configure(
+                    image=None,
+                    text="(no token — enable and save to generate)",
+                    font=ctk.CTkFont(size=11),
+                    text_color=("gray50", "gray60"),
+                )
+        except Exception as e:
+            logger.debug("QR code generation failed: %s", e)
+            if self._web_qr_label:
+                self._web_qr_label.configure(image=None, text="(QR unavailable)")
+
+    def _on_regenerate_token(self):
+        import secrets
+        new_token = secrets.token_urlsafe(16)
+        if self._web_token_var:
+            self._web_token_var.set(new_token)
+        self._refresh_web_qr()
+
+    def _on_clear_token(self):
+        if self._web_token_var:
+            self._web_token_var.set("")
+        self._refresh_web_qr()
+
+    def _on_save_web(self):
+        cfg = self._get_config()
+        try:
+            port = int(self._web_port_var.get())
+            if not 1024 <= port <= 65535:
+                raise ValueError
+        except ValueError:
+            show_warning(self._window, T("dialog.invalid"), T("settings_window.port_invalid"))
+            return
+
+        try:
+            limit = int(self._web_history_limit_var.get()) if self._web_history_limit_var else 5
+            if not 1 <= limit <= 20:
+                raise ValueError
+        except ValueError:
+            show_warning(self._window, T("dialog.invalid"), "History limit must be 1–20")
+            return
+
+        cfg.web_enabled = self._web_enabled_var.get()
+        cfg.web_port = port
+        cfg.web_history_limit = limit
+        cfg.web_token = self._web_token_var.get()
+        self._save_config()
+
+        if self._status_label:
+            self._status_label.configure(text=T("settings_window.web_saved"))
+        show_info(self._window, T("dialog.saved"), T("settings_window.web_saved"))
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Content Filter

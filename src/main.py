@@ -165,15 +165,44 @@ def _remove_lock():
 
 
 def _pid_alive(pid: int) -> bool:
-    """Return True if the given PID is still running."""
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except OSError:
-        # PermissionError on Windows means process exists
-        return True
+    """Return True if the given PID belongs to a running ClipSync instance."""
+    if sys.platform == "win32":
+        # os.kill(pid, 0) is unreliable on Windows (signal 0 not supported,
+        # raises OSError for unrelated reasons). Use Win32 API to check the
+        # process image name so we don't get fooled by PID reuse.
+        try:
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(
+                0x0400 | 0x0010, False, pid,
+            )  # PROCESS_QUERY_INFORMATION | PROCESS_VM_READ
+            if not handle:
+                return False
+            buf = ctypes.create_unicode_buffer(260)
+            size = wintypes.DWORD(260)
+            ok = kernel32.QueryFullProcessImageNameW(
+                handle, 0, buf, ctypes.byref(size),
+            )
+            kernel32.CloseHandle(handle)
+            if not ok:
+                return False
+            name = buf.value.lower()
+            return "python" in name
+        except Exception:
+            return False
+    else:
+        # Unix: signal 0 + verify cmdline contains python
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, OSError):
+            return False
+        try:
+            from pathlib import Path
+            cmdline = Path(f"/proc/{pid}/cmdline").read_text()
+            return "python" in cmdline and "clipsync" in cmdline
+        except Exception:
+            return True  # can't verify, err on safe side
 
 
 def _check_and_cleanup_stale_lock() -> bool:
@@ -947,6 +976,32 @@ class Application:
         dlg.transient(self.root)
         dlg.grab_set()
 
+    def _on_web_action(self, action: dict) -> None:
+        """Handle web server control actions from dashboard / settings."""
+        act = action.get("action", "")
+        if act == "start":
+            if not self.web_server:
+                return
+            if not self.cfg.web_token:
+                self.cfg.web_token = secrets.token_urlsafe(16)
+                self._save_cfg_encrypted()
+            self.web_server.start()
+            self.systray.set_web_enabled(True)
+            logger.info("Web companion started via dashboard")
+        elif act == "stop":
+            if self.web_server:
+                self.web_server.stop()
+            self.systray.set_web_enabled(False)
+            logger.info("Web companion stopped via dashboard")
+        elif act == "restart":
+            if self.web_server:
+                self.web_server.stop()
+                if not self.cfg.web_token:
+                    self.cfg.web_token = secrets.token_urlsafe(16)
+                    self._save_cfg_encrypted()
+                self.web_server.start()
+            logger.info("Web companion restarted via dashboard")
+
     # ═══════════════════════════════════════════════════════════════
 
     def export_logs(self) -> None:
@@ -1312,6 +1367,10 @@ class Application:
             on_open_folder=self._open_folder,
             on_retry_transfer=self._retry_file_transfer,
             on_edit_note=self._on_edit_note,
+            on_web_action=self._on_web_action,
+            get_web_status=lambda: {
+                "running": self.web_server is not None and self.web_server.is_running,
+            },
         )
         self.dashboard_win.show()
 

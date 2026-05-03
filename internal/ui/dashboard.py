@@ -91,10 +91,15 @@ class DashboardWindow:
         on_retry_transfer: Callable | None = None,
         # Notes
         on_edit_note: Callable | None = None,
+        # Web companion
+        on_web_action: Callable | None = None,
+        get_web_status: Callable | None = None,
     ):
         self._root = root
         self._get_config = get_config
         self._save_config = save_config
+        self._on_web_action = on_web_action
+        self._get_web_status = get_web_status
         self._get_peers = get_peers
         self._get_sync = get_sync_enabled
         self._set_sync = set_sync_enabled
@@ -289,6 +294,8 @@ class DashboardWindow:
                         self._refresh_history_list()
                 except Exception:
                     pass
+        elif self._current_panel == "web_companion":
+            self._refresh_web_dashboard()
         if self._window is not None:
             self._refresh_job = self._root.after(2000, self._schedule_refresh)
 
@@ -346,6 +353,7 @@ class DashboardWindow:
         self._panels["devices"] = self._build_devices_panel()
         self._panels["history"] = self._build_history_panel()
         self._panels["transfers"] = self._build_transfers_panel()
+        self._panels["web_companion"] = self._build_web_companion_panel()
 
         # ── Footer ──────────────────────────────────────────────────
         footer = ctk.CTkFrame(outer, height=46, corner_radius=0,
@@ -385,10 +393,11 @@ class DashboardWindow:
         inner.pack(fill="both", expand=True, padx=8, pady=16)
 
         nav = [
-            ("overview",  T("nav.overview")),
-            ("devices",   T("nav.devices")),
-            ("history",   T("nav.history")),
-            ("transfers", T("nav.transfers")),
+            ("overview",       T("nav.overview")),
+            ("devices",        T("nav.devices")),
+            ("history",        T("nav.history")),
+            ("transfers",      T("nav.transfers")),
+            ("web_companion",  T("nav.web_companion")),
         ]
 
         for key, label in nav:
@@ -463,6 +472,8 @@ class DashboardWindow:
             self._refresh_history_list()
         elif key == "overview":
             self._refresh_overview()
+        elif key == "web_companion":
+            self._refresh_web_dashboard()
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Overview
@@ -1634,6 +1645,385 @@ class DashboardWindow:
         if ask_yesno(self._window, T("transfers.clear_title"), T("transfers.clear_confirm")):
             self._clear_transfer_history()
             self._root.after(50, self._refresh_transfers)
+
+    # ═══════════════════════════════════════════════════════════════
+    # Panel: Web Companion
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_web_companion_panel(self):
+        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+
+        # Scrollable wrapper — prevents content cutoff on small windows
+        scroll = ctk.CTkScrollableFrame(panel, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            scroll, text=T("settings_window.web_companion_title"),
+            font=ctk.CTkFont(size=20, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
+
+        ctk.CTkLabel(
+            scroll, text=T("settings_window.web_companion_desc"),
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray60"),
+            wraplength=520, justify="left",
+        ).pack(anchor="w", pady=(0, 16))
+
+        cfg = self._get_config()
+
+        # ── Toggle card ─────────────────────────────────────────
+        toggle_card = ctk.CTkFrame(scroll, corner_radius=14)
+        toggle_card.pack(fill="x", pady=(0, 12))
+
+        toggle_inner = ctk.CTkFrame(toggle_card, fg_color="transparent")
+        toggle_inner.pack(fill="x", padx=16, pady=(14, 4))
+
+        self._web_enabled_var = tk.BooleanVar(value=cfg.web_enabled)
+        ctk.CTkSwitch(
+            toggle_inner, text=T("settings_window.web_enable"),
+            variable=self._web_enabled_var,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._on_web_toggle,
+        ).pack(side="left")
+
+        self._web_status_badge = ctk.CTkLabel(
+            toggle_inner, text="",
+            font=ctk.CTkFont(size=11, weight="bold"),
+        )
+        self._web_status_badge.pack(side="right")
+
+        self._web_status_label = ctk.CTkLabel(
+            toggle_card, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"),
+        )
+        self._web_status_label.pack(anchor="w", padx=16, pady=(0, 14))
+
+        # ── Details area (shown/hidden by toggle) ───────────────
+        self._web_details = ctk.CTkFrame(scroll, fg_color="transparent")
+
+        # QR card
+        qr_card = ctk.CTkFrame(self._web_details, corner_radius=14)
+        qr_card.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(
+            qr_card, text=T("web.qr_title"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(
+            qr_card, text=T("settings_window.web_qr_hint"),
+            font=ctk.CTkFont(size=11), text_color=("gray55", "gray55"),
+        ).pack(anchor="w", padx=16, pady=(0, 10))
+
+        self._dashboard_qr_label = ctk.CTkLabel(qr_card, text="")
+        self._dashboard_qr_label.pack(padx=16, pady=(0, 6))
+
+        self._dashboard_url_label = ctk.CTkLabel(
+            qr_card, text="", font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray60"), wraplength=400,
+        )
+        self._dashboard_url_label.pack(anchor="w", padx=16, pady=(0, 14))
+
+        # Settings card
+        settings_card = ctk.CTkFrame(self._web_details, corner_radius=14)
+        settings_card.pack(fill="x", pady=(0, 12))
+
+        ctk.CTkLabel(
+            settings_card, text="⚙️  Settings",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(14, 10))
+
+        # Port
+        port_header = ctk.CTkFrame(settings_card, fg_color="transparent")
+        port_header.pack(fill="x", padx=16, pady=(0, 2))
+        ctk.CTkLabel(
+            port_header, text=T("settings_window.web_port"),
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(side="left")
+        ctk.CTkLabel(
+            port_header, text=T("settings_window.web_port_hint"),
+            font=ctk.CTkFont(size=10), text_color=("gray55", "gray55"),
+        ).pack(side="left", padx=(8, 0))
+
+        self._web_port_var = tk.StringVar(value=str(cfg.web_port))
+        ctk.CTkEntry(
+            settings_card, textvariable=self._web_port_var, width=100, height=32,
+        ).pack(anchor="w", padx=16, pady=(2, 10))
+
+        # History limit
+        limit_header = ctk.CTkFrame(settings_card, fg_color="transparent")
+        limit_header.pack(fill="x", padx=16, pady=(4, 2))
+        ctk.CTkLabel(
+            limit_header, text=T("settings_window.web_history_limit"),
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(side="left")
+        ctk.CTkLabel(
+            limit_header, text=T("settings_window.web_history_limit_desc"),
+            font=ctk.CTkFont(size=10), text_color=("gray55", "gray55"),
+        ).pack(side="left", padx=(8, 0))
+
+        self._web_history_limit_var = tk.StringVar(value=str(cfg.web_history_limit))
+        ctk.CTkEntry(
+            settings_card, textvariable=self._web_history_limit_var, width=100, height=32,
+        ).pack(anchor="w", padx=16, pady=(2, 10))
+
+        # Token
+        ctk.CTkLabel(
+            settings_card, text=T("settings_window.web_token"),
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(8, 4))
+
+        token_row = ctk.CTkFrame(settings_card, fg_color="transparent")
+        token_row.pack(fill="x", padx=16, pady=(0, 2))
+        self._web_token_var = tk.StringVar(value=cfg.web_token or "")
+        token_entry = ctk.CTkEntry(
+            token_row, textvariable=self._web_token_var, height=30, width=200,
+            state="readonly", font=ctk.CTkFont(size=10),
+        )
+        token_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ctk.CTkButton(
+            token_row, text=T("settings_window.web_token_regenerate"),
+            width=84, height=30, font=ctk.CTkFont(size=11),
+            command=self._on_regenerate_token,
+        ).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(
+            token_row, text=T("settings_window.web_token_clear"),
+            width=54, height=30, font=ctk.CTkFont(size=11),
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray60"),
+            border_color=("gray60", "gray50"),
+            command=self._on_clear_token,
+        ).pack(side="left")
+
+        # LAN IP
+        ctk.CTkLabel(
+            settings_card, text=T("settings_window.web_ip"),
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w", padx=16, pady=(12, 2))
+        self._web_ip_value = ctk.CTkLabel(
+            settings_card, text="", font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=("gray30", "gray70"),
+        )
+        self._web_ip_value.pack(anchor="w", padx=16, pady=(0, 2))
+
+        self._web_all_ips_label = ctk.CTkLabel(
+            settings_card, text="", font=ctk.CTkFont(size=10),
+            text_color=("gray55", "gray55"),
+        )
+        self._web_all_ips_label.pack(anchor="w", padx=16, pady=(0, 2))
+
+        # Firewall status
+        fw_row = ctk.CTkFrame(settings_card, fg_color="transparent")
+        fw_row.pack(fill="x", padx=16, pady=(4, 4))
+        ctk.CTkLabel(
+            fw_row, text="🔥 Firewall",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(side="left")
+        self._web_firewall_label = ctk.CTkLabel(
+            fw_row, text="", font=ctk.CTkFont(size=11, weight="bold"),
+        )
+        self._web_firewall_label.pack(side="left", padx=(8, 0))
+        self._web_firewall_hint = ctk.CTkLabel(
+            settings_card, text="", font=ctk.CTkFont(size=10),
+            text_color=("gray55", "gray55"), wraplength=480,
+        )
+        self._web_firewall_hint.pack(anchor="w", padx=16, pady=(0, 14))
+
+        # Save button
+        save_row = ctk.CTkFrame(self._web_details, fg_color="transparent")
+        save_row.pack(fill="x", pady=(0, 16))
+        ctk.CTkButton(
+            save_row, text=T("settings_window.save_web"),
+            width=160, height=36, command=self._on_save_web_settings,
+        ).pack(side="left")
+        self._web_save_status = ctk.CTkLabel(
+            save_row, text="",
+            font=ctk.CTkFont(size=11), text_color=("#27AE60", "#2ECC71"),
+        )
+        self._web_save_status.pack(side="left", padx=(12, 0))
+
+        self._refresh_web_dashboard()
+        return panel
+
+    # ── Web Companion: helpers ──────────────────────────────────────
+
+    def _on_web_toggle(self):
+        enabled = self._web_enabled_var.get()
+        cfg = self._get_config()
+        cfg.web_enabled = enabled
+        if enabled and not cfg.web_token:
+            import secrets
+            cfg.web_token = secrets.token_urlsafe(16)
+            self._web_token_var.set(cfg.web_token)
+        self._save_config()
+        self._refresh_web_dashboard()
+        if self._on_web_action:
+            self._on_web_action({"action": "start" if enabled else "stop"})
+
+    def _on_regenerate_token(self):
+        import secrets
+        new_token = secrets.token_urlsafe(16)
+        self._web_token_var.set(new_token)
+        cfg = self._get_config()
+        cfg.web_token = new_token
+        self._save_config()
+        self._refresh_qr()
+        # Restart server so new token takes effect
+        if cfg.web_enabled and self._on_web_action:
+            self._on_web_action({"action": "restart"})
+
+    def _on_clear_token(self):
+        self._web_token_var.set("")
+        cfg = self._get_config()
+        cfg.web_token = ""
+        self._save_config()
+        self._refresh_qr()
+        if cfg.web_enabled and self._on_web_action:
+            self._on_web_action({"action": "restart"})
+
+    def _on_save_web_settings(self):
+        cfg = self._get_config()
+        try:
+            port = int(self._web_port_var.get())
+            if not 1024 <= port <= 65535:
+                raise ValueError
+        except ValueError:
+            self._web_save_status.configure(
+                text="Port must be 1024–65535", text_color=("#E74C3C", "#C0392B"),
+            )
+            return
+        try:
+            limit = int(self._web_history_limit_var.get())
+            if not 1 <= limit <= 20:
+                raise ValueError
+        except ValueError:
+            self._web_save_status.configure(
+                text="History limit must be 1–20", text_color=("#E74C3C", "#C0392B"),
+            )
+            return
+
+        needs_restart = (port != cfg.web_port or limit != cfg.web_history_limit)
+        cfg.web_port = port
+        cfg.web_history_limit = limit
+        self._save_config()
+        self._refresh_qr()
+        self._web_save_status.configure(
+            text=T("settings_window.web_saved"),
+            text_color=("#27AE60", "#2ECC71"),
+        )
+        self._root.after(3000, lambda: self._web_save_status.configure(text=""))
+        if needs_restart and cfg.web_enabled and self._on_web_action:
+            self._on_web_action({"action": "restart"})
+
+    def _refresh_web_dashboard(self):
+        cfg = self._get_config()
+        enabled = cfg.web_enabled
+
+        # Check real server status
+        server_running = False
+        if self._get_web_status:
+            try:
+                status = self._get_web_status()
+                server_running = status.get("running", False)
+            except Exception:
+                server_running = False
+
+        if enabled:
+            if server_running:
+                self._web_status_badge.configure(
+                    text="●  " + ("RUNNING" if cfg.language != "zh-CN" else "运行中"),
+                    text_color=("#27AE60", "#2ECC71"),
+                )
+            else:
+                self._web_status_badge.configure(
+                    text="●  " + ("STARTING..." if cfg.language != "zh-CN" else "启动中..."),
+                    text_color=("#E67E22", "#F39C12"),
+                )
+            self._web_status_label.configure(
+                text="Scan the QR code with your phone to connect"
+                if cfg.language != "zh-CN" else "用手机扫码即可连接，无需安装应用",
+            )
+            self._web_details.pack(fill="x", after=self._web_status_label.master)
+            self._refresh_qr()
+            # Show all LAN IPs
+            from internal.web.server import WebServer
+            ips = WebServer.get_all_ips()
+            primary = ips[0] if ips else WebServer._get_lan_ip()
+            self._web_ip_value.configure(text=primary)
+            if len(ips) > 1:
+                self._web_all_ips_label.configure(
+                    text="All IPs: " + ", ".join(ips),
+                )
+            else:
+                self._web_all_ips_label.configure(text="")
+            # Firewall status
+            fw_ok, fw_detail = WebServer.check_firewall_rule(cfg.web_port)
+            if fw_ok:
+                self._web_firewall_label.configure(
+                    text="✅  Open", text_color=("#27AE60", "#2ECC71"),
+                )
+                self._web_firewall_hint.configure(text="")
+            else:
+                self._web_firewall_label.configure(
+                    text="⚠️  " + fw_detail, text_color=("#E74C3C", "#C0392B"),
+                )
+                if cfg.language == "zh-CN":
+                    self._web_firewall_hint.configure(
+                        text="请以管理员身份运行，或手动执行：\n"
+                             f"netsh advfirewall firewall add rule name=\"ClipSync Web Companion\" dir=in action=allow localport={cfg.web_port} protocol=TCP",
+                    )
+                else:
+                    self._web_firewall_hint.configure(
+                        text="Run as administrator, or run manually:\n"
+                             f"netsh advfirewall firewall add rule name=\"ClipSync Web Companion\" dir=in action=allow localport={cfg.web_port} protocol=TCP",
+                    )
+            self._web_port_var.set(str(cfg.web_port))
+            self._web_history_limit_var.set(str(cfg.web_history_limit))
+            self._web_token_var.set(cfg.web_token or "")
+        else:
+            self._web_status_badge.configure(
+                text="●  " + ("STOPPED" if cfg.language != "zh-CN" else "已停止"),
+                text_color=("gray50", "gray60"),
+            )
+            self._web_status_label.configure(
+                text="Enable to access clipboard from your phone browser"
+                if cfg.language != "zh-CN" else "开启后即可用手机浏览器访问剪贴板",
+            )
+            self._web_details.pack_forget()
+
+    def _refresh_qr(self):
+        if self._dashboard_qr_label is None:
+            return
+        try:
+            import qrcode
+            from PIL import Image
+            token = self._web_token_var.get()
+            port = self._web_port_var.get()
+            ip = self._get_lan_ip()
+            url = f"http://{ip}:{port}?token={token}" if token else f"http://{ip}:{port}"
+            self._dashboard_url_label.configure(text=url)
+            if token:
+                img = qrcode.make(url)
+                img = img.resize((200, 200), Image.LANCZOS)
+                ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(200, 200))
+                self._dashboard_qr_label.configure(image=ctk_img, text="")
+                self._dashboard_qr_label.image = ctk_img
+            else:
+                self._dashboard_qr_label.configure(image=None, text="(no token)")
+        except Exception:
+            self._dashboard_qr_label.configure(image=None, text="(QR unavailable)")
+
+    @staticmethod
+    def _get_lan_ip() -> str:
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0)
+            s.connect(("10.254.254.254", 1))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Transfers
