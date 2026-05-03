@@ -2,7 +2,7 @@
 
 All notable changes to ClipSync are documented in this file.
 
-## [1.2.0] — 2026-05-03
+## [1.1.0] — 2026-05-03
 
 ### Added
 - **Web Companion** — built-in HTTP server for mobile phone access on the same LAN
