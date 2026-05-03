@@ -8,6 +8,14 @@ import ssl
 import struct
 import threading
 import time
+
+
+class PortInUseError(OSError):
+    """Raised when the TCP port is already in use by another process."""
+
+    def __init__(self, port: int):
+        self.port = port
+        super().__init__(f"Port {port} is already in use")
 import uuid
 from pathlib import Path
 from typing import Callable
@@ -435,7 +443,12 @@ class TransportManager:
 
         self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server_sock.bind(("0.0.0.0", self._port))
+        try:
+            self._server_sock.bind(("0.0.0.0", self._port))
+        except OSError as e:
+            self._server_sock.close()
+            self._server_sock = None
+            raise PortInUseError(self._port) from e
         self._server_sock.listen(5)
         self._server_sock.settimeout(1.0)
 

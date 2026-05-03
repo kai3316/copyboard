@@ -42,7 +42,7 @@ from internal.security.pairing import (
 )
 from internal.sync.file_transfer import FileTransferManager
 from internal.sync.manager import SyncManager
-from internal.transport.connection import MAX_FRAME_SIZE, TransportManager
+from internal.transport.connection import MAX_FRAME_SIZE, PortInUseError, TransportManager
 from internal.transport.discovery import Discovery
 from internal.ui.dashboard import DashboardWindow
 from internal.ui.dialogs import ask_string, show_error, show_info, show_warning
@@ -751,7 +751,19 @@ class Application:
                 self.root.after(800, lambda: show_warning(self.root, "Clipboard Unavailable", msg))
 
         self.sync_mgr.start()
-        self.transport_mgr.start_server()
+        try:
+            self.transport_mgr.start_server()
+        except PortInUseError:
+            show_error(
+                self.root,
+                "Port Already in Use",
+                f"Port {self.cfg.port} is already in use by another process.\n\n"
+                "This usually means another instance is still running.\n\n"
+                "Run this command to find and stop it:\n"
+                f"  lsof -i :{self.cfg.port}  &&  kill -9 <PID>\n\n"
+                "ClipSync will now exit.",
+            )
+            sys.exit(1)
         self.discovery.start()
         if self.cfg.web_enabled:
             if not self.cfg.web_token:
