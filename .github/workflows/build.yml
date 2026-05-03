@@ -20,6 +20,8 @@ jobs:
             artifact: clipsync-macos
           - os: ubuntu-latest
             artifact: clipsync-linux
+          - os: ubuntu-24.04-arm
+            artifact: clipsync-linux-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -61,7 +63,7 @@ jobs:
       - name: Package for release (Linux)
         if: runner.os == 'Linux'
         run: |
-          cd dist && tar -czf ../clipsync-linux.tar.gz *
+          cd dist && tar -czf ../${{ matrix.artifact }}.tar.gz *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -97,6 +99,12 @@ jobs:
           name: clipsync-linux
           path: dist
 
+      - name: Download Linux ARM64 build
+        uses: actions/download-artifact@v4
+        with:
+          name: clipsync-linux-arm64
+          path: dist
+
       - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -107,7 +115,9 @@ jobs:
             --notes "Automated build for ${{ github.ref_name }}.
             - \`clipsync-windows.zip\` — Windows \`.exe\`
             - \`clipsync-macos.zip\` — macOS \`.app\` bundle
-            - \`clipsync-linux.tar.gz\` — Linux binary" \
+            - \`clipsync-linux.tar.gz\` — Linux x86_64 binary
+            - \`clipsync-linux-arm64.tar.gz\` — Linux ARM64 binary" \
             dist/clipsync-windows.zip \
             dist/clipsync-macos.zip \
-            dist/clipsync-linux.tar.gz
+            dist/clipsync-linux.tar.gz \
+            dist/clipsync-linux-arm64.tar.gz
