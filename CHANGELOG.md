@@ -2,35 +2,7 @@
 
 All notable changes to ClipSync are documented in this file.
 
-## [1.1.0] — 2026-05-03
-
-### Added
-- **Web Companion** — built-in HTTP server for mobile phone access on the same LAN
-  - QR code scanning to connect (no app install needed)
-  - View clipboard history, push text to desktop, transfer files
-  - PWA support with app icon for "Add to Home Screen" on iOS/Android
-  - Pin/unpin history items from the web page
-  - Delete history items from the web page
-  - File upload from phone to desktop
-  - File download from desktop to phone
-  - Image download (tap image items to save, not copy)
-  - iOS install banner with instructions
-  - Animations (fade-in cards, refresh spin, push button pulse)
-- Clipboard history: pin/unpin entries, pinned-first sorting
-- History entry IDs for stable item identification across the API
-
-### Changed
-- Dashboard: buttons moved to right side of cards for compact layout (history, devices, transfers)
-- Device panel: notes merged into status row (right-aligned)
-- Web page: swipe gestures replaced with visible Pin/Delete buttons
-
-### Fixed
-- Deadlock in ClipboardHistory (Lock → RLock) when calling get_all from within locked methods
-- Non-ASCII filename download crash (RFC 5987 Content-Disposition encoding)
-- Web server: device list now shows only connected devices
-- Firewall port check uses regex instead of brittle string matching
-
-## [1.0.0] — 2026-05-02
+## [1.0.0] — 2026-05-03
 
 ### Added
 - Cross-platform clipboard sync (Windows, macOS, Linux)
@@ -43,15 +15,24 @@ All notable changes to ClipSync are documented in this file.
 - System tray application with sync toggle and device status
 - Dashboard with Overview, Devices, History, and Transfers panels
 - Settings window with Network, Content Filter, Security, Advanced, Logs, and About sections
+- **Web Companion** — built-in HTTP server for mobile phone access on the same LAN
+  - QR code scanning to connect (no app install needed)
+  - View clipboard history, push text to desktop, transfer files
+  - PWA support with app icon for "Add to Home Screen" on iOS/Android
+  - Pin/unpin and delete history items from the web page
+  - File upload/download between phone and desktop
+  - iOS install banner with instructions
+  - Animations (fade-in cards, refresh spin, push button pulse)
 - File transfer between paired devices with progress tracking
 - Speed test for measuring LAN throughput
 - Content filtering for sensitive data (credit cards, SSNs, API keys, etc.)
-- Clipboard history with search, copy, and delete
+- Clipboard history with search, copy, delete, pin/unpin, and pinned-first sorting
 - Dark mode support (light/dark/system)
 - Auto-start on system login
 - Desktop notifications for connect/disconnect and sync events
 - Log viewer and export within the app
 - PyInstaller standalone builds for all platforms
+- Factory reset and restart buttons in advanced settings
 
 ### Security
 - PBKDF2 password verification (password never stored in plaintext)

@@ -335,7 +335,7 @@ _EN: dict[str, str] = {
     "settings_window.validation_error": "Validation Error",
     "settings_window.port_invalid": "Port must be 1024–65535.",
     "settings_window.logs_title": "Application Logs",
-    "settings_window.about_version": "v1.1.0",
+    "settings_window.about_version": "v1.0.0",
     "settings_window.about_desc": "Cross-platform clipboard sharing\nbetween Windows, macOS, and Linux.",
     "settings_window.about_features": [
         "Automatic peer discovery on LAN (mDNS/Bonjour)",
@@ -697,7 +697,7 @@ _ZH: dict[str, str] = {
     "settings_window.validation_error": "验证错误",
     "settings_window.port_invalid": "端口必须在 1024–65535 范围内。",
     "settings_window.logs_title": "应用程序日志",
-    "settings_window.about_version": "v1.1.0",
+    "settings_window.about_version": "v1.0.0",
     "settings_window.about_desc": "跨平台剪贴板共享\n支持 Windows、macOS 和 Linux。",
     "settings_window.about_features": [
         "局域网自动发现对端 (mDNS/Bonjour)",
