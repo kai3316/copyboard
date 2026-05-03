@@ -2,6 +2,34 @@
 
 All notable changes to ClipSync are documented in this file.
 
+## [1.2.0] — 2026-05-03
+
+### Added
+- **Web Companion** — built-in HTTP server for mobile phone access on the same LAN
+  - QR code scanning to connect (no app install needed)
+  - View clipboard history, push text to desktop, transfer files
+  - PWA support with app icon for "Add to Home Screen" on iOS/Android
+  - Pin/unpin history items from the web page
+  - Delete history items from the web page
+  - File upload from phone to desktop
+  - File download from desktop to phone
+  - Image download (tap image items to save, not copy)
+  - iOS install banner with instructions
+  - Animations (fade-in cards, refresh spin, push button pulse)
+- Clipboard history: pin/unpin entries, pinned-first sorting
+- History entry IDs for stable item identification across the API
+
+### Changed
+- Dashboard: buttons moved to right side of cards for compact layout (history, devices, transfers)
+- Device panel: notes merged into status row (right-aligned)
+- Web page: swipe gestures replaced with visible Pin/Delete buttons
+
+### Fixed
+- Deadlock in ClipboardHistory (Lock → RLock) when calling get_all from within locked methods
+- Non-ASCII filename download crash (RFC 5987 Content-Disposition encoding)
+- Web server: device list now shows only connected devices
+- Firewall port check uses regex instead of brittle string matching
+
 ## [1.0.0] — 2026-05-02
 
 ### Added

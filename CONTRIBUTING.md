@@ -33,12 +33,14 @@ src/main.py              # Application entry point
 internal/
   clipboard/             # Platform-specific clipboard I/O
   config/                # JSON config persistence
+  i18n/                  # Internationalization (EN, ZH)
   platform/              # OS integration (autostart, notifications)
   protocol/              # Wire format encoding/decoding
   security/              # Encryption, pairing, identity
   sync/                  # Sync orchestration and file transfer
   transport/             # TLS connections and mDNS discovery
-  ui/                    # Dashboard, settings, system tray
+  ui/                    # Dashboard (5 panels), settings, system tray
+  web/                   # Built-in HTTP server + mobile PWA
 tests/                   # pytest test suite
 ```
 
