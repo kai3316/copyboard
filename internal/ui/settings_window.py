@@ -144,10 +144,6 @@ class SettingsWindow:
         if self._on_closed is not None:
             self._on_closed()
 
-    def _on_quit_click(self):
-        if self._on_quit:
-            self._on_quit()
-
     # ═══════════════════════════════════════════════════════════════
     # UI construction
     # ═══════════════════════════════════════════════════════════════
@@ -214,13 +210,6 @@ class SettingsWindow:
         )
         self._status_label.pack(side="left")
 
-        if self._on_quit:
-            ctk.CTkButton(
-                f_inner, text=T("tray.quit"), width=60, height=28,
-                fg_color="#E74C3C", text_color="white",
-                hover_color="#C0392B",
-                command=self._on_quit_click,
-            ).pack(side="right", padx=(6, 0))
         ctk.CTkButton(
             f_inner, text=T("ui.close"), width=60, height=28,
             fg_color="transparent", border_width=1,
@@ -1080,10 +1069,18 @@ class SettingsWindow:
             command=self._on_restart,
         ).pack(side="left", padx=16, pady=14)
 
+        if self._on_quit:
+            ctk.CTkButton(
+                danger_frame, text=T("tray.quit"),
+                width=180, height=36, fg_color=("#E74C3C", "#C0392B"),
+                hover_color=("#C0392B", "#A93226"),
+                command=self._on_quit_from_settings,
+            ).pack(side="left", padx=16, pady=14)
+
         ctk.CTkButton(
             danger_frame, text=T("settings_window.factory_reset"),
-            width=180, height=36, fg_color=("#E74C3C", "#C0392B"),
-            hover_color=("#C0392B", "#A93226"),
+            width=180, height=36, fg_color=("#7F8C8D", "#566573"),
+            hover_color=("#95A5A6", "#7F8C8D"),
             command=self._on_factory_reset,
         ).pack(side="right", padx=16, pady=14)
 
@@ -1195,6 +1192,16 @@ class SettingsWindow:
             pass
         self._window.destroy()
         sys.exit(0)
+
+    def _on_quit_from_settings(self) -> None:
+        if not _confirm_danger(
+            self._window,
+            T("tray.quit"),
+            T("settings_window.quit_confirm"),
+        ):
+            return
+        if self._on_quit:
+            self._on_quit()
 
     def _on_restart(self) -> None:
         if not _confirm_danger(
