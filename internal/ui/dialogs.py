@@ -23,7 +23,6 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
     dlg.title(title)
     dlg.resizable(False, False)
     dlg.transient(parent)
-    dlg.grab_set()
 
     # Position centered over parent, or screen-center if parent is withdrawn
     dlg.update_idletasks()
@@ -39,6 +38,11 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
         x = (sw - w) // 2
         y = (sh - h) // 2
     dlg.geometry(f"{w}x{h}+{x}+{y}")
+
+    try:
+        dlg.grab_set()
+    except Exception:
+        pass
 
     result = [False]
 
@@ -144,7 +148,6 @@ def ask_string(parent, title, prompt, initial_value="", show=""):
     dlg.title(title)
     dlg.resizable(False, False)
     dlg.transient(parent)
-    dlg.grab_set()
 
     dlg.update_idletasks()
     pw, ph = parent.winfo_width(), parent.winfo_height()
@@ -153,6 +156,11 @@ def ask_string(parent, title, prompt, initial_value="", show=""):
     x = px + (pw - w) // 2
     y = py + (ph - h) // 2
     dlg.geometry(f"{w}x{h}+{x}+{y}")
+
+    try:
+        dlg.grab_set()
+    except Exception:
+        pass
 
     result = [None]
 
