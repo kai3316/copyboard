@@ -123,7 +123,6 @@ class DashboardWindow:
         self._refresh_job: str | None = None
         self._breathing = False
         self._breath_timer: str | None = None
-        self._anim_frame = 0
 
         # Sidebar
         self._sidebar_buttons: dict[str, ctk.CTkButton] = {}
@@ -234,6 +233,12 @@ class DashboardWindow:
 
     def _on_hide(self):
         self._breathing = False
+        if self._breath_timer is not None:
+            self._root.after_cancel(self._breath_timer)
+            self._breath_timer = None
+        if self._refresh_job is not None:
+            self._root.after_cancel(self._refresh_job)
+            self._refresh_job = None
         if self._window is not None:
             self._window.withdraw()
         if self._on_hidden:
@@ -241,9 +246,15 @@ class DashboardWindow:
 
     def _on_close(self):
         self._breathing = False
+        if self._breath_timer is not None:
+            self._root.after_cancel(self._breath_timer)
+            self._breath_timer = None
         if self._refresh_job is not None:
             self._root.after_cancel(self._refresh_job)
             self._refresh_job = None
+        if self._history_search_timer is not None:
+            self._root.after_cancel(self._history_search_timer)
+            self._history_search_timer = None
         if self._window is not None:
             self._window.destroy()
             self._window = None
@@ -513,7 +524,9 @@ class DashboardWindow:
         return {"type": "unknown", "label": "LAN", "detail": ""}
 
     def _build_overview_panel(self):
-        panel = ctk.CTkFrame(self._content_frame, fg_color="transparent")
+        wrapper = ctk.CTkScrollableFrame(self._content_frame, fg_color="transparent")
+        panel = ctk.CTkFrame(wrapper, fg_color="transparent")
+        panel.pack(fill="both", expand=True)
         cfg = self._get_config()
         net = self._detect_network_info()
         local_ip = self._detect_local_ip()
@@ -582,20 +595,6 @@ class DashboardWindow:
             text_color=("gray50", "gray60"),
         )
         self._local_ip_label.pack(anchor="w", pady=(8, 0))
-
-        # Protocol info
-        proto_row = ctk.CTkFrame(s_center, fg_color="transparent")
-        proto_row.pack(fill="x", pady=(4, 0))
-        ctk.CTkLabel(
-            proto_row, text=T("network.encrypted_tls"),
-            font=ctk.CTkFont(size=12),
-            text_color=("#27AE60", "#2ECC71"),
-        ).pack(side="left")
-        ctk.CTkLabel(
-            proto_row, text=T("network.discovery_mdns"),
-            font=ctk.CTkFont(size=12),
-            text_color=("#27AE60", "#2ECC71"),
-        ).pack(side="left", padx=(8, 0))
 
         # ── Col 1: This Device ─────────────────────────────────────────
         card_d = ctk.CTkFrame(top, corner_radius=14)
@@ -760,7 +759,7 @@ class DashboardWindow:
                 self._stat_visibility = val
                 self._sub_visibility = sub
 
-        return panel
+        return wrapper
 
     def _refresh_overview(self):
         if self._status_dot is None:
@@ -1440,7 +1439,6 @@ class DashboardWindow:
             self._history_more_btn.pack(fill="x", pady=4, padx=4)
 
     @staticmethod
-    @staticmethod
     def _format_relative_time(timestamp: float) -> str:
         """Format a timestamp as a human-readable relative time string."""
         if not timestamp or timestamp <= 0:
@@ -1525,24 +1523,27 @@ class DashboardWindow:
         r1 = ctk.CTkFrame(inner, fg_color="transparent")
         r1.pack(fill="x")
 
+        # Time packed first so it always gets its natural width
+        time_lbl = ctk.CTkLabel(
+            r1, text=time_str,
+            font=self._card_font_small,
+            text_color=("gray60", "gray55"),
+        )
+        time_lbl.pack(side="right", padx=(8, 0))
+
         ctk.CTkLabel(
             r1, text=type_icon,
             font=ctk.CTkFont(size=14),
             text_color=type_color,
         ).pack(side="left", padx=(0, 8))
 
-        ctk.CTkLabel(
+        preview_lbl = ctk.CTkLabel(
             r1, text=preview or "[No preview]",
             font=self._card_font_bold,
             text_color=("gray20", "gray85"),
             anchor="w",
-        ).pack(side="left")
-
-        ctk.CTkLabel(
-            r1, text=time_str,
-            font=self._card_font_small,
-            text_color=("gray60", "gray55"),
-        ).pack(side="right")
+        )
+        preview_lbl.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
         # ── Row 2: meta ──────────────────────────────────────────
         r2 = ctk.CTkFrame(inner, fg_color="transparent")

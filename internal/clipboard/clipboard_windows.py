@@ -39,6 +39,8 @@ kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
 kernel32.GlobalUnlock.restype = ctypes.c_int
 kernel32.GlobalSize.argtypes = [ctypes.c_void_p]
 kernel32.GlobalSize.restype = ctypes.c_size_t
+kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+kernel32.GlobalFree.restype = ctypes.c_void_p
 kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
 kernel32.GetModuleHandleW.restype = ctypes.c_void_p
 
@@ -161,8 +163,8 @@ class _ClipboardReader(ClipboardReader):
                 # and encode as UTF-8 for cross-platform consistency.
                 raw = ctypes.string_at(ptr, size).rstrip(b"\x00")
                 try:
-                    import locale
-                    codepage = locale.getpreferredencoding()
+                    acp = kernel32.GetACP()
+                    codepage = f"cp{acp}"
                 except Exception:
                     codepage = "utf-8"
                 return raw.decode(codepage, errors="replace").encode("utf-8")
@@ -282,6 +284,7 @@ class _ClipboardWriter(ClipboardWriter):
             kernel32.GlobalUnlock(handle)
             if not user32.SetClipboardData(CF_UNICODETEXT, handle):
                 logger.warning("SetClipboardData(CF_UNICODETEXT) failed")
+                kernel32.GlobalFree(handle)
 
     def _set_html(self, data: bytes):
         cf_html = self._build_cf_html(data)
@@ -334,6 +337,7 @@ class _ClipboardWriter(ClipboardWriter):
                 kernel32.GlobalUnlock(handle)
                 if not user32.SetClipboardData(CF_DIB, handle):
                     logger.warning("SetClipboardData(CF_DIB) failed")
+                    kernel32.GlobalFree(handle)
             return
 
         try:
@@ -361,6 +365,7 @@ class _ClipboardWriter(ClipboardWriter):
                 kernel32.GlobalUnlock(handle)
                 if not user32.SetClipboardData(CF_DIB, handle):
                     logger.warning("SetClipboardData(CF_DIB) failed")
+                    kernel32.GlobalFree(handle)
         except Exception:
             logger.debug("Failed to write image to clipboard", exc_info=True)
 
@@ -384,6 +389,7 @@ class _ClipboardWriter(ClipboardWriter):
             kernel32.GlobalUnlock(handle)
             if not user32.SetClipboardData(fmt, handle):
                 logger.warning("SetClipboardData(%d) failed", fmt)
+                kernel32.GlobalFree(handle)
 
 
 class WindowsClipboardMonitor(ClipboardMonitor):

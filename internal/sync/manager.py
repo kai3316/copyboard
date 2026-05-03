@@ -14,7 +14,7 @@ import time
 import uuid
 from typing import Callable, Optional
 
-from internal.clipboard.format import ClipboardContent, SyncMessage
+from internal.clipboard.format import ClipboardContent, ContentType, SyncMessage
 from internal.clipboard.history import ClipboardHistory
 from internal.clipboard.platform import create_monitor, create_reader, create_writer
 
@@ -170,6 +170,14 @@ class SyncManager:
         content = self._reader.read()
         if content.is_empty():
             return
+
+        # Skip accidental clipboard noise: whitespace-only or single-
+        # character copies that terminals often emit on click/select.
+        if ContentType.TEXT in content.types:
+            text = content.types[ContentType.TEXT].decode("utf-8", errors="replace")
+            stripped = text.strip()
+            if len(stripped) <= 1:
+                return
 
         content_hash = content.hash_key()
 

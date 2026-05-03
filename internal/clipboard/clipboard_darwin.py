@@ -844,6 +844,9 @@ class DarwinClipboardMonitor(ClipboardMonitor):
 
             # No text/HTML — check for image-only content.
             if _pb_has_image():
+                raw = _pb_data_for_type(b"public.tiff") or _pb_data_for_type(b"public.png")
+                if raw:
+                    return hashlib.sha256(raw).hexdigest()
                 return hashlib.sha256(str(time.time()).encode()).hexdigest()
         except Exception:
             pass
