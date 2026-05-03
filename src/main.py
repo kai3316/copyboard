@@ -911,6 +911,8 @@ class Application:
                 self.cfg.encryption_password,
                 self.pairing_mgr.get_identity().fingerprint,
             )
+        else:
+            self.cfg.encryption_password_hash = ""
         return EncryptionManager(
             self.pairing_mgr.get_identity().fingerprint,
             password=self.cfg.encryption_password,

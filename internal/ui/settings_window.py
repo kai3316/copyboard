@@ -815,10 +815,10 @@ class SettingsWindow:
         self._enc_password_var = tk.StringVar(value="")
         self._enc_password_entry = ctk.CTkEntry(
             pw_row, textvariable=self._enc_password_var,
-            height=32, width=240, show="*",
+            height=32, width=200, show="*",
             placeholder_text=T("settings_window.password_placeholder"),
         )
-        self._enc_password_entry.pack(side="left", padx=(0, 8))
+        self._enc_password_entry.pack(side="left", padx=(0, 6))
         self._show_pw_btn = ctk.CTkButton(
             pw_row, text=T("settings_window.show"), width=50, height=32,
             fg_color="transparent", border_width=1,
@@ -827,7 +827,16 @@ class SettingsWindow:
             font=ctk.CTkFont(size=11),
             command=self._toggle_password_visibility,
         )
-        self._show_pw_btn.pack(side="left")
+        self._show_pw_btn.pack(side="left", padx=(0, 6))
+        ctk.CTkButton(
+            pw_row, text=T("settings_window.clear_password"), width=60, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#3C1A1A"),
+            font=ctk.CTkFont(size=11),
+            command=self._on_clear_password,
+        ).pack(side="left")
 
         # ── Save button ──────────────────────────────────────────
         ctk.CTkButton(
@@ -845,10 +854,35 @@ class SettingsWindow:
             self._enc_password_entry.configure(show="*")
             self._show_pw_btn.configure(text=T("settings_window.show"))
 
+    def _on_clear_password(self):
+        cfg = self._get_config()
+        self._enc_password_var.set("")
+        cfg.encryption_password = ""
+        if cfg.encryption_password_hash:
+            cfg.encryption_password_hash = ""
+            self._enc_pw_status.configure(
+                text=T("security.no_password"),
+                text_color=("gray50", "gray60"),
+            )
+        self._save_config()
+        if self._status_label:
+            self._status_label.configure(text=T("settings_window.password_cleared"))
+
     def _on_save_security(self):
         cfg = self._get_config()
         cfg.encryption_enabled = self._enc_enabled_var.get()
         cfg.encryption_password = self._enc_password_var.get()
+        # Update status indicator
+        if cfg.encryption_password_hash:
+            self._enc_pw_status.configure(
+                text=T("security.password_set"),
+                text_color=("#27AE60", "#2ECC71"),
+            )
+        else:
+            self._enc_pw_status.configure(
+                text=T("security.no_password"),
+                text_color=("gray50", "gray60"),
+            )
         self._save_config()
         if self._status_label:
             self._status_label.configure(text=T("settings_window.security_saved"))
@@ -1122,6 +1156,12 @@ class SettingsWindow:
     def _restart_app(self) -> None:
         import subprocess
         import sys
+        from internal.config.config import _config_dir
+        # Remove lock file so the new instance won't see "already running"
+        try:
+            (_config_dir() / ".lock").unlink()
+        except Exception:
+            pass
         # Spawn a new instance and exit
         try:
             subprocess.Popen([sys.executable] + sys.argv)
