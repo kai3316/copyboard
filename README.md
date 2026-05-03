@@ -182,6 +182,7 @@ sudo dnf install xclip
 # Arch
 sudo pacman -S xclip
 # Wayland users: install wl-clipboard instead
+sudo apt install wl-clipboard
 ```
 
 ---

@@ -53,7 +53,7 @@ def _has_xclip() -> bool:
         return True
     except Exception:
         if not _xclip_warned:
-            logger.warning("xclip not found, X11 clipboard unavailable")
+            logger.warning("xclip not found — install it: sudo apt install xclip")
             _xclip_warned = True
         return False
 
@@ -68,15 +68,42 @@ def _has_wl_copy() -> bool:
         return True
     except Exception:
         if not _wl_warned:
-            logger.warning("wl-copy not found, Wayland clipboard unavailable")
+            logger.warning("wl-copy not found — install it: sudo apt install wl-clipboard")
             _wl_warned = True
         return False
+
+
+def _can_read() -> bool:
+    """Check if any clipboard tool is available."""
+    return _has_xclip() or _has_wl_copy()
+
+
+def _can_write() -> bool:
+    """Check if any clipboard tool is available."""
+    return _has_xclip() or _has_wl_copy()
+
+
+_clipboard_warned = False
+
+
+def _warn_no_clipboard() -> None:
+    global _clipboard_warned
+    if not _clipboard_warned:
+        logger.warning(
+            "No clipboard tool found (xclip or wl-clipboard). "
+            "Clipboard read/write is disabled. Install xclip (X11) or wl-clipboard (Wayland)."
+        )
+        _clipboard_warned = True
 
 
 class _ClipboardReader(ClipboardReader):
     def read(self) -> ClipboardContent:
         content = ClipboardContent(timestamp=time.time())
         self._image_fmt = ""
+
+        if not _can_read():
+            _warn_no_clipboard()
+            return content
 
         text = self._get_text()
         if text:
@@ -99,71 +126,64 @@ class _ClipboardReader(ClipboardReader):
         return content
 
     def _get_text(self) -> bytes:
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                result = subprocess.run(
-                    ["wl-paste", "--no-newline"],
-                    capture_output=True, timeout=2,
-                )
-            else:
-                result = subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-o"],
-                    capture_output=True, timeout=2,
-                )
-            if result.returncode == 0 and result.stdout:
-                return result.stdout
-        except Exception:
-            logger.debug("Failed to read text from clipboard via %s", _BACKEND)
+        # Try wl-paste first on Wayland, xclip first on X11, but fall back to the other
+        tools = (
+            [(["wl-paste", "--no-newline"], "wl-paste"), (["xclip", "-selection", "clipboard", "-o"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-o"], "xclip"), (["wl-paste", "--no-newline"], "wl-paste")]
+        )
+        for args, _name in tools:
+            try:
+                result = subprocess.run(args, capture_output=True, timeout=2)
+                if result.returncode == 0 and result.stdout:
+                    return result.stdout
+            except Exception:
+                continue
         return b""
 
     def _get_html(self) -> bytes:
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                result = subprocess.run(
-                    ["wl-paste", "--type", "text/html"],
-                    capture_output=True, timeout=2,
-                )
-            elif _BACKEND == "x11" and _has_xclip():
-                result = subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-o", "-t", "text/html"],
-                    capture_output=True, timeout=2,
-                )
-            else:
-                return b""
-            if result.returncode == 0 and result.stdout.strip():
-                data = result.stdout
-                if b"<" in data:
-                    return data
-        except Exception:
-            logger.debug("Failed to read HTML from clipboard")
+        if not _can_read():
+            return b""
+        tools = (
+            [(["wl-paste", "--type", "text/html"], "wl-paste"), (["xclip", "-selection", "clipboard", "-o", "-t", "text/html"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-o", "-t", "text/html"], "xclip"), (["wl-paste", "--type", "text/html"], "wl-paste")]
+        )
+        for args, _name in tools:
+            try:
+                result = subprocess.run(args, capture_output=True, timeout=2)
+                if result.returncode == 0 and result.stdout.strip():
+                    data = result.stdout
+                    if b"<" in data:
+                        return data
+            except Exception:
+                continue
+        logger.debug("Failed to read HTML from clipboard")
         return b""
 
     def _get_rtf(self) -> bytes:
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                result = subprocess.run(
-                    ["wl-paste", "--type", "text/rtf"],
-                    capture_output=True, timeout=2,
-                )
-            elif _BACKEND == "x11" and _has_xclip():
-                result = subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-o", "-t", "text/rtf"],
-                    capture_output=True, timeout=2,
-                )
-            else:
-                return b""
-            if result.returncode == 0 and result.stdout.strip():
-                data = result.stdout
-                # Relaxed check matching macOS — some apps emit RTF with
-                # a leading BOM or whitespace before the {\rtf header.
-                head = data[:200]
-                if b"\\rtf" in head or b"{\\rtf" in head:
-                    return data
-        except Exception:
-            logger.debug("Failed to read RTF from clipboard")
+        if not _can_read():
+            return b""
+        tools = (
+            [(["wl-paste", "--type", "text/rtf"], "wl-paste"), (["xclip", "-selection", "clipboard", "-o", "-t", "text/rtf"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-o", "-t", "text/rtf"], "xclip"), (["wl-paste", "--type", "text/rtf"], "wl-paste")]
+        )
+        for args, _name in tools:
+            try:
+                result = subprocess.run(args, capture_output=True, timeout=2)
+                if result.returncode == 0 and result.stdout.strip():
+                    data = result.stdout
+                    head = data[:200]
+                    if b"\\rtf" in head or b"{\\rtf" in head:
+                        return data
+            except Exception:
+                continue
+        logger.debug("Failed to read RTF from clipboard")
         return b""
 
     def _get_image(self) -> bytes:
+        # Try PIL ImageGrab first (works on some Linux desktops)
         try:
             from PIL import ImageGrab
         except ImportError:
@@ -179,27 +199,23 @@ class _ClipboardReader(ClipboardReader):
             except Exception:
                 logger.debug("ImageGrab.grabclipboard failed")
 
-        # Fallback: try clipboard CLI tools with image/png target
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                result = subprocess.run(
-                    ["wl-paste", "--type", "image/png"],
-                    capture_output=True, timeout=2,
-                )
-            elif _BACKEND == "x11" and _has_xclip():
-                result = subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-o", "-t", "image/png"],
-                    capture_output=True, timeout=2,
-                )
-            else:
-                return b""
-            if result.returncode == 0 and result.stdout:
-                if result.stdout[:8] == b"\x89PNG\r\n\x1a\n":
+        if not _can_read():
+            return b""
+        # Try both CLI tools for image/png
+        tools = (
+            [(["wl-paste", "--type", "image/png"], "wl-paste"), (["xclip", "-selection", "clipboard", "-o", "-t", "image/png"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-o", "-t", "image/png"], "xclip"), (["wl-paste", "--type", "image/png"], "wl-paste")]
+        )
+        for args, _name in tools:
+            try:
+                result = subprocess.run(args, capture_output=True, timeout=2)
+                if result.returncode == 0 and result.stdout and result.stdout[:8] == b"\x89PNG\r\n\x1a\n":
                     self._image_fmt = "png"
                     return result.stdout
-        except Exception:
-            logger.debug("Failed to read image from clipboard via %s", _BACKEND)
-
+            except Exception:
+                continue
+        logger.debug("Failed to read image from clipboard")
         return b""
 
 
@@ -225,51 +241,59 @@ class _ClipboardWriter(ClipboardWriter):
             # IMAGE_EMF is Windows-only, skip on Linux
 
     def _set_text(self, data: bytes):
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                subprocess.run(["wl-copy"], input=data, timeout=2)
-            else:
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-in"],
-                    input=data, timeout=2,
-                )
-        except Exception:
-            logger.debug("Failed to write text to clipboard")
+        if not _can_write():
+            _warn_no_clipboard()
+            return
+        tools = (
+            [(["wl-copy"], "wl-copy"), (["xclip", "-selection", "clipboard", "-in"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-in"], "xclip"), (["wl-copy"], "wl-copy")]
+        )
+        for args, _name in tools:
+            try:
+                subprocess.run(args, input=data, timeout=2)
+                return  # success
+            except Exception:
+                continue
+        logger.debug("Failed to write text to clipboard")
 
     def _set_html(self, data: bytes):
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                subprocess.run(
-                    ["wl-copy", "--type", "text/html"],
-                    input=data, timeout=2,
-                )
-            elif _BACKEND == "x11" and _has_xclip():
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-in", "-t", "text/html"],
-                    input=data, timeout=2,
-                )
-        except Exception:
-            logger.debug("Failed to write HTML to clipboard via %s", _BACKEND)
+        if not _can_write():
+            _warn_no_clipboard()
+            return
+        tools = (
+            [(["wl-copy", "--type", "text/html"], "wl-copy"), (["xclip", "-selection", "clipboard", "-in", "-t", "text/html"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-in", "-t", "text/html"], "xclip"), (["wl-copy", "--type", "text/html"], "wl-copy")]
+        )
+        for args, _name in tools:
+            try:
+                subprocess.run(args, input=data, timeout=2)
+                return
+            except Exception:
+                continue
+        logger.debug("Failed to write HTML to clipboard")
 
     def _set_rtf(self, data: bytes):
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                subprocess.run(
-                    ["wl-copy", "--type", "text/rtf"],
-                    input=data, timeout=2,
-                )
-            elif _BACKEND == "x11" and _has_xclip():
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-in", "-t", "text/rtf"],
-                    input=data, timeout=2,
-                )
-        except Exception:
-            logger.debug("Failed to write RTF to clipboard via %s", _BACKEND)
+        if not _can_write():
+            _warn_no_clipboard()
+            return
+        tools = (
+            [(["wl-copy", "--type", "text/rtf"], "wl-copy"), (["xclip", "-selection", "clipboard", "-in", "-t", "text/rtf"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-in", "-t", "text/rtf"], "xclip"), (["wl-copy", "--type", "text/rtf"], "wl-copy")]
+        )
+        for args, _name in tools:
+            try:
+                subprocess.run(args, input=data, timeout=2)
+                return
+            except Exception:
+                continue
+        logger.debug("Failed to write RTF to clipboard")
 
     def _set_image(self, data: bytes, image_fmt: str = ""):
         png_data = data
         if image_fmt in ("bmp", "tiff"):
-            # Convert non-PNG formats to PNG for Linux clipboard
             try:
                 from PIL import Image
                 img = Image.open(BytesIO(data))
@@ -280,19 +304,21 @@ class _ClipboardWriter(ClipboardWriter):
                 logger.debug("Failed to convert %s image to PNG for Linux", image_fmt)
                 return
 
-        try:
-            if _BACKEND == "x11" and _has_xclip():
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-in", "-t", "image/png"],
-                    input=png_data, timeout=2,
-                )
-            elif _BACKEND == "wayland" and _has_wl_copy():
-                subprocess.run(
-                    ["wl-copy", "--type", "image/png"],
-                    input=png_data, timeout=2,
-                )
-        except Exception:
-            logger.debug("Failed to write image to clipboard")
+        if not _can_write():
+            _warn_no_clipboard()
+            return
+        tools = (
+            [(["wl-copy", "--type", "image/png"], "wl-copy"), (["xclip", "-selection", "clipboard", "-in", "-t", "image/png"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-in", "-t", "image/png"], "xclip"), (["wl-copy", "--type", "image/png"], "wl-copy")]
+        )
+        for args, _name in tools:
+            try:
+                subprocess.run(args, input=png_data, timeout=2)
+                return
+            except Exception:
+                continue
+        logger.debug("Failed to write image to clipboard")
 
 
 class LinuxClipboardMonitor(ClipboardMonitor):
@@ -331,39 +357,57 @@ class LinuxClipboardMonitor(ClipboardMonitor):
                 last_hash = current
 
     def _get_content_hash(self) -> str:
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                result = subprocess.run(
-                    ["wl-paste", "--no-newline"], capture_output=True, timeout=2,
-                )
-            else:
-                result = subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-o"],
-                    capture_output=True, timeout=2,
-                )
-            if result.returncode == 0 and result.stdout:
-                return hashlib.sha256(result.stdout).hexdigest()
-        except Exception:
-            pass
+        if not _can_read():
+            return ""
+
+        # Try both tools for plain text
+        text_tools = (
+            [(["wl-paste", "--no-newline"], "wl-paste"), (["xclip", "-selection", "clipboard", "-o"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-o"], "xclip"), (["wl-paste", "--no-newline"], "wl-paste")]
+        )
+        for args, _name in text_tools:
+            try:
+                result = subprocess.run(args, capture_output=True, timeout=2)
+                if result.returncode == 0 and result.stdout:
+                    return hashlib.sha256(result.stdout).hexdigest()
+            except Exception:
+                continue
 
         # Text read returned nothing — clipboard may contain an image.
-        # Try reading image data so image-only clipboard changes are detected.
-        try:
-            if _BACKEND == "wayland" and _has_wl_copy():
-                result = subprocess.run(
-                    ["wl-paste", "--type", "image/png"],
-                    capture_output=True, timeout=2,
-                )
-            else:
-                result = subprocess.run(
-                    ["xclip", "-selection", "clipboard", "-o", "-t", "image/png"],
-                    capture_output=True, timeout=2,
-                )
-            if result.returncode == 0 and result.stdout:
-                return hashlib.sha256(result.stdout).hexdigest()
-        except Exception:
-            pass
+        img_tools = (
+            [(["wl-paste", "--type", "image/png"], "wl-paste"), (["xclip", "-selection", "clipboard", "-o", "-t", "image/png"], "xclip")]
+            if _BACKEND == "wayland"
+            else [(["xclip", "-selection", "clipboard", "-o", "-t", "image/png"], "xclip"), (["wl-paste", "--type", "image/png"], "wl-paste")]
+        )
+        for args, _name in img_tools:
+            try:
+                result = subprocess.run(args, capture_output=True, timeout=2)
+                if result.returncode == 0 and result.stdout:
+                    return hashlib.sha256(result.stdout).hexdigest()
+            except Exception:
+                continue
         return ""
+
+
+_startup_warning_shown = False
+
+
+def check_clipboard_tools() -> str | None:
+    """Return a warning message if no clipboard tool is available, or None if OK.
+    Only shows the warning once per process."""
+    global _startup_warning_shown
+    if _startup_warning_shown:
+        return None
+    _startup_warning_shown = True
+    if not _can_read():
+        return (
+            "No clipboard tool found (xclip or wl-clipboard).\n\n"
+            "Clipboard sync will not work until you install one:\n\n"
+            "  sudo apt install xclip         (X11)\n"
+            "  sudo apt install wl-clipboard  (Wayland)"
+        )
+    return None
 
 
 def create_monitor(poll_interval: float = POLL_INTERVAL) -> ClipboardMonitor:

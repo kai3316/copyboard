@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import filedialog, simpledialog
+from tkinter import filedialog
 
 # Add project root to Python path so 'internal' package can be found
 # (not needed in a PyInstaller-frozen bundle)
@@ -45,7 +45,7 @@ from internal.sync.manager import SyncManager
 from internal.transport.connection import MAX_FRAME_SIZE, TransportManager
 from internal.transport.discovery import Discovery
 from internal.ui.dashboard import DashboardWindow
-from internal.ui.dialogs import show_error, show_info, show_warning
+from internal.ui.dialogs import ask_string, show_error, show_info, show_warning
 from internal.ui.settings_window import SettingsWindow
 from internal.ui.systray import SystrayApp
 from internal.web.server import WebServer
@@ -437,10 +437,11 @@ class Application:
             tmp_root = tk.Tk()
             tmp_root.withdraw()
             try:
-                entered = simpledialog.askstring(
+                entered = ask_string(
+                    tmp_root,
                     "Encryption Password",
                     "Enter the pre-shared encryption password:",
-                    show="*", parent=tmp_root,
+                    show="*",
                 )
             finally:
                 tmp_root.destroy()
@@ -450,14 +451,19 @@ class Application:
                 cfg.encryption_password = entered
                 logger.info("Encryption password verified")
             elif entered:
-                import tkinter.messagebox as messagebox
-                messagebox.showerror(
-                    "Wrong Password",
-                    "The encryption password you entered is incorrect.\n\n"
-                    "ClipSync cannot start without the correct password "
-                    "because your device identity (private key) is encrypted with it.\n\n"
-                    "The application will now exit.",
-                )
+                tmp_root2 = tk.Tk()
+                tmp_root2.withdraw()
+                try:
+                    show_error(
+                        tmp_root2,
+                        "Wrong Password",
+                        "The encryption password you entered is incorrect.\n\n"
+                        "ClipSync cannot start without the correct password "
+                        "because your device identity (private key) is encrypted with it.\n\n"
+                        "The application will now exit.",
+                    )
+                finally:
+                    tmp_root2.destroy()
                 sys.exit(1)
 
         logger.info(
@@ -737,6 +743,13 @@ class Application:
     # ═══════════════════════════════════════════════════════════════
 
     def _start_services(self) -> None:
+        # On Linux, warn if no clipboard tool (xclip/wl-clipboard) is installed
+        if sys.platform == "linux":
+            from internal.clipboard.clipboard_linux import check_clipboard_tools
+            msg = check_clipboard_tools()
+            if msg:
+                self.root.after(800, lambda: show_warning(self.root, "Clipboard Unavailable", msg))
+
         self.sync_mgr.start()
         self.transport_mgr.start_server()
         self.discovery.start()
@@ -1688,10 +1701,9 @@ def main():
     # Prevent duplicate instances (macOS tray icon bug)
     if not _check_and_cleanup_stale_lock():
         # Another instance is running — show error and exit
-        import tkinter.messagebox as _mb
         _r = tk.Tk()
         _r.withdraw()
-        _mb.showerror("ClipSync", "Another instance is already running.")
+        show_error(_r, "ClipSync", "Another instance is already running.")
         _r.destroy()
         sys.exit(1)
 

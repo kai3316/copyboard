@@ -135,9 +135,9 @@ def ask_yesno(parent, title, message):
                    [(T("ui.yes"), _INFO_COLOR), (T("ui.no"), ("gray65", "gray45"))])
 
 
-def ask_string(parent, title, prompt, initial_value=""):
+def ask_string(parent, title, prompt, initial_value="", show=""):
     """Show a themed input dialog. Returns the entered string, or None if
-    cancelled. Uses CTkEntry for consistent look."""
+    cancelled. Uses CTkEntry for consistent look. Pass show='*' for passwords."""
     import customtkinter as ctk
 
     dlg = ctk.CTkToplevel(parent)
@@ -166,14 +166,26 @@ def ask_string(parent, title, prompt, initial_value=""):
         wraplength=350,
     ).pack(fill="x", pady=(0, 10))
 
-    entry_var = ctk.StringVar(value=initial_value)
-    entry = ctk.CTkEntry(
-        body, textvariable=entry_var, height=34,
-        font=ctk.CTkFont(size=13),
-    )
-    entry.pack(fill="x")
-    entry.select_range(0, "end")
-    entry.focus_set()
+    if show:
+        # Use tkinter Entry for password masking (CTkEntry doesn't support show=)
+        import tkinter as tk
+        entry_var = tk.StringVar(value=initial_value)
+        entry = tk.Entry(
+            body, textvariable=entry_var, show=show,
+            font=("TkDefaultFont", 13), relief="solid", borderwidth=1,
+        )
+        entry.pack(fill="x", ipady=6)
+        entry.select_range(0, "end")
+        entry.focus_set()
+    else:
+        entry_var = ctk.StringVar(value=initial_value)
+        entry = ctk.CTkEntry(
+            body, textvariable=entry_var, height=34,
+            font=ctk.CTkFont(size=13),
+        )
+        entry.pack(fill="x")
+        entry.select_range(0, "end")
+        entry.focus_set()
 
     btn_row = ctk.CTkFrame(dlg, fg_color="transparent")
     btn_row.pack(fill="x", padx=24, pady=(0, 20))

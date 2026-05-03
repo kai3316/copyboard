@@ -8,7 +8,7 @@ filtering preferences, and version information.
 import logging
 import os
 import tkinter as tk
-from internal.ui.dialogs import show_info, show_warning
+from internal.ui.dialogs import ask_yesno, show_info, show_warning
 from typing import Callable
 
 import customtkinter as ctk
@@ -19,10 +19,9 @@ from internal.i18n import T, available_locales, set_locale
 logger = logging.getLogger(__name__)
 
 
-def _confirm_danger(parent: tk.Tk, title: str, message: str) -> bool:
+def _confirm_danger(parent, title: str, message: str) -> bool:
     """Show a confirmation dialog for dangerous actions. Returns True if confirmed."""
-    import tkinter.messagebox as messagebox
-    return messagebox.askyesno(title, message, parent=parent, icon="warning")
+    return ask_yesno(parent, title, message)
 
 
 class SettingsWindow:
