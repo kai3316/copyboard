@@ -1060,7 +1060,7 @@ class DashboardWindow:
         inner = ctk.CTkFrame(row, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=10)
 
-        # ── Row 1: dot + name + device ID ──────────────────────
+        # ── Row 1: dot + name + device ID + buttons ─────────────
         r1 = ctk.CTkFrame(inner, fg_color="transparent")
         r1.pack(fill="x")
 
@@ -1073,13 +1073,53 @@ class DashboardWindow:
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(side="left")
 
+        # Action buttons — right side of row 1
+        ctk.CTkButton(
+            r1, text=T("ui.forget"), width=56, height=22,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#5B2C2C"),
+            font=ctk.CTkFont(size=10),
+            command=lambda d=dev_id: self._do_remove(d),
+        ).pack(side="right", padx=(4, 0))
+
+        if paired:
+            ctk.CTkButton(
+                r1, text=T("ui.unpair"), width=56, height=22,
+                fg_color="transparent", border_width=1,
+                text_color=WARN_COLOR,
+                border_color=WARN_COLOR,
+                hover_color=("#FDEBD0", "#7D5A0B"),
+                font=ctk.CTkFont(size=10),
+                command=lambda d=dev_id: self._do_unpair(d),
+            ).pack(side="right", padx=(4, 0))
+
+        if paired and not connected and self._on_connect_peer:
+            ctk.CTkButton(
+                r1, text=T("ui.reconnect"), width=68, height=22,
+                fg_color=ACCENT,
+                hover_color=("#2980B9", "#2471A3"),
+                font=ctk.CTkFont(size=10),
+                command=lambda d=dev_id: self._do_reconnect(d),
+            ).pack(side="right", padx=(4, 0))
+
+        if not connected and not paired and self._on_connect_peer:
+            ctk.CTkButton(
+                r1, text=T("ui.connect"), width=60, height=22,
+                fg_color=ACCENT,
+                hover_color=("#2980B9", "#2471A3"),
+                font=ctk.CTkFont(size=10),
+                command=lambda d=dev_id: self._do_connect(d),
+            ).pack(side="right", padx=(4, 0))
+
         ctk.CTkLabel(
             r1, text=display_id,
             font=ctk.CTkFont(size=10),
             text_color=("gray60", "gray50"),
-        ).pack(side="right")
+        ).pack(side="right", padx=(8, 8))
 
-        # ── Row 2: status text ─────────────────────────────────
+        # ── Row 2: status (left) + notes (right) ─────────────────
         detail = status
         if connected:
             detail += "  \U0001F512  " + T("device.encrypted")
@@ -1088,75 +1128,33 @@ class DashboardWindow:
         else:
             detail += T("device.connect_to_sync")
 
+        r2 = ctk.CTkFrame(inner, fg_color="transparent")
+        r2.pack(fill="x", pady=(2, 0))
+
         ctk.CTkLabel(
-            inner, text=detail,
+            r2, text=detail,
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray60"),
-        ).pack(anchor="w", pady=(2, 0))
+        ).pack(side="left")
 
-        # ── Notes row (for paired devices) ─────────────────────
         if paired:
-            note_row = ctk.CTkFrame(inner, fg_color="transparent")
-            note_row.pack(fill="x", pady=(4, 0))
             note_text = notes if notes else T("device.add_note")
             note_color = ("gray50", "gray60") if notes else ("gray65", "gray55")
             note_label = ctk.CTkLabel(
-                note_row, text=note_text,
+                r2, text=note_text,
                 font=ctk.CTkFont(size=11),
                 text_color=note_color,
             )
-            note_label.pack(side="left")
+            note_label.pack(side="right", padx=(0, 4))
             ctk.CTkButton(
-                note_row, text="✎", width=20, height=20,
+                r2, text="✎", width=20, height=20,
                 fg_color="transparent", border_width=0,
                 text_color=("gray55", "gray55"),
                 hover_color=("gray85", "gray25"),
                 font=ctk.CTkFont(size=9),
                 command=lambda d=dev_id, nl=note_label: self._do_edit_note(d, nl),
-            ).pack(side="left", padx=(4, 0))
+            ).pack(side="right")
 
-        # ── Row 3: action buttons ──────────────────────────────
-        btns = ctk.CTkFrame(inner, fg_color="transparent")
-        btns.pack(fill="x", pady=(6, 0))
-
-        if not connected and not paired and self._on_connect_peer:
-            ctk.CTkButton(
-                btns, text=T("ui.connect"), width=70, height=26,
-                fg_color=ACCENT,
-                hover_color=("#2980B9", "#2471A3"),
-                font=ctk.CTkFont(size=11),
-                command=lambda d=dev_id: self._do_connect(d),
-            ).pack(side="left", padx=(0, 4))
-
-        if paired and not connected and self._on_connect_peer:
-            ctk.CTkButton(
-                btns, text=T("ui.reconnect"), width=80, height=26,
-                fg_color=ACCENT,
-                hover_color=("#2980B9", "#2471A3"),
-                font=ctk.CTkFont(size=11),
-                command=lambda d=dev_id: self._do_reconnect(d),
-            ).pack(side="left", padx=(0, 4))
-
-        if paired:
-            ctk.CTkButton(
-                btns, text=T("ui.unpair"), width=60, height=26,
-                fg_color="transparent", border_width=1,
-                text_color=WARN_COLOR,
-                border_color=WARN_COLOR,
-                hover_color=("#FDEBD0", "#7D5A0B"),
-                font=ctk.CTkFont(size=11),
-                command=lambda d=dev_id: self._do_unpair(d),
-            ).pack(side="left", padx=(0, 4))
-
-        ctk.CTkButton(
-            btns, text=T("ui.forget"), width=60, height=26,
-            fg_color="transparent", border_width=1,
-            text_color=("#E74C3C", "#C0392B"),
-            border_color=("#E74C3C", "#C0392B"),
-            hover_color=("#FADBD8", "#5B2C2C"),
-            font=ctk.CTkFont(size=11),
-            command=lambda d=dev_id: self._do_remove(d),
-        ).pack(side="left")
 
     # ── Device actions ────────────────────────────────────────────
 
@@ -1246,40 +1244,41 @@ class DashboardWindow:
         inner = ctk.CTkFrame(row, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=8)
 
+        # Name + buttons in one row
+        name_row = ctk.CTkFrame(inner, fg_color="transparent")
+        name_row.pack(fill="x")
+
         ctk.CTkLabel(
-            inner, text=peer_name,
+            name_row, text=peer_name,
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w")
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            name_row, text=T("ui.reject"), width=56, height=24,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#5B2C2C"),
+            font=ctk.CTkFont(size=11),
+            command=lambda pid=peer_id: self._on_reject_pairing(pid),
+        ).pack(side="right", padx=(4, 0))
+
+        ctk.CTkButton(
+            name_row, text=T("ui.confirm"), width=72, height=24,
+            fg_color=STATUS_COLOR,
+            hover_color=("#27AE60", "#1E8449"),
+            font=ctk.CTkFont(size=11),
+            command=lambda pid=peer_id, c=code: self._on_confirm_pairing(pid, c),
+        ).pack(side="right", padx=(4, 0))
 
         code_frame = ctk.CTkFrame(inner, fg_color=("#D6EAF8", "#1A3A4A"),
                                   corner_radius=6)
-        code_frame.pack(anchor="w", pady=(2, 6))
+        code_frame.pack(anchor="w", pady=(4, 0))
         ctk.CTkLabel(
             code_frame, text=T("ui.pairing_code", code=code),
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=ACCENT,
         ).pack(padx=12, pady=6)
-
-        btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-        btn_row.pack(fill="x")
-
-        ctk.CTkButton(
-            btn_row, text=T("ui.confirm"), width=80, height=28,
-            fg_color=STATUS_COLOR,
-            hover_color=("#27AE60", "#1E8449"),
-            font=ctk.CTkFont(size=12),
-            command=lambda pid=peer_id, c=code: self._on_confirm_pairing(pid, c),
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            btn_row, text=T("ui.reject"), width=60, height=28,
-            fg_color="transparent", border_width=1,
-            text_color=("#E74C3C", "#C0392B"),
-            border_color=("#E74C3C", "#C0392B"),
-            hover_color=("#FADBD8", "#5B2C2C"),
-            font=ctk.CTkFont(size=12),
-            command=lambda pid=peer_id: self._on_reject_pairing(pid),
-        ).pack(side="left")
 
     def _on_confirm_pairing(self, peer_id: str, code: str):
         if not self._on_pair:
@@ -1570,7 +1569,7 @@ class DashboardWindow:
         )
         preview_lbl.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
-        # ── Row 2: meta ──────────────────────────────────────────
+        # ── Row 2: meta (left) + buttons (right) ──────────────────
         r2 = ctk.CTkFrame(inner, fg_color="transparent")
         r2.pack(fill="x", pady=(2, 0))
 
@@ -1581,25 +1580,22 @@ class DashboardWindow:
             anchor="w",
         ).pack(side="left")
 
-        # ── Row 3: buttons ───────────────────────────────────────
         if preview:
-            btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-            btn_row.pack(fill="x", pady=(4, 0))
             ctk.CTkButton(
-                btn_row, text=T("ui.copy"), width=56, height=24,
-                fg_color=("#27AE60", "#2ECC71"),
-                font=self._card_font_btn,
-                command=lambda i=index: self._do_copy_history(i),
-            ).pack(side="left")
-            ctk.CTkButton(
-                btn_row, text=T("ui.delete"), width=56, height=24,
+                r2, text=T("ui.delete"), width=56, height=24,
                 fg_color="transparent", border_width=1,
                 text_color=("#E74C3C", "#C0392B"),
                 border_color=("#E74C3C", "#C0392B"),
                 hover_color=("#FADBD8", "#5B2C2C"),
                 font=self._card_font_btn,
                 command=lambda i=index: self._on_delete_history_item(i),
-            ).pack(side="left", padx=(6, 0))
+            ).pack(side="right", padx=(6, 0))
+            ctk.CTkButton(
+                r2, text=T("ui.copy"), width=56, height=24,
+                fg_color=("#27AE60", "#2ECC71"),
+                font=self._card_font_btn,
+                command=lambda i=index: self._do_copy_history(i),
+            ).pack(side="right")
 
     def _do_copy_history(self, index: int):
         if self._copy_from_history:
@@ -2319,12 +2315,49 @@ class DashboardWindow:
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=10)
 
-        # Row 1: file name + size
+        # Row 1: file name + size + action buttons
         r1 = ctk.CTkFrame(inner, fg_color="transparent")
         r1.pack(fill="x")
+
+        # Action buttons (pause / resume / cancel) — right side
+        paused = transfer.get("paused", False)
+        tid = transfer.get("transfer_id", "")
+        if state in ("sending", "receiving", "paused"):
+            if self._on_cancel_transfer:
+                ctk.CTkButton(
+                    r1, text=T("ui.cancel"), width=52, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#E74C3C", "#C0392B"),
+                    border_color=("#E74C3C", "#C0392B"),
+                    hover_color=("#FADBD8", "#5B2C2C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda t=tid: self._on_cancel_transfer(t),
+                ).pack(side="right", padx=(4, 0))
+            if self._on_resume_transfer and paused:
+                ctk.CTkButton(
+                    r1, text=T("ui.resume"), width=52, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#27AE60", "#2ECC71"),
+                    border_color=("#27AE60", "#2ECC71"),
+                    hover_color=("#D5F5E3", "#1C4A2C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda t=tid: self._on_resume_transfer(t),
+                ).pack(side="right", padx=(4, 0))
+            if self._on_pause_transfer and not paused:
+                ctk.CTkButton(
+                    r1, text=T("ui.pause"), width=52, height=22,
+                    fg_color="transparent", border_width=1,
+                    text_color=("#E67E22", "#F0A04B"),
+                    border_color=("#E67E22", "#F0A04B"),
+                    hover_color=("#FDEBD0", "#5B3A1C"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda t=tid: self._on_pause_transfer(t),
+                ).pack(side="right", padx=(4, 0))
+
         ctk.CTkLabel(
             r1, text=f"{arrow}  {display_name}",
             font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w",
         ).pack(side="left")
         ctk.CTkLabel(
             r1, text=size_str,
@@ -2368,48 +2401,6 @@ class DashboardWindow:
             bar.pack(fill="x", pady=(6, 0))
             bar.set(progress)
 
-        # Action buttons (pause / resume / cancel)
-        paused = transfer.get("paused", False)
-        if state in ("sending", "receiving", "paused") and (
-            self._on_pause_transfer or self._on_resume_transfer or self._on_cancel_transfer
-        ):
-            btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-            btn_row.pack(fill="x", pady=(4, 0))
-            tid = transfer.get("transfer_id", "")
-
-            if self._on_pause_transfer and not paused:
-                ctk.CTkButton(
-                    btn_row, text=T("ui.pause"), width=56, height=22,
-                    fg_color="transparent", border_width=1,
-                    text_color=("#E67E22", "#F0A04B"),
-                    border_color=("#E67E22", "#F0A04B"),
-                    hover_color=("#FDEBD0", "#5B3A1C"),
-                    font=ctk.CTkFont(size=10),
-                    command=lambda t=tid: self._on_pause_transfer(t),
-                ).pack(side="left", padx=(0, 4))
-
-            if self._on_resume_transfer and paused:
-                ctk.CTkButton(
-                    btn_row, text=T("ui.resume"), width=56, height=22,
-                    fg_color="transparent", border_width=1,
-                    text_color=("#27AE60", "#2ECC71"),
-                    border_color=("#27AE60", "#2ECC71"),
-                    hover_color=("#D5F5E3", "#1C4A2C"),
-                    font=ctk.CTkFont(size=10),
-                    command=lambda t=tid: self._on_resume_transfer(t),
-                ).pack(side="left", padx=(0, 4))
-
-            if self._on_cancel_transfer:
-                ctk.CTkButton(
-                    btn_row, text=T("ui.cancel"), width=56, height=22,
-                    fg_color="transparent", border_width=1,
-                    text_color=("#E74C3C", "#C0392B"),
-                    border_color=("#E74C3C", "#C0392B"),
-                    hover_color=("#FADBD8", "#5B2C2C"),
-                    font=ctk.CTkFont(size=10),
-                    command=lambda t=tid: self._on_cancel_transfer(t),
-                ).pack(side="left")
-
     def _create_transfer_history_card(self, entry: dict):
         direction = entry.get("direction", "down")
         file_name = entry.get("file_name", "?")
@@ -2437,55 +2428,56 @@ class DashboardWindow:
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=12, pady=8)
 
-        # Row 1: icon + filename (left), size + time (right)
+        # Row 1: icon + filename (left), buttons + size + time (right)
         r1 = ctk.CTkFrame(inner, fg_color="transparent")
         r1.pack(fill="x")
-        ctk.CTkLabel(
-            r1, text=f"{status_icon}  {arrow}  {display_name}",
-            font=ctk.CTkFont(size=12),
-        ).pack(side="left")
-        ctk.CTkLabel(
-            r1, text=f"{size_str}  ·  {time_str}",
-            font=ctk.CTkFont(size=10),
-            text_color=("gray50", "gray60"),
-        ).pack(side="right")
 
-        # Row 2: action buttons
         resolve_path = saved_path or source_path
         has_actions = (
             (resolve_path and success and self._on_open_file and self._on_open_folder)
             or self._delete_transfer_history_item
         )
+
+        # Action buttons on the right
         if has_actions:
-            btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-            btn_row.pack(fill="x", pady=(6, 0))
-            if resolve_path and success and self._on_open_file and self._on_open_folder:
-                ctk.CTkButton(
-                    btn_row, text=T("ui.open_file"), width=70, height=22,
-                    fg_color=("gray85", "gray25"),
-                    text_color=("gray20", "gray80"),
-                    hover_color=("gray75", "gray35"),
-                    font=ctk.CTkFont(size=10),
-                    command=lambda p=resolve_path: self._on_open_file(p),
-                ).pack(side="left", padx=(0, 4))
-                ctk.CTkButton(
-                    btn_row, text=T("ui.open_folder"), width=80, height=22,
-                    fg_color=("gray85", "gray25"),
-                    text_color=("gray20", "gray80"),
-                    hover_color=("gray75", "gray35"),
-                    font=ctk.CTkFont(size=10),
-                    command=lambda p=resolve_path: self._on_open_folder(p),
-                ).pack(side="left")
             if self._delete_transfer_history_item:
                 ctk.CTkButton(
-                    btn_row, text=T("ui.delete"), width=50, height=22,
+                    r1, text=T("ui.delete"), width=48, height=22,
                     fg_color="transparent", border_width=1,
                     text_color=("#E74C3C", "#C0392B"),
                     border_color=("#E74C3C", "#C0392B"),
                     hover_color=("#FADBD8", "#5B2C2C"),
                     font=ctk.CTkFont(size=10),
                     command=lambda e=entry: self._delete_transfer_history_item(e),
-                ).pack(side="right")
+                ).pack(side="right", padx=(4, 0))
+            if resolve_path and success and self._on_open_file and self._on_open_folder:
+                ctk.CTkButton(
+                    r1, text=T("ui.open_folder"), width=72, height=22,
+                    fg_color=("gray85", "gray25"),
+                    text_color=("gray20", "gray80"),
+                    hover_color=("gray75", "gray35"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda p=resolve_path: self._on_open_folder(p),
+                ).pack(side="right", padx=(4, 0))
+                ctk.CTkButton(
+                    r1, text=T("ui.open_file"), width=64, height=22,
+                    fg_color=("gray85", "gray25"),
+                    text_color=("gray20", "gray80"),
+                    hover_color=("gray75", "gray35"),
+                    font=ctk.CTkFont(size=10),
+                    command=lambda p=resolve_path: self._on_open_file(p),
+                ).pack(side="right", padx=(4, 0))
+
+        ctk.CTkLabel(
+            r1, text=f"{status_icon}  {arrow}  {display_name}",
+            font=ctk.CTkFont(size=12),
+            anchor="w",
+        ).pack(side="left")
+        ctk.CTkLabel(
+            r1, text=f"{size_str}  ·  {time_str}",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray50", "gray60"),
+        ).pack(side="right")
 
     @staticmethod
     def _format_size(size: int) -> str:

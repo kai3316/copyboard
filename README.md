@@ -77,6 +77,7 @@ Most clipboard sync tools fall into two camps: **cloud-based services** (conveni
 | **Rich Text / HTML** | ✅ Links, tables, formatting preserved | ❌ Plain text only | ❌ Plain text only |
 | **Images (PNG)** | ✅ Full resolution, any size | ❌ Not supported | ❌ Not supported |
 | **File Transfer** | ✅ Encrypted, any file type | ❌ Not supported | ❌ |
+| **Mobile Access** | ✅ Web Companion — browser on phone | ❌ Separate app required | ❌ |
 | **Data Location** | ✅ Pure LAN — never leaves | ❌ Uploaded to cloud servers | ✅ Local only |
 | **Account Required** | ✅ None — just run it | ❌ Account + sign-in | Varies |
 | **Cross-Platform** | ✅ Windows / macOS / Linux | Varies by tool | ❌ Single ecosystem |
@@ -118,6 +119,7 @@ Most clipboard sync tools fall into two camps: **cloud-based services** (conveni
 - **Optional pre-shared password** — add an out-of-band password for additional entropy; verified via PBKDF2 hash on startup
 
 ### Additional Features
+- **Web Companion** — built-in HTTP server lets phones on the same LAN view clipboard history, push text, and transfer files. Scan a QR code, no app install needed. PWA support for "Add to Home Screen" on iOS/Android.
 - **File transfer** — send files between paired devices over the encrypted channel
 - **Content filtering** — optional regex-based filters for credit cards, SSNs, API keys, passwords
 - **System tray** — runs quietly in the background; right-click for settings
@@ -248,6 +250,9 @@ Device A                              Device B
 | Encryption | Settings → Security | Toggle at-rest + frame encryption |
 | Pre-shared Password | Settings → Security | Optional shared secret for extra key entropy |
 | History | Settings → Advanced | Max entries (default: 50) |
+| Web Companion | Settings → Web Companion | Built-in HTTP server for mobile access (off by default) |
+| Web Port | Settings → Web Companion | HTTP port for web companion (default: 19991) |
+| Web History Limit | Settings → Web Companion | Number of history items shown on the web page (default: 5) |
 | File Receive Dir | Settings → Advanced | Where received files are saved |
 | Poll Interval | Settings → Advanced | Clipboard check frequency (default: 0.4s) |
 | Sync Debounce | Settings → Advanced | Minimum interval between syncs (default: 0.3s) |
@@ -327,11 +332,14 @@ clipsync/
 │   ├── transport/
 │   │   ├── connection.py            # TLS 1.3 TCP connections
 │   │   └── discovery.py             # mDNS/Zeroconf discovery
-│   └── ui/
-│       ├── dashboard.py             # Main window with 4 panels
-│       ├── settings_window.py       # Settings with sidebar nav
-│       ├── dialogs.py               # Themed CTk dialog replacements
-│       └── systray.py               # System tray icon + menu
+│   ├── ui/
+│   │   ├── dashboard.py             # Main window with 5 panels
+│   │   ├── settings_window.py       # Settings with sidebar nav
+│   │   ├── dialogs.py               # Themed CTk dialog replacements
+│   │   └── systray.py               # System tray icon + menu
+│   └── web/
+│       ├── __init__.py
+│       └── server.py                # Built-in HTTP server + mobile PWA
 ├── tests/                           # 204 tests covering all modules
 ├── assets/
 │   └── icon.svg                     # Application icon

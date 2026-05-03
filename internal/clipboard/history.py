@@ -116,10 +116,11 @@ class ClipboardHistory:
             self._path = _config_dir() / "clipboard_history.json"
         self.MAX_ENTRIES = max_entries
         self._entries: list[dict] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._enc_mgr = enc_mgr
         self._last_dedup_key: str = ""
         self._last_dedup_time: float = 0.0
+        self._next_id: int = 0
         self._load()
 
     # ------------------------------------------------------------------
@@ -162,7 +163,10 @@ class ClipboardHistory:
                     for t, data in content.types.items()
                 },
                 "source_device": content.source_device,
+                "pinned": False,
+                "entry_id": self._next_id,
             }
+            self._next_id += 1
 
             self._entries.insert(0, entry)
             if len(self._entries) > self.MAX_ENTRIES:
@@ -170,9 +174,11 @@ class ClipboardHistory:
             self._save()
 
     def get_all(self) -> list[dict]:
-        """Return all entries, newest first."""
+        """Return all entries, pinned first, then newest first within each group."""
         with self._lock:
-            return list(self._entries)
+            pinned = [e for e in self._entries if e.get("pinned")]
+            unpinned = [e for e in self._entries if not e.get("pinned")]
+            return pinned + unpinned
 
     def search(self, query: str) -> list[dict]:
         """Case-insensitive search in text previews. Returns matching entries, newest first."""
@@ -181,17 +187,50 @@ class ClipboardHistory:
             return [e for e in self._entries if q in e.get("text_preview", "").lower()]
 
     def get(self, index: int) -> dict | None:
-        """Get a single entry by index (0 = newest). Returns None if out of bounds."""
+        """Get a single entry by display index (matching get_all() order). Returns None if out of bounds."""
         with self._lock:
-            if 0 <= index < len(self._entries):
-                return dict(self._entries[index])
+            internal = self._display_to_internal(index)
+            if internal is not None:
+                return dict(self._entries[internal])
             return None
 
+    def _display_to_internal(self, display_index: int) -> int | None:
+        """Convert a get_all() display index to internal _entries index."""
+        all_entries = self.get_all()
+        if 0 <= display_index < len(all_entries):
+            target = all_entries[display_index]
+            eid = target.get("entry_id")
+            for i, e in enumerate(self._entries):
+                if e.get("entry_id") == eid:
+                    return i
+        return None
+
     def delete(self, index: int) -> bool:
-        """Delete a single entry by index (0 = newest). Returns True if deleted."""
+        """Delete an entry by display index (matching get_all() order). Returns True if deleted."""
         with self._lock:
-            if 0 <= index < len(self._entries):
-                self._entries.pop(index)
+            internal = self._display_to_internal(index)
+            if internal is not None:
+                self._entries.pop(internal)
+                self._save()
+                return True
+            return False
+
+    def pin(self, index: int) -> bool:
+        """Pin an entry by display index (matching get_all() order). Pinned items stay at the top."""
+        with self._lock:
+            internal = self._display_to_internal(index)
+            if internal is not None:
+                self._entries[internal]["pinned"] = True
+                self._save()
+                return True
+            return False
+
+    def unpin(self, index: int) -> bool:
+        """Unpin an entry by display index (matching get_all() order)."""
+        with self._lock:
+            internal = self._display_to_internal(index)
+            if internal is not None:
+                self._entries[internal]["pinned"] = False
                 self._save()
                 return True
             return False
@@ -217,6 +256,8 @@ class ClipboardHistory:
 
         if isinstance(data, list):
             self._entries = data[: self.MAX_ENTRIES]
+            if self._entries:
+                self._next_id = max(e.get("entry_id", 0) for e in self._entries) + 1
             if self._enc_mgr:
                 for entry in self._entries:
                     self._decrypt_entry(entry)

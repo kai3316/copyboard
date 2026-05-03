@@ -577,7 +577,10 @@ class Application:
         )
 
         # ── Web Companion ───────────────────────────────────────
-        self.web_server = WebServer(cfg, self.clipboard_history, self.sync_mgr)
+        self.web_server = WebServer(
+            cfg, self.clipboard_history, self.sync_mgr,
+            get_connected_ids=lambda: self.transport_mgr.get_connected_peers(),
+        )
 
     # ═══════════════════════════════════════════════════════════════
     # Phase 6: Callback wiring
