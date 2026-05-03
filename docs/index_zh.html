@@ -405,6 +405,12 @@
     }
 
     /* Use Cases */
+    .web-companion { background: #0d0d14; }
+    .web-feat-card:hover {
+      border-color: rgba(52,152,219,0.3) !important; transform: translateY(-4px);
+      box-shadow: 0 0 25px rgba(52,152,219,0.08);
+    }
+
     .usecases { background: #0a0a0f; }
     .usecase-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
@@ -566,6 +572,7 @@
     @media (max-width: 1024px) {
       .feature-grid { grid-template-columns: repeat(2, 1fr); }
       .steps { grid-template-columns: repeat(2, 1fr); }
+      .web-features { grid-template-columns: repeat(2, 1fr) !important; }
       .hero-inner { flex-direction: column; gap: 3rem; text-align: center; }
       .hero-content { max-width: 100%; }
       .hero-underline { margin: 0 auto 1.75rem; }
@@ -603,6 +610,7 @@
       .orb { opacity: 0.06; }
       .feature-card { padding: 1.5rem; }
       .step { padding: 1.5rem 1rem; }
+      .web-features { grid-template-columns: 1fr !important; }
     }
 
     @media (max-width: 400px) {
@@ -774,6 +782,7 @@
       </a>
       <ul class="nav-links">
         <li><a href="#features">功能特性</a></li>
+        <li><a href="#web-companion">Web 伴侣</a></li>
         <li><a href="#security">安全架构</a></li>
         <li><a href="#how-it-works">工作原理</a></li>
         <li><a href="#download">下载</a></li>
@@ -789,6 +798,7 @@
     </div>
     <div class="mobile-menu">
       <a href="#features" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">功能特性</a>
+      <a href="#web-companion" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">Web 伴侣</a>
       <a href="#security" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">安全架构</a>
       <a href="#how-it-works" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">工作原理</a>
       <a href="#download" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">下载</a>
@@ -901,6 +911,39 @@
           <div class="feature-icon red">&#128065;</div>
           <h3>隐私优先</h3>
           <p>数据仅限局域网内传输，永不触碰云端。剪贴板历史落盘加密。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Web Companion -->
+  <section class="web-companion" id="web-companion">
+    <div class="section-inner">
+      <div class="section-header reveal">
+        <div class="section-label">Web 伴侣</div>
+        <h2>手机访问，无需安装</h2>
+        <p>扫码即连，在手机上查看剪贴板、推送文字、传输文件。不装 App，不注册账号。</p>
+      </div>
+      <div class="web-features stagger-reveal" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;max-width:1000px;margin:0 auto;">
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#128241;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">无需安装 App</h4>
+          <p style="color:#71717a;font-size:0.82rem;">手机浏览器扫码即用，iOS 和 Android 通用，无需下载任何应用。</p>
+        </div>
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#128203;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">查看与复制</h4>
+          <p style="color:#71717a;font-size:0.82rem;">浏览所有设备的剪贴板历史，点击任意记录即可复制到手机。</p>
+        </div>
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#128228;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">推送与传输</h4>
+          <p style="color:#71717a;font-size:0.82rem;">在手机上输入文字推送到任意设备，还支持文件上传和下载。</p>
+        </div>
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#127760;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">PWA 支持</h4>
+          <p style="color:#71717a;font-size:0.82rem;">添加到手机主屏幕，像原生应用一样使用，离线也能访问。</p>
         </div>
       </div>
     </div>

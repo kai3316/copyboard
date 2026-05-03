@@ -415,6 +415,12 @@
 
     /* ── How It Works ────────────────────────────────────── */
     /* Use Cases */
+    .web-companion { background: #0d0d14; }
+    .web-feat-card:hover {
+      border-color: rgba(52,152,219,0.3) !important; transform: translateY(-4px);
+      box-shadow: 0 0 25px rgba(52,152,219,0.08);
+    }
+
     .usecases { background: #0a0a0f; }
     .usecase-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
@@ -583,6 +589,7 @@
     @media (max-width: 1024px) {
       .feature-grid { grid-template-columns: repeat(2, 1fr); }
       .steps { grid-template-columns: repeat(2, 1fr); }
+      .web-features { grid-template-columns: repeat(2, 1fr) !important; }
       .hero-inner { flex-direction: column; gap: 3rem; text-align: center; }
       .hero-content { max-width: 100%; }
       .hero-underline { margin: 0 auto 1.75rem; }
@@ -621,6 +628,7 @@
       .orb { opacity: 0.06; }
       .feature-card { padding: 1.5rem; }
       .step { padding: 1.5rem 1rem; }
+      .web-features { grid-template-columns: 1fr !important; }
     }
 
     /* Small phone */
@@ -807,6 +815,7 @@
       </a>
       <ul class="nav-links">
         <li><a href="#features">Features</a></li>
+        <li><a href="#web-companion">Web Companion</a></li>
         <li><a href="#security">Security</a></li>
         <li><a href="#how-it-works">How It Works</a></li>
         <li><a href="#download">Download</a></li>
@@ -822,6 +831,7 @@
     </div>
     <div class="mobile-menu">
       <a href="#features" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">Features</a>
+      <a href="#web-companion" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">Web Companion</a>
       <a href="#security" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">Security</a>
       <a href="#how-it-works" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">How It Works</a>
       <a href="#download" onclick="document.querySelector('.mobile-menu').classList.remove('open');document.querySelector('.hamburger').classList.remove('open')">Download</a>
@@ -934,6 +944,39 @@
           <div class="feature-icon red">&#128065;</div>
           <h3>Privacy by Design</h3>
           <p>Everything stays on your LAN. Nothing touches the cloud. Clipboard history encrypted at rest.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Web Companion -->
+  <section class="web-companion" id="web-companion">
+    <div class="section-inner">
+      <div class="section-header reveal">
+        <div class="section-label">Web Companion</div>
+        <h2>Mobile Access, No App Needed</h2>
+        <p>Scan a QR code and access your clipboard from any phone on the same network. No install, no account.</p>
+      </div>
+      <div class="web-features stagger-reveal" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;max-width:1000px;margin:0 auto;">
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#128241;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">No App Needed</h4>
+          <p style="color:#71717a;font-size:0.82rem;">Open your phone browser, scan the QR code, done. Works on iOS and Android right away.</p>
+        </div>
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#128203;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">View &amp; Copy</h4>
+          <p style="color:#71717a;font-size:0.82rem;">See recent clipboard history from all your devices. Tap any item to copy it to your phone.</p>
+        </div>
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#128228;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">Push &amp; Transfer</h4>
+          <p style="color:#71717a;font-size:0.82rem;">Type text on your phone and push it to any connected device. Upload and download files too.</p>
+        </div>
+        <div class="web-feat-card" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:1.75rem;text-align:center;transition:border-color 0.3s,transform 0.3s;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">&#127760;</div>
+          <h4 style="margin-bottom:0.4rem;font-size:0.95rem;">PWA Ready</h4>
+          <p style="color:#71717a;font-size:0.82rem;">Add to Home Screen on iOS/Android for a native app feel. Works offline after first visit.</p>
         </div>
       </div>
     </div>
