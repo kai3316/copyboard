@@ -979,7 +979,7 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("web.qr_title"))
         dlg.resizable(False, False)
-        w, h = 320, 380
+        w, h = 320, 430
         sw, sh = dlg.winfo_screenwidth(), dlg.winfo_screenheight()
         dlg.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
