@@ -2251,8 +2251,10 @@ class DashboardWindow:
         if not cfg.web_enabled:
             self._web_card.pack_forget()
             return
-        self._web_card.pack(fill="x", pady=(8, 0),
-                            before=self._web_card.master.winfo_children()[-1])
+        try:
+            self._web_card.pack_info()
+        except tk.TclError:
+            self._web_card.pack(fill="x", pady=(8, 0))
 
         from internal.web.server import WebServer
         ip = WebServer._get_lan_ip()
