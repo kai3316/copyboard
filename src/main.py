@@ -921,8 +921,13 @@ class Application:
         self._parent_conn = parent_conn
 
         def _poll_tray():
-            while parent_conn.poll():
-                self._handle_tray_msg(parent_conn.recv())
+            if self._shutting_down:
+                return
+            try:
+                while parent_conn.poll():
+                    self._handle_tray_msg(parent_conn.recv())
+            except (EOFError, BrokenPipeError, ConnectionResetError, OSError):
+                return
             self.root.after(100, _poll_tray)
 
         self.root.after(100, _poll_tray)
@@ -940,7 +945,7 @@ class Application:
         elif cmd == "show_web_qr":
             self._show_web_qr()
         elif cmd == "send_url":
-            self._do_send_url()
+            self.root.after(0, self._do_send_url)
         elif cmd == "quit":
             self.shutdown()
 
@@ -1297,14 +1302,7 @@ class Application:
                 return
             if not re.match(r'^https?://', url):
                 url = "https://" + url
-            peer_id = self._pick_peer()
-            if peer_id is None:
-                return
-            data = encode_frame({"msg_type": "nav_url", "url": url},
-                                source_device=self.cfg.device_id)
-            self.transport_mgr.send_to_peer(peer_id, data)
-            logger.info("Sent URL to peer %s: %s", peer_id[:12], url[:80])
-            notification_mgr.show(T("nav_url.title"), url[:120])
+            self.root.after(0, lambda u=url: self._send_url_to_peer(u))
 
         ctk.CTkButton(
             btn_row, text=T("transfer.send"), width=80, height=32,
@@ -1314,6 +1312,17 @@ class Application:
         dlg.grab_set()
         dlg.focus_force()
         dlg.bind("<Return>", lambda e: _send())
+
+    def _send_url_to_peer(self, url: str) -> None:
+        """Pick a peer and send the URL (deferred from dialog callback)."""
+        peer_id = self._pick_peer()
+        if peer_id is None:
+            return
+        data = encode_frame({"msg_type": "nav_url", "url": url},
+                            source_device=self.cfg.device_id)
+        self.transport_mgr.send_to_peer(peer_id, data)
+        logger.info("Sent URL to peer %s: %s", peer_id[:12], url[:80])
+        notification_mgr.show(T("nav_url.title"), url[:120])
 
     def _pick_peer(self) -> str | None:
         """Show a dialog to select which peer to send to.
