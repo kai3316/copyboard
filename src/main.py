@@ -1429,6 +1429,7 @@ class Application:
             on_open_folder=self._open_folder,
             on_retry_transfer=self._retry_file_transfer,
             on_edit_note=self._on_edit_note,
+            on_web_action=self._on_web_action,
         )
         self.dashboard_win.show()
 

@@ -91,6 +91,8 @@ class DashboardWindow:
         on_retry_transfer: Callable | None = None,
         # Notes
         on_edit_note: Callable | None = None,
+        # Web companion
+        on_web_action: Callable | None = None,
     ):
         self._root = root
         self._get_config = get_config
@@ -130,6 +132,7 @@ class DashboardWindow:
         self._on_open_folder = on_open_folder
         self._on_retry_transfer = on_retry_transfer
         self._on_edit_note = on_edit_note
+        self._on_web_action = on_web_action
 
         self._window: ctk.CTkToplevel | None = None
         self._dark_mode = get_config().appearance_mode == "dark"
@@ -199,6 +202,14 @@ class DashboardWindow:
         self._card_font_btn: ctk.CTkFont | None = None
         self._card_type_labels: dict[str, str] | None = None
         self._cached_device_id: str | None = None
+
+        # Web companion widgets (overview)
+        self._web_switch_var: tk.BooleanVar | None = None
+        self._web_card: ctk.CTkFrame | None = None
+        self._web_qr_label: ctk.CTkLabel | None = None
+        self._web_url_label: ctk.CTkLabel | None = None
+        self._web_copy_btn: ctk.CTkButton | None = None
+        self._web_switch: ctk.CTkSwitch | None = None
 
     # ═══════════════════════════════════════════════════════════════
     # Public API
@@ -691,6 +702,15 @@ class DashboardWindow:
             font=ctk.CTkFont(size=12),
         ).pack(anchor="w", pady=(0, 6))
 
+        self._web_switch_var = tk.BooleanVar(value=cfg.web_enabled)
+        self._web_switch = ctk.CTkSwitch(
+            c_center, text=T("settings_window.web_companion_title"),
+            variable=self._web_switch_var,
+            command=self._on_web_toggle,
+            font=ctk.CTkFont(size=12),
+        )
+        self._web_switch.pack(anchor="w", pady=(0, 6))
+
         # ── Bottom: Activity ───────────────────────────────────────────
         card_a = ctk.CTkFrame(panel, corner_radius=14)
         card_a.pack(fill="both", expand=True)
@@ -772,6 +792,56 @@ class DashboardWindow:
             elif ref_name == "_stat_visibility":
                 self._stat_visibility = val
                 self._sub_visibility = sub
+
+        # ── Web Companion card (shown when enabled) ─────────────────
+        web_card = ctk.CTkFrame(panel, corner_radius=14)
+        web_card.pack(fill="x", pady=(8, 0))
+        self._web_card = web_card
+
+        web_inner = ctk.CTkFrame(web_card, fg_color="transparent")
+        web_inner.pack(fill="x", padx=16, pady=(14, 14))
+
+        # Left: QR code
+        qr_frame = ctk.CTkFrame(web_inner, corner_radius=8,
+                                fg_color=("gray95", "gray17"),
+                                width=120, height=120)
+        qr_frame.pack(side="left", padx=(0, 16))
+        qr_frame.pack_propagate(False)
+        self._web_qr_label = ctk.CTkLabel(qr_frame, text="")
+        self._web_qr_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Right: URL + copy
+        right = ctk.CTkFrame(web_inner, fg_color="transparent")
+        right.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkLabel(right, text=T("web.qr_title"),
+                    font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(0, 2))
+
+        ctk.CTkLabel(right, text=T("settings_window.web_qr_hint"),
+                    font=ctk.CTkFont(size=11),
+                    text_color=("gray55", "gray55"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        url_row = ctk.CTkFrame(right, corner_radius=6,
+                               fg_color=("gray90", "gray17"))
+        url_row.pack(fill="x")
+        self._web_url_label = ctk.CTkLabel(
+            url_row, text="", font=ctk.CTkFont(size=11, family="monospace"),
+            text_color=("gray50", "gray70"),
+        )
+        self._web_url_label.pack(side="left", padx=(10, 6), pady=8)
+
+        self._web_copy_btn = ctk.CTkButton(
+            url_row, text=T("ui.copy"), width=54, height=28,
+            font=ctk.CTkFont(size=11),
+            command=self._on_web_copy_url,
+        )
+        self._web_copy_btn.pack(side="right", padx=(0, 6))
+
+        # Initial state: show if web enabled
+        if not cfg.web_enabled:
+            web_card.pack_forget()
 
         return wrapper
 
@@ -907,6 +977,8 @@ class DashboardWindow:
                     self._recent_activity.configure(text=T("activity.no_recent"))
             except Exception:
                 self._recent_activity.configure(text="")
+
+        self._refresh_web_card()
 
     # ═══════════════════════════════════════════════════════════════
     # Panel: Devices (with pairing)
@@ -2149,4 +2221,57 @@ class DashboardWindow:
                 self._overview_device_name.configure(text=cfg.device_name)
             if self._status_footer:
                 self._status_footer.configure(text=T("footer.name_updated"))
+
+    # ── Web Companion (overview) ────────────────────────────────────
+
+    def _on_web_toggle(self):
+        enabled = self._web_switch_var.get()
+        cfg = self._get_config()
+        cfg.web_enabled = enabled
+        if enabled and not cfg.web_token:
+            import secrets
+            cfg.web_token = secrets.token_urlsafe(16)
+        self._save_config()
+        self._refresh_web_card()
+        if self._on_web_action:
+            self._on_web_action({"action": "start" if enabled else "stop"})
+
+    def _on_web_copy_url(self):
+        url = self._web_url_label.cget("text") if self._web_url_label else ""
+        if url and self._web_copy_btn:
+            self._window.clipboard_clear()
+            self._window.clipboard_append(url)
+            self._web_copy_btn.configure(text=T("web.copied"))
+            self._root.after(2000, lambda: self._web_copy_btn.configure(text=T("ui.copy")))
+
+    def _refresh_web_card(self):
+        if self._web_card is None:
+            return
+        cfg = self._get_config()
+        if not cfg.web_enabled:
+            self._web_card.pack_forget()
+            return
+        self._web_card.pack(fill="x", pady=(8, 0),
+                            before=self._web_card.master.winfo_children()[-1])
+
+        from internal.web.server import WebServer
+        ip = WebServer._get_lan_ip()
+        token = cfg.web_token or ""
+        port = cfg.web_port
+        url = f"http://{ip}:{port}?token={token}" if token else f"http://{ip}:{port}"
+        self._web_url_label.configure(text=url)
+
+        if token:
+            try:
+                import qrcode
+                from PIL import Image
+                img = qrcode.make(url)
+                img = img.resize((100, 100), Image.LANCZOS)
+                ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(100, 100))
+                self._web_qr_label.configure(image=ctk_img, text="")
+                self._web_qr_label.image = ctk_img
+            except Exception:
+                self._web_qr_label.configure(image=None, text="QR err")
+        else:
+            self._web_qr_label.configure(image=None, text="")
 
