@@ -1225,15 +1225,31 @@ class WebServer:
 
     @staticmethod
     def _get_lan_ip() -> str:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0)
-            s.connect(("10.254.254.254", 1))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
+        """Return the best LAN IP reachable from other devices on the local network.
+
+        Prefers 192.168.x.x over 10.x.x.x over 172.16-31.x.x (VPN range).
+        Falls back to the OS-chosen default route if no private IP is found.
+        """
+        all_ips = WebServer.get_all_ips()
+        if not all_ips:
             return "127.0.0.1"
+        # Sort by preference: real LAN > VPN/tunnel ranges
+        def _priority(ip):
+            if ip.startswith("192.168."):
+                return 0
+            if ip.startswith("10."):
+                return 1
+            # 172.16.0.0 – 172.31.255.255 (often VPN)
+            if ip.startswith("172."):
+                try:
+                    second = int(ip.split(".")[1])
+                    if 16 <= second <= 31:
+                        return 2
+                except ValueError:
+                    pass
+            return 3  # non-private, use as last resort
+        all_ips.sort(key=_priority)
+        return all_ips[0]
 
     @staticmethod
     def get_all_ips() -> list[str]:
@@ -1248,5 +1264,16 @@ class WebServer:
         except Exception:
             pass
         if not ips:
-            ips.append(WebServer._get_lan_ip())
+            # Fallback: use OS default route
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.settimeout(0)
+                s.connect(("10.254.254.254", 1))
+                default_ip = s.getsockname()[0]
+                s.close()
+                if default_ip and default_ip not in ips:
+                    ips.append(default_ip)
+            except Exception:
+                if "127.0.0.1" not in ips:
+                    ips.append("127.0.0.1")
         return ips

@@ -87,6 +87,7 @@ class SettingsWindow:
         self._web_qr_label: ctk.CTkLabel | None = None
         self._web_qr_image: ctk.CTkImage | None = None
         self._web_url_label: ctk.CTkLabel | None = None
+        self._web_copy_btn: ctk.CTkButton | None = None
 
     # ═══════════════════════════════════════════════════════════════
     # Public API
@@ -586,11 +587,12 @@ class SettingsWindow:
             url_row, text="", font=ctk.CTkFont(size=11), text_color=("gray50", "gray60"),
         )
         self._web_url_label.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        ctk.CTkButton(
+        self._web_copy_btn = ctk.CTkButton(
             url_row, text=T("ui.copy"), width=60, height=28,
             font=ctk.CTkFont(size=11),
             command=self._on_copy_url,
-        ).pack(side="right")
+        )
+        self._web_copy_btn.pack(side="right")
 
         # Refresh QR and URL
         self._refresh_web_qr()
@@ -664,10 +666,11 @@ class SettingsWindow:
 
     def _on_copy_url(self):
         url = self._web_url_label.cget("text") if self._web_url_label else ""
-        if url:
+        if url and self._web_copy_btn:
             self._window.clipboard_clear()
             self._window.clipboard_append(url)
-            show_info(self._window, T("dialog.info"), T("footer.copied"))
+            self._web_copy_btn.configure(text=T("web.copied"))
+            self._window.after(2000, lambda: self._web_copy_btn.configure(text=T("ui.copy")))
 
     def _on_save_web(self):
         cfg = self._get_config()

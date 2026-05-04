@@ -1027,10 +1027,10 @@ class Application:
         copy_btn.pack(side="right", padx=(0, 6))
 
         ctk.CTkButton(
-            body, text=T("ui.close"), width=90, height=32,
-            fg_color="transparent", border_width=1,
-            border_color=("gray60", "gray50"),
-            text_color=("gray40", "gray70"),
+            body, text=T("ui.close"), width=100, height=38,
+            font=ctk.CTkFont(size=13),
+            fg_color=("gray85", "gray20"),
+            hover_color=("gray75", "gray30"),
             command=dlg.destroy,
         ).pack(pady=(4, 0))
 
@@ -1429,10 +1429,6 @@ class Application:
             on_open_folder=self._open_folder,
             on_retry_transfer=self._retry_file_transfer,
             on_edit_note=self._on_edit_note,
-            on_web_action=self._on_web_action,
-            get_web_status=lambda: {
-                "running": self.web_server is not None and self.web_server.is_running,
-            },
         )
         self.dashboard_win.show()
 
