@@ -29,7 +29,7 @@ from internal.config.config import Config, PeerInfo, _config_dir, load, save
 from internal.i18n import T, set_locale
 from internal.platform.autostart import disable_autostart, enable_autostart, is_autostart_enabled
 from internal.platform.notify import notification_mgr
-from internal.protocol.codec import FILE_TRANSFER_MSG_TYPES, encode_message
+from internal.protocol.codec import FILE_TRANSFER_MSG_TYPES, encode_frame, encode_message
 from internal.security.encryption import (
     EncryptionManager,
     make_password_hash as _make_password_hash,
@@ -256,6 +256,7 @@ def _run_tray(device_name: str, pipe, parent_pid: int):
         on_open_settings=lambda: pipe.send(("open_settings",)),
         on_export_logs=lambda: pipe.send(("export_logs",)),
         on_show_web_qr=lambda: pipe.send(("show_web_qr",)),
+        on_send_url=lambda: pipe.send(("send_url",)),
         on_quit=lambda: pipe.send(("quit",)),
     )
 
@@ -597,9 +598,27 @@ class Application:
         )
 
         # ── Web Companion ───────────────────────────────────────
+        def _on_web_nav_url(url: str, device_id: str):
+            data = encode_frame({"msg_type": "nav_url", "url": url},
+                                source_device=self.cfg.device_id)
+            self.transport_mgr.send_to_peer(device_id, data)
+            logger.info("Web nav forwarded to peer %s: %s", device_id[:12], url[:80])
+
+        def _on_web_forward_file(file_path: str, device_id: str):
+            def _send_fn(data: bytes):
+                self.transport_mgr.send_to_peer(device_id, data)
+            try:
+                self.file_transfer_mgr.send_file(file_path, _send_fn)
+                logger.info("Web upload forwarded to peer %s: %s",
+                            device_id[:12], os.path.basename(file_path))
+            except Exception as e:
+                logger.error("Failed to forward uploaded file: %s", e)
+
         self.web_server = WebServer(
             cfg, self.clipboard_history, self.sync_mgr,
             get_connected_ids=lambda: self.transport_mgr.get_connected_peers(),
+            on_nav_url=_on_web_nav_url,
+            on_forward_file=_on_web_forward_file,
         )
 
     # ═══════════════════════════════════════════════════════════════
@@ -651,6 +670,14 @@ class Application:
 
     def _on_peer_message(self, msg) -> None:
         msg_type = getattr(msg, "msg_type", "clipboard")
+        if msg_type == "nav_url":
+            url = getattr(msg, "_raw_payload", {}).get("url", "")
+            if url:
+                import webbrowser
+                logger.info("Opening URL from peer: %s", url[:80])
+                webbrowser.open(url)
+                notification_mgr.show(T("nav_url.title"), url[:120])
+            return
         if msg_type in FILE_TRANSFER_MSG_TYPES:
             raw_payload = getattr(msg, "_raw_payload", {})
             self.file_transfer_mgr.handle_message(
@@ -821,6 +848,7 @@ class Application:
             on_open_settings=self.open_settings,
             on_export_logs=self.export_logs,
             on_show_web_qr=self._show_web_qr,
+            on_send_url=self._do_send_url,
             on_quit=self.shutdown,
         )
         self.systray.set_web_enabled(self.cfg.web_enabled)
@@ -911,6 +939,8 @@ class Application:
             self.export_logs()
         elif cmd == "show_web_qr":
             self._show_web_qr()
+        elif cmd == "send_url":
+            self._do_send_url()
         elif cmd == "quit":
             self.shutdown()
 
@@ -1202,6 +1232,89 @@ class Application:
             return
         self._send_as_zip([folder])
 
+    def _do_send_url(self) -> None:
+        """Send a URL to a selected device. Reads clipboard for URL pre-fill."""
+        import re
+        import customtkinter as ctk
+
+        # Try to read clipboard for URL pre-fill
+        prefill = ""
+        try:
+            clip_text = self.root.clipboard_get()
+            if clip_text and re.match(r'^https?://', clip_text.strip()):
+                prefill = clip_text.strip()
+        except Exception:
+            pass
+
+        # URL input dialog
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title(T("nav_url.title"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+
+        dw, dh = 440, 170
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - dw) // 2
+            y = ry + (rh - dh) // 2
+        else:
+            x = (self.root.winfo_screenwidth() - dw) // 2
+            y = (self.root.winfo_screenheight() - dh) // 2
+        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=20, pady=16)
+
+        ctk.CTkLabel(
+            body, text=T("nav_url.prompt"),
+            font=ctk.CTkFont(size=13),
+        ).pack(anchor="w", pady=(0, 8))
+
+        url_var = tk.StringVar(value=prefill)
+        entry = ctk.CTkEntry(body, textvariable=url_var, height=36,
+                             font=ctk.CTkFont(size=12))
+        entry.pack(fill="x", pady=(0, 12))
+        entry.focus_set()
+        entry.icursor(len(prefill))
+
+        btn_row = ctk.CTkFrame(body, fg_color="transparent")
+        btn_row.pack(fill="x")
+
+        ctk.CTkButton(
+            btn_row, text=T("ui.cancel"), width=80, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray70"),
+            border_color=("gray60", "gray50"),
+            hover_color=("gray85", "gray25"),
+            command=dlg.destroy,
+        ).pack(side="left")
+
+        def _send():
+            url = url_var.get().strip()
+            dlg.destroy()
+            if not url:
+                return
+            if not re.match(r'^https?://', url):
+                url = "https://" + url
+            peer_id = self._pick_peer()
+            if peer_id is None:
+                return
+            data = encode_frame({"msg_type": "nav_url", "url": url},
+                                source_device=self.cfg.device_id)
+            self.transport_mgr.send_to_peer(peer_id, data)
+            logger.info("Sent URL to peer %s: %s", peer_id[:12], url[:80])
+            notification_mgr.show(T("nav_url.title"), url[:120])
+
+        ctk.CTkButton(
+            btn_row, text=T("transfer.send"), width=80, height=32,
+            command=_send,
+        ).pack(side="right")
+
+        dlg.grab_set()
+        dlg.focus_force()
+        dlg.bind("<Return>", lambda e: _send())
+
     def _pick_peer(self) -> str | None:
         """Show a dialog to select which peer to send to.
 
@@ -1210,7 +1323,10 @@ class Application:
         """
         peers = self.transport_mgr.get_connected_peers_with_names()
         if not peers:
-            show_error(self.root, T("transfer.error"), T("transfer.no_peers"))
+            if self.cfg.web_enabled:
+                self._pick_peer_phone_guide()
+            else:
+                show_error(self.root, T("transfer.error"), T("transfer.no_peers"))
             return None
         if len(peers) == 1:
             return peers[0][0]
@@ -1278,6 +1394,66 @@ class Application:
         dlg.focus_force()
         dlg.wait_window()
         return result[0]
+
+    def _pick_peer_phone_guide(self) -> None:
+        """Show guidance for transferring files to a phone via Web Companion."""
+        import customtkinter as ctk
+
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title(T("transfer.phone_title"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+
+        dw, dh = 420, 240
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - dw) // 2
+            y = ry + (rh - dh) // 2
+        else:
+            x = (self.root.winfo_screenwidth() - dw) // 2
+            y = (self.root.winfo_screenheight() - dh) // 2
+        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=24, pady=20)
+
+        ctk.CTkLabel(
+            body, text=T("transfer.phone_title"),
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w", pady=(0, 10))
+
+        msg_frame = ctk.CTkFrame(body, fg_color="transparent")
+        msg_frame.pack(fill="x", pady=(0, 16))
+
+        ctk.CTkLabel(
+            msg_frame, text=T("transfer.phone_msg"),
+            font=ctk.CTkFont(size=12),
+            justify="left", wraplength=370,
+        ).pack(anchor="w")
+
+        btn_row = ctk.CTkFrame(body, fg_color="transparent")
+        btn_row.pack(fill="x")
+
+        ctk.CTkButton(
+            btn_row, text=T("ui.cancel"), width=90, height=34,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray70"),
+            border_color=("gray60", "gray50"),
+            hover_color=("gray85", "gray25"),
+            command=dlg.destroy,
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            btn_row, text=T("transfer.phone_action"), width=130, height=34,
+            command=lambda: (
+                dlg.destroy(),
+                self._show_web_qr(),
+            ),
+        ).pack(side="right")
+
+        dlg.grab_set()
+        dlg.focus_force()
 
     def _send_single_path(self, file_path: str) -> None:
         """Send a single file directly (no zipping)."""
@@ -1563,13 +1739,13 @@ class Application:
             ),
             get_transfers=lambda: self.file_transfer_mgr.get_transfers(),
             on_cancel_transfer=lambda tid: self.file_transfer_mgr.cancel_transfer(
-                tid, self.transport_mgr.broadcast,
+                tid, self.file_transfer_mgr.get_transfer_send_fn(tid) or self.transport_mgr.broadcast,
             ),
             on_pause_transfer=lambda tid: self.file_transfer_mgr.pause_transfer(
-                tid, self.transport_mgr.broadcast,
+                tid, self.file_transfer_mgr.get_transfer_send_fn(tid) or self.transport_mgr.broadcast,
             ),
             on_resume_transfer=lambda tid: self.file_transfer_mgr.resume_transfer(
-                tid, self.transport_mgr.broadcast,
+                tid, self.file_transfer_mgr.get_transfer_send_fn(tid) or self.transport_mgr.broadcast,
             ),
             get_pending_pairings=self._get_pending,
             on_pair=self._on_pair,
@@ -1844,10 +2020,15 @@ class Application:
 
     def _retry_file_transfer(self, file_path: str) -> None:
         """Retry sending a file that previously failed."""
+        peer_id = self._pick_peer()
+        if peer_id is None:
+            return
+
+        def _send_fn(data: bytes):
+            self.transport_mgr.send_to_peer(peer_id, data)
+
         try:
-            transfer_id = self.file_transfer_mgr.send_file(
-                file_path, self.transport_mgr.broadcast,
-            )
+            transfer_id = self.file_transfer_mgr.send_file(file_path, _send_fn)
             logger.info("Retried file transfer: %s (%s)", file_path, transfer_id[:8])
             notification_mgr.show("File Transfer",
                                   T("transfer.sending_file", name=os.path.basename(file_path)))

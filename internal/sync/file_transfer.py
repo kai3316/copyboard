@@ -243,6 +243,7 @@ class FileTransferManager:
                 "acked": False,
                 "_last_progress": 0.0,
                 "_bytes_sent": 0,
+                "_send_fn": broadcast_fn,
             }
 
         self._send_as_frame(
@@ -261,6 +262,14 @@ class FileTransferManager:
             transfer_id[:8], _mask_file_name(file_name), file_size, total_chunks,
         )
         return transfer_id
+
+    def get_transfer_send_fn(self, transfer_id: str) -> Callable[[bytes], None] | None:
+        """Return the stored send function for an outgoing transfer."""
+        with self._lock:
+            transfer = self._transfers.get(transfer_id)
+        if transfer is None:
+            return None
+        return transfer.get("_send_fn")
 
     def accept_transfer(self, transfer_id: str, send_fn: Callable[[bytes], None]) -> None:
         """Accept an incoming file transfer request.
@@ -742,9 +751,11 @@ class FileTransferManager:
             "File transfer %s acknowledged by peer -- starting chunk send", transfer_id[:8],
         )
 
+        stored_send_fn = transfer.get("_send_fn", send_fn)
+
         thread = threading.Thread(
             target=self._send_chunks,
-            args=(transfer_id, send_fn),
+            args=(transfer_id, stored_send_fn),
             daemon=True,
             name=f"file-xfer-{transfer_id[:8]}",
         )

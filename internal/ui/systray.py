@@ -76,6 +76,7 @@ class SystrayApp:
         on_export_logs: Callable | None = None,
         on_quit: Callable | None = None,
         on_show_web_qr: Callable | None = None,
+        on_send_url: Callable | None = None,
     ):
         self._device_name = device_name
         self._on_enable_toggle = on_enable_toggle
@@ -84,6 +85,7 @@ class SystrayApp:
         self._on_export_logs = on_export_logs
         self._on_quit_cb = on_quit
         self._on_show_web_qr = on_show_web_qr
+        self._on_send_url = on_send_url
         self._syncing = True
         self._web_enabled = False
         self._tray = None
@@ -161,6 +163,7 @@ class SystrayApp:
                 T("tray.connected_devices"),
                 self._build_peer_menu(),
             ),
+            pystray.MenuItem(T("tray.send_url"), self._on_send_url_click),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(T("tray.settings"), self._on_open_settings_click),
         ]
@@ -237,6 +240,10 @@ class SystrayApp:
     def _on_show_web_qr_click(self, icon, item):
         if self._on_show_web_qr:
             self._on_show_web_qr()
+
+    def _on_send_url_click(self, icon, item):
+        if self._on_send_url:
+            self._on_send_url()
 
     def _on_about(self, icon, item):
         if self._tray:

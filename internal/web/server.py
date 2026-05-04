@@ -85,202 +85,356 @@ _HTML = r"""<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/icon-192.png?token=__TOKEN__">
 <title>ClipSync Web</title>
 <style>
+  /* ═══════════════════════════════════════════════════════════════
+     ClipSync Web Companion — Design System
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* ── Tokens ────────────────────────────────────────────────── */
   :root {
-    --bg: #F5F7FA; --card: #FFFFFF; --text: #1A1A2E;
-    --sub: #7F8C8D; --accent: #2471A3; --accent-hover: #1A5276;
-    --border: #E5E7EB; --tag-bg: #EBF5FB; --tag-text: #2471A3;
-    --success: #27AE60; --warn: #E67E22; --danger: #E74C3C; --shadow: 0 2px 12px rgba(0,0,0,.06);
-    --radius: 14px;
+    --bg: #F0F2F5; --card: #FFFFFF; --text: #111827;
+    --sub: #6B7280; --accent: #4F46E5; --accent2: #7C3AED;
+    --accent-glow: rgba(79,70,229,.12);
+    --border: #E5E7EB; --tag-bg: #EEF2FF; --tag-text: #4338CA;
+    --success: #059669; --warn: #D97706; --danger: #DC2626;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.04);
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.07);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,.10);
+    --radius-sm: 10px; --radius: 14px; --radius-lg: 18px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
   }
   .dark {
-    --bg: #0F1923; --card: #1A2732; --text: #E8EDF2;
-    --sub: #8899AA; --accent: #5DADE2; --accent-hover: #85C1E9;
-    --border: #2C3E50; --tag-bg: #1B3346; --tag-text: #5DADE2;
-    --shadow: 0 2px 12px rgba(0,0,0,.25);
+    --bg: #0A0E1A; --card: #131A2E; --text: #E2E8F0;
+    --sub: #7C8AA0; --accent: #818CF8; --accent2: #A78BFA;
+    --accent-glow: rgba(129,140,248,.15);
+    --border: #1E293B; --tag-bg: #1E2040; --tag-text: #A5B4FC;
+    --success: #10B981; --warn: #F59E0B; --danger: #EF4444;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.15);
+    --shadow: 0 1px 3px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.15);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.25);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,.35);
   }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  html { height:100%; }
-  body {
-    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background:var(--bg); color:var(--text); min-height:100%;
-    -webkit-tap-highlight-color:transparent;
-  }
-  .app { max-width:600px; margin:0 auto; padding:0 16px 24px; }
 
-  header { padding:20px 0 16px; display:flex; align-items:center; justify-content:space-between; }
-  .logo { display:flex; align-items:center; gap:10px; }
-  .logo-icon { font-size:28px; }
-  .logo-text { font-size:20px; font-weight:700; letter-spacing:-0.3px; }
-  .header-actions { display:flex; gap:8px; }
-  .icon-btn {
-    background:var(--card); border:1px solid var(--border); border-radius:10px;
-    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
-    cursor:pointer; font-size:16px; color:var(--text); transition:all .15s;
+  /* ── Reset & Base ──────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  html { height:100%; -webkit-text-size-adjust:100%; }
+  body {
+    font-family:var(--font); background:var(--bg); color:var(--text);
+    min-height:100%; line-height:1.5; -webkit-tap-highlight-color:transparent;
+    -webkit-font-smoothing:antialiased;
   }
-  .icon-btn:active { transform:scale(.93); background:var(--border); }
-  .icon-btn.spin { animation: spin360 .6s ease-in-out; }
+  /* subtle bg texture */
+  body::before {
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:-1;
+    background: radial-gradient(ellipse 80% 50% at 50% -20%, var(--accent-glow), transparent);
+  }
+
+  /* ── Layout Container ──────────────────────────────────────── */
+  .app { margin:0 auto; padding:0 16px 24px; }
+
+  /* ── Header (glass) ────────────────────────────────────────── */
+  header {
+    position:sticky; top:0; z-index:50; padding:14px 0;
+    display:flex; align-items:center; justify-content:space-between;
+    backdrop-filter:blur(16px) saturate(180%);
+    -webkit-backdrop-filter:blur(16px) saturate(180%);
+    background:color-mix(in srgb, var(--bg) 75%, transparent);
+    border-bottom:1px solid transparent;
+    transition:border-color .3s, box-shadow .3s;
+  }
+  header.scrolled { border-bottom-color:var(--border); box-shadow:var(--shadow-sm); }
+  .logo { display:flex; align-items:center; gap:10px; }
+  .logo-icon {
+    width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius:11px; font-size:20px; color:#fff; box-shadow:0 2px 8px var(--accent-glow);
+  }
+  .logo-text { font-size:19px; font-weight:700; letter-spacing:-0.3px; }
+  .header-actions { display:flex; gap:6px; }
+  .icon-btn {
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm);
+    width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:15px; color:var(--text); transition:all .2s;
+    box-shadow:var(--shadow-sm);
+  }
+  .icon-btn:hover { border-color:var(--accent); box-shadow:var(--shadow); }
+  .icon-btn:active { transform:scale(.93); }
+  .icon-btn.spin { animation:spin360 .6s ease-in-out; }
   @keyframes spin360 { to { transform:rotate(360deg); } }
 
-  /* History item animations */
-  .clip-item {
-    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:14px; display:flex; gap:12px; cursor:pointer; transition:all .15s;
-    align-items:flex-start; border:1.5px solid transparent;
-    animation: fadeUp .3s ease-out;
-  }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-  .clip-item:active { transform:scale(.98); border-color:var(--accent); }
-
-  /* Connected devices */
+  /* ── Devices Strip ─────────────────────────────────────────── */
   .devices-card {
     background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:12px 14px; margin-bottom:16px;
+    padding:12px 14px; margin-bottom:14px; border:1px solid var(--border);
   }
   .devices-title {
-    font-size:12px; font-weight:600; color:var(--sub); text-transform:uppercase;
-    letter-spacing:.8px; margin-bottom:8px;
+    font-size:11px; font-weight:700; color:var(--sub); text-transform:uppercase;
+    letter-spacing:1px; margin-bottom:8px;
   }
   .device-row {
     display:flex; align-items:center; gap:10px; padding:6px 0;
-    font-size:14px;
+    font-size:13px;
   }
   .device-row + .device-row { border-top:1px solid var(--border); }
   .status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-  .status-dot.online { background:var(--success); }
+  .status-dot.online {
+    background:var(--success);
+    box-shadow:0 0 6px color-mix(in srgb, var(--success) 50%, transparent);
+    animation:pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow:0 0 4px color-mix(in srgb, var(--success) 40%, transparent); }
+    50% { box-shadow:0 0 10px color-mix(in srgb, var(--success) 70%, transparent); }
+  }
   .status-dot.offline { background:var(--sub); }
   .device-name { flex:1; font-weight:500; }
   .device-status { font-size:11px; color:var(--sub); }
 
-  /* Tabs */
+  /* ── Tabs ──────────────────────────────────────────────────── */
   .tabs {
-    display:flex; gap:4px; margin-bottom:16px;
+    display:flex; gap:4px; margin-bottom:14px;
     background:var(--card); border-radius:var(--radius); padding:4px;
-    box-shadow:var(--shadow);
+    box-shadow:var(--shadow-sm); border:1px solid var(--border);
   }
   .tab {
-    flex:1; text-align:center; padding:8px 0; border-radius:10px;
+    flex:1; text-align:center; padding:9px 0; border-radius:var(--radius-sm);
     font-size:13px; font-weight:600; cursor:pointer; color:var(--sub);
-    transition:all .15s; border:none; background:transparent; font-family:inherit;
+    transition:all .25s cubic-bezier(.4,0,.2,1);
+    border:none; background:transparent; font-family:var(--font);
   }
-  .tab.active { background:var(--accent); color:#fff; transition:all .2s ease; }
-  .tab-content { animation: fadeUp .25s ease-out; }
+  .tab:hover { color:var(--text); }
+  .tab.active {
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    color:#fff; box-shadow:0 2px 8px var(--accent-glow);
+  }
 
-  /* Push area */
+  /* ── Push Card ─────────────────────────────────────────────── */
   .push-card {
     background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:14px; margin-bottom:16px;
+    padding:14px; margin-bottom:14px; border:1px solid var(--border);
   }
   .push-input {
-    width:100%; min-height:80px; background:var(--bg); border:1px solid var(--border);
-    border-radius:10px; padding:12px; font-size:15px; font-family:inherit;
-    color:var(--text); resize:vertical; line-height:1.5;
+    width:100%; min-height:80px; background:var(--bg); border:1.5px solid var(--border);
+    border-radius:var(--radius-sm); padding:12px; font-size:14px; font-family:var(--font);
+    color:var(--text); resize:vertical; line-height:1.5; transition:border-color .2s, box-shadow .2s;
   }
   .push-input::placeholder { color:var(--sub); }
-  .push-input:focus { outline:none; border-color:var(--accent); }
-  .push-row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:10px; }
-  .push-target { font-size:13px; color:var(--sub); flex:1; }
-  .push-btn, .upload-btn {
-    background:var(--accent); color:#fff; border:none; border-radius:10px;
-    padding:10px 22px; font-size:14px; font-weight:600; font-family:inherit;
-    cursor:pointer; transition:all .15s; white-space:nowrap;
+  .push-input:focus {
+    outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-glow);
   }
-  .push-btn:active, .upload-btn:active { transform:scale(.96); opacity:.85; }
-  .push-btn:disabled, .upload-btn:disabled { opacity:.5; pointer-events:none; }
+  .push-row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:10px; }
+  .push-target { font-size:12px; color:var(--sub); flex:1; }
+  .push-btn, .upload-btn {
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    color:#fff; border:none; border-radius:var(--radius-sm);
+    padding:9px 20px; font-size:13px; font-weight:600; font-family:var(--font);
+    cursor:pointer; transition:all .2s; white-space:nowrap;
+    box-shadow:0 2px 8px var(--accent-glow);
+  }
+  .push-btn:hover, .upload-btn:hover {
+    transform:translateY(-1px); box-shadow:0 4px 14px var(--accent-glow);
+  }
+  .push-btn:active, .upload-btn:active { transform:scale(.96); }
+  .push-btn:disabled, .upload-btn:disabled {
+    opacity:.4; pointer-events:none; box-shadow:none; transform:none;
+  }
 
-  /* File upload */
+  /* ── File Upload ───────────────────────────────────────────── */
   .upload-card {
     background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
-    padding:14px; margin-bottom:16px;
+    padding:14px; margin-bottom:14px; border:1px solid var(--border);
   }
   .upload-area {
-    border:2px dashed var(--border); border-radius:10px; padding:24px;
-    text-align:center; cursor:pointer; transition:border-color .15s;
+    border:2px dashed var(--border); border-radius:var(--radius-sm); padding:28px 16px;
+    text-align:center; cursor:pointer; transition:all .2s;
   }
-  .upload-area:active, .upload-area.drag-over { border-color:var(--accent); }
-  .upload-icon { font-size:32px; margin-bottom:8px; }
+  .upload-area:hover { border-color:var(--accent); background:var(--accent-glow); }
+  .upload-area:active, .upload-area.drag-over { border-color:var(--accent); background:var(--accent-glow); }
+  .upload-icon { font-size:36px; margin-bottom:8px; }
   .upload-text { font-size:13px; color:var(--sub); }
-  .upload-file-name { font-size:13px; margin-top:8px; color:var(--accent); }
+  .upload-file-name { font-size:13px; margin-top:8px; color:var(--accent); font-weight:600; }
   .file-input-hidden { display:none; }
 
-  /* File list */
+  /* ── File List ─────────────────────────────────────────────── */
   .file-list { display:flex; flex-direction:column; gap:8px; }
   .file-item {
     background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
     padding:12px 14px; display:flex; align-items:center; gap:10px;
+    border:1px solid var(--border); transition:all .2s;
+    min-width:0; overflow:hidden;
   }
-  .file-icon { font-size:24px; flex-shrink:0; }
-  .file-info { flex:1; min-width:0; }
-  .file-name { font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .file-item:hover { box-shadow:var(--shadow-md); }
+  .file-icon { font-size:26px; flex-shrink:0; }
+  .file-info { flex:1; min-width:0; overflow:hidden; }
+  .file-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .file-meta { font-size:11px; color:var(--sub); margin-top:2px; }
   .file-dl {
-    background:var(--accent); color:#fff; border:none; border-radius:8px;
-    padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;
-    font-family:inherit; white-space:nowrap;
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+    color:#fff; border:none; border-radius:8px;
+    padding:6px 14px; font-size:12px; font-weight:600; cursor:pointer;
+    font-family:var(--font); white-space:nowrap; flex-shrink:0;
+    box-shadow:0 1px 4px var(--accent-glow);
   }
   .file-dl:active { transform:scale(.95); }
 
-  /* History section */
+  /* ── History ───────────────────────────────────────────────── */
   .section-title {
-    font-size:13px; font-weight:600; color:var(--sub); text-transform:uppercase;
-    letter-spacing:.8px; margin-bottom:10px; padding-left:2px;
+    font-size:11px; font-weight:700; color:var(--sub); text-transform:uppercase;
+    letter-spacing:1px; margin-bottom:10px; padding-left:2px;
   }
-  .history-list { display:flex; flex-direction:column; gap:10px; }
+  .history-list { display:flex; flex-direction:column; gap:8px; }
   .clip-icon {
-    font-size:22px; width:36px; height:36px; display:flex; align-items:center;
-    justify-content:center; border-radius:10px; flex-shrink:0;
+    font-size:20px; width:34px; height:34px; display:flex; align-items:center;
+    justify-content:center; border-radius:9px; flex-shrink:0;
     background:var(--tag-bg);
   }
-  .clip-body { flex:1; min-width:0; }
+  .clip-body { flex:1; min-width:0; overflow:hidden; }
   .clip-preview {
-    font-size:14px; line-height:1.45; display:-webkit-box;
+    font-size:13px; line-height:1.5; display:-webkit-box;
     -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
     word-break:break-all;
   }
-  .clip-meta { display:flex; gap:10px; margin-top:6px; font-size:11px; color:var(--sub); }
+  .clip-meta { display:flex; gap:8px; margin-top:5px; font-size:11px; color:var(--sub); flex-wrap:wrap; }
   .clip-source {
     display:inline-flex; align-items:center; gap:4px;
     background:var(--tag-bg); color:var(--tag-text); border-radius:6px;
-    padding:2px 8px; font-size:11px; font-weight:500;
+    padding:2px 8px; font-size:10px; font-weight:600;
   }
   .device-indicator { width:6px; height:6px; border-radius:50%; display:inline-block; }
   .device-indicator.local { background:var(--accent); }
   .device-indicator.remote { background:var(--warn); }
 
-  .empty { text-align:center; padding:48px 24px; color:var(--sub); }
-  .empty-icon { font-size:48px; margin-bottom:12px; opacity:.6; }
-  .empty-text { font-size:14px; line-height:1.6; }
+  /* ── History Item ──────────────────────────────────────────── */
+  .clip-item {
+    background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:13px; display:flex; gap:12px; cursor:pointer; transition:all .2s;
+    align-items:flex-start; border:1px solid var(--border);
+    animation:fadeUp .35s ease-out;
+  }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .clip-item:hover { box-shadow:var(--shadow-md); border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); }
+  .clip-item:active { transform:scale(.985); border-color:var(--accent); }
 
+  /* ── Action Buttons ────────────────────────────────────────── */
+  .clip-actions { display:flex; flex-direction:column; gap:4px; flex-shrink:0; align-self:center; }
+  .clip-action-btn {
+    background:transparent; border:1px solid var(--border); border-radius:7px;
+    padding:4px 8px; font-size:11px; font-weight:600; cursor:pointer;
+    color:var(--sub); font-family:var(--font); transition:all .2s;
+    white-space:nowrap; text-align:center;
+  }
+  .clip-action-btn:hover { border-color:currentColor; }
+  .clip-action-btn:active { transform:scale(.94); }
+  .clip-action-btn.btn-delete { color:var(--danger); border-color:color-mix(in srgb, var(--danger) 30%, transparent); }
+  .clip-action-btn.btn-delete:hover { background:color-mix(in srgb, var(--danger) 8%, transparent); }
+  .clip-action-btn.btn-pin { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 30%, transparent); }
+  .clip-action-btn.btn-pin:hover { background:var(--accent-glow); }
+  .clip-action-btn.btn-nav { color:var(--accent2); border-color:color-mix(in srgb, var(--accent2) 30%, transparent); }
+  .clip-action-btn.btn-nav:hover { background:var(--accent-glow); }
+  .clip-action-btn.pinned { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  /* ── Empty State ───────────────────────────────────────────── */
+  .empty { text-align:center; padding:40px 24px; color:var(--sub); }
+  .empty-icon { font-size:44px; margin-bottom:10px; opacity:.5; }
+  .empty-text { font-size:13px; line-height:1.6; }
+  .status-msg { text-align:center; padding:20px; color:var(--sub); font-size:13px; }
+
+  /* ── Toast ─────────────────────────────────────────────────── */
   .toast {
-    position:fixed; bottom:40px; left:50%; transform:translateX(-50%);
-    background:#1A1A2E; color:#fff; padding:10px 24px; border-radius:20px;
-    font-size:14px; font-weight:500; opacity:0; pointer-events:none;
-    transition:opacity .25s; z-index:100; box-shadow:0 4px 20px rgba(0,0,0,.3);
+    position:fixed; bottom:36px; left:50%; transform:translateX(-50%);
+    background:var(--text); color:var(--bg); padding:10px 22px; border-radius:20px;
+    font-size:13px; font-weight:600; opacity:0; pointer-events:none;
+    transition:opacity .3s; z-index:100; box-shadow:var(--shadow-lg);
+    font-family:var(--font);
   }
   .toast.show { opacity:1; }
-  .status-msg { text-align:center; padding:24px; color:var(--sub); font-size:14px; }
 
-  /* Install banner */
+  /* ── Install Banner ────────────────────────────────────────── */
   .install-banner {
-    background:var(--card); border:1px solid var(--accent); border-radius:10px;
+    background:var(--card); border:1px solid var(--accent); border-radius:var(--radius-sm);
     padding:10px 14px; margin-bottom:12px; display:flex; align-items:center;
     gap:8px; font-size:12px; color:var(--sub); line-height:1.4;
   }
   .install-banner b { color:var(--accent); }
 
-  /* Item action buttons */
-  .clip-actions { display:flex; gap:6px; margin-top:8px; }
-  .clip-action-btn {
-    background:transparent; border:1px solid var(--border); border-radius:8px;
-    padding:5px 12px; font-size:12px; font-weight:500; cursor:pointer;
-    color:var(--sub); font-family:inherit; transition:all .15s;
+  /* ── Device Picker Overlay ─────────────────────────────────── */
+  .picker-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center;
+    z-index:200; backdrop-filter:blur(4px); animation:fadeIn .2s ease-out;
   }
-  .clip-action-btn:active { transform:scale(.94); }
-  .clip-action-btn.btn-delete { color:var(--danger); border-color:var(--danger); }
-  .clip-action-btn.btn-pin { color:var(--accent); border-color:var(--accent); }
-  .clip-action-btn.pinned { background:var(--accent); color:#fff; border-color:var(--accent); }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  .picker-panel {
+    background:var(--card); border-radius:var(--radius-lg); padding:24px;
+    min-width:260px; max-width:340px; box-shadow:var(--shadow-lg);
+    animation:slideUp .25s ease-out;
+  }
+  @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .picker-title {
+    font-size:16px; font-weight:700; margin-bottom:14px; text-align:center;
+  }
+  .picker-btn {
+    display:block; width:100%; padding:12px 16px; margin-bottom:8px;
+    background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm);
+    font-size:14px; font-weight:500; cursor:pointer; color:var(--text);
+    font-family:var(--font); transition:all .2s; text-align:center;
+  }
+  .picker-btn:hover { border-color:var(--accent); background:var(--accent-glow); }
+  .picker-btn:active { transform:scale(.97); background:var(--accent); color:#fff; border-color:var(--accent); }
+  .picker-cancel {
+    background:transparent; color:var(--sub); border-color:transparent;
+    margin-top:4px; font-weight:400;
+  }
+  .picker-cancel:hover { color:var(--text); background:transparent; }
 
-  @media (min-width:600px) {
-    .app { padding:0 0 32px; }
+  /* ═══════════════════════════════════════════════════════════════
+     Responsive Breakpoints
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* ── Tablet (≥ 640px) ──────────────────────────────────────── */
+  @media (min-width:640px) {
+    .app { max-width:680px; padding:0 24px 36px; }
+    header { padding:18px 0; }
+    .logo-text { font-size:21px; }
+    .logo-icon { width:42px; height:42px; border-radius:12px; font-size:22px; }
+    .push-input { min-height:100px; font-size:15px; padding:14px; }
+    .tab { padding:11px 0; font-size:14px; }
+    .clip-item { padding:16px; }
+    .clip-icon { font-size:24px; width:40px; height:40px; border-radius:10px; }
+    .clip-preview { font-size:14px; }
+    .clip-action-btn { padding:5px 10px; font-size:12px; }
+    .clip-actions { gap:5px; }
+    .file-list { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .section-title { font-size:12px; margin-bottom:12px; }
+    /* Horizontal device chips */
+    #devicesList { display:flex; flex-wrap:wrap; gap:6px; }
+    .device-row {
+      flex:0 0 auto; min-width:0; font-size:12px; padding:4px 8px;
+      background:var(--bg); border-radius:6px;
+    }
+    .device-row + .device-row { border-top:none; }
+  }
+
+  /* ── Desktop (≥ 1024px) ───────────────────────────────────── */
+  @media (min-width:1024px) {
+    .app { max-width:940px; padding:0 32px 40px; }
+    header { padding:20px 0; }
+    .logo-text { font-size:23px; }
+    .push-input { min-height:110px; }
+    /* 2-col history grid */
+    .history-list { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    /* clip item in grid: no animation offset */
+    .history-list .clip-item { animation:none; }
+    /* 3-col file grid */
+    .file-list { grid-template-columns:1fr 1fr 1fr; }
+  }
+
+  /* ── Wide (≥ 1280px) ──────────────────────────────────────── */
+  @media (min-width:1280px) {
+    .app { max-width:1100px; }
+    .history-list { grid-template-columns:1fr 1fr 1fr; }
+    .file-list { grid-template-columns:1fr 1fr 1fr 1fr; }
   }
 </style>
 </head>
@@ -495,6 +649,20 @@ function renderHistory() {
     var pinnedBadge = item.pinned ? ' 📌' : '';
     var pinBtnClass = item.pinned ? 'clip-action-btn btn-pin pinned' : 'clip-action-btn btn-pin';
     var pinLabel = item.pinned ? (I18N["web.unpin"] || "Unpin") : (I18N["web.pin"] || "Pin");
+    var isUrl = item.text_preview && /^https?:\/\//.test(item.text_preview);
+    var navBtn = isUrl
+      ? '<button class="clip-action-btn btn-nav" onclick="event.stopPropagation();openOnDesktop(\'' +
+        item.text_preview.replace(/'/g, "\\'") + '\')">🔗 ' + (I18N["web.open_on_desktop"] || "Open") + '</button>'
+      : '';
+    // Build action buttons
+    var actions = '';
+    if (isUrl) {
+      actions += '<button class="clip-action-btn btn-nav" onclick="event.stopPropagation();openOnDesktop(\'' +
+        item.text_preview.replace(/'/g, "\\'") + '\')">🔗 ' + (I18N["web.open_on_desktop"] || "Open") + '</button>';
+    }
+    actions += '<button class="' + pinBtnClass + '" onclick="event.stopPropagation();togglePin(' + i + ')">📌 ' + pinLabel + '</button>' +
+      '<button class="clip-action-btn btn-delete" onclick="event.stopPropagation();deleteItem(' + i + ')">🗑 ' + (I18N["web.delete"] || "Delete") + '</button>';
+
     return '<div class="clip-item" onclick="copyItem(' + i + ', this)">' +
       '<div class="clip-icon">' + icon + '</div>' +
       '<div class="clip-body">' +
@@ -504,11 +672,8 @@ function renderHistory() {
           escapeHtml(sourceLabel) + '</span>' +
           '<span>' + time + '</span>' +
         '</div>' +
-        '<div class="clip-actions">' +
-          '<button class="' + pinBtnClass + '" onclick="event.stopPropagation();togglePin(' + i + ')">📌 ' + pinLabel + '</button>' +
-          '<button class="clip-action-btn btn-delete" onclick="event.stopPropagation();deleteItem(' + i + ')">🗑 ' + (I18N["web.delete"] || "Delete") + '</button>' +
-        '</div>' +
       '</div>' +
+      '<div class="clip-actions">' + actions + '</div>' +
     '</div>';
   }).join("");
 }
@@ -582,6 +747,57 @@ function pushText() {
   });
 }
 
+function _pickDevice(callback) {
+  var devs = (_cache.devices || []).filter(function(d) { return d.connected; });
+  if (devs.length <= 1) {
+    callback(devs.length ? devs[0].device_id : "");
+    return;
+  }
+  // Show device picker overlay
+  var overlay = document.createElement("div");
+  overlay.className = "picker-overlay";
+  overlay.onclick = function() { overlay.remove(); };
+  var panel = document.createElement("div");
+  panel.className = "picker-panel";
+  panel.onclick = function(e) { e.stopPropagation(); };
+  panel.innerHTML = '<div class="picker-title">' + (I18N["web.select_device"] || "Select Device") + '</div>';
+  devs.forEach(function(d) {
+    var btn = document.createElement("button");
+    btn.className = "picker-btn";
+    btn.textContent = d.device_name;
+    btn.onclick = function() { overlay.remove(); callback(d.device_id); };
+    panel.appendChild(btn);
+  });
+  var cancel = document.createElement("button");
+  cancel.className = "picker-btn picker-cancel";
+  cancel.textContent = I18N["web.cancel"] || "Cancel";
+  cancel.onclick = function() { overlay.remove(); };
+  panel.appendChild(cancel);
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+}
+
+function openOnDesktop(url) {
+  _pickDevice(function(deviceId) {
+    fetch("/api/nav?token=" + encodeURIComponent("__TOKEN__"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: url, device_id: deviceId }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast(I18N["web.push_sent"] || "Sent!");
+      } else {
+        showToast(I18N["web.server_error"] || "Server error");
+      }
+    })
+    .catch(function() {
+      showToast(I18N["web.server_error"] || "Server error");
+    });
+  });
+}
+
 // ── File upload / download ────────────────────────────────────
 var _selectedFile = null;
 
@@ -596,31 +812,34 @@ function onFileSelected(input) {
 
 function uploadFile() {
   if (!_selectedFile) return;
-  var btn = document.getElementById("uploadBtn");
-  btn.disabled = true; btn.textContent = "...";
-  var form = new FormData();
-  form.append("file", _selectedFile);
-  fetch("/api/upload?token=" + encodeURIComponent("__TOKEN__"), {
-    method: "POST", body: form,
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.ok) {
-      showToast("Uploaded: " + data.name);
-      _selectedFile = null;
-      document.getElementById("fileInput").value = "";
-      document.getElementById("uploadFileName").style.display = "none";
-      document.getElementById("uploadBtn").disabled = true;
-      loadFiles();
-    } else {
-      showToast(data.error || "Upload failed");
-    }
-  })
-  .catch(function() {
-    showToast(I18N["web.server_error"] || "Server error");
-  })
-  .finally(function() {
-    btn.disabled = false; btn.textContent = "Upload";
+  _pickDevice(function(deviceId) {
+    var btn = document.getElementById("uploadBtn");
+    btn.disabled = true; btn.textContent = "...";
+    var form = new FormData();
+    form.append("file", _selectedFile);
+    if (deviceId) form.append("device_id", deviceId);
+    fetch("/api/upload?token=" + encodeURIComponent("__TOKEN__"), {
+      method: "POST", body: form,
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        showToast("Uploaded: " + data.name);
+        _selectedFile = null;
+        document.getElementById("fileInput").value = "";
+        document.getElementById("uploadFileName").style.display = "none";
+        document.getElementById("uploadBtn").disabled = true;
+        loadFiles();
+      } else {
+        showToast(data.error || "Upload failed");
+      }
+    })
+    .catch(function() {
+      showToast(I18N["web.server_error"] || "Server error");
+    })
+    .finally(function() {
+      btn.disabled = false; btn.textContent = "Upload";
+    });
   });
 }
 
@@ -727,6 +946,13 @@ document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("pushInput").placeholder = I18N["web.push_placeholder"] || "Paste text here...";
   document.getElementById("pushBtn").textContent = I18N["web.push_button"] || "Push";
   document.getElementById("statusMsg").textContent = I18N["web.loading"] || "Loading...";
+
+  // Glass header scroll effect
+  var header = document.querySelector("header");
+  window.addEventListener("scroll", function() {
+    header.classList.toggle("scrolled", window.scrollY > 4);
+  }, { passive: true });
+
   refresh();
   setInterval(refresh, 3000);
 })();
@@ -781,11 +1007,14 @@ def _make_icon(size: int, dark: bool = False) -> bytes:
 class WebServer:
     """Lightweight HTTP server for the ClipSync web companion."""
 
-    def __init__(self, cfg, clipboard_history, sync_mgr, get_connected_ids=None):
+    def __init__(self, cfg, clipboard_history, sync_mgr, get_connected_ids=None,
+                 on_nav_url=None, on_forward_file=None):
         self._cfg = cfg
         self._history = clipboard_history
         self._sync_mgr = sync_mgr
         self._get_connected_ids = get_connected_ids
+        self._on_nav_url = on_nav_url
+        self._on_forward_file = on_forward_file
         self._httpd: HTTPServer | None = None
         self._thread: Thread | None = None
         self._firewall_ok: bool = False
@@ -891,6 +1120,8 @@ class WebServer:
         history = self._history
         sync_mgr = self._sync_mgr
         get_connected_ids = self._get_connected_ids
+        on_nav_url = self._on_nav_url
+        on_forward_file = self._on_forward_file
         upload_dir = self._upload_dir
         icon_192 = self._icon_192
         icon_512 = self._icon_512
@@ -1140,6 +1371,25 @@ class WebServer:
                     logger.info("Web push: %d chars", len(text))
                     inner_self._send_json({"ok": True, "len": len(text)})
 
+                elif path == "/api/nav":
+                    try:
+                        data = json.loads(body.decode("utf-8"))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        inner_self._send_json({"ok": False, "error": "invalid json"}, 400)
+                        return
+                    url = data.get("url", "").strip()
+                    if not url:
+                        inner_self._send_json({"ok": False, "error": "empty url"}, 400)
+                        return
+                    target_device = data.get("device_id", "")
+                    if target_device and target_device != cfg.device_id and on_nav_url:
+                        on_nav_url(url, target_device)
+                    else:
+                        import webbrowser
+                        webbrowser.open(url)
+                    logger.info("Web nav: %s -> %s", url[:80], target_device[:12] or "local")
+                    inner_self._send_json({"ok": True})
+
                 elif path == "/api/upload":
                     content_type = inner_self.headers.get("Content-Type", "")
                     if "multipart" not in content_type:
@@ -1153,6 +1403,10 @@ class WebServer:
                     fname, fdata = file_field
                     if not fname:
                         fname = "uploaded_file"
+                    target_device = ""
+                    target_field = fields.get("device_id")
+                    if target_field:
+                        target_device = target_field[1].decode("utf-8", errors="replace")
                     # Sanitize filename
                     safe_name = os.path.basename(fname).replace("\\", "_").replace("/", "_")
                     if not safe_name:
@@ -1167,6 +1421,8 @@ class WebServer:
                     with open(dest, "wb") as f:
                         f.write(fdata)
                     logger.info("Web upload: %s (%d bytes) → %s", safe_name, len(fdata), dest)
+                    if target_device and target_device != cfg.device_id and on_forward_file:
+                        on_forward_file(dest, target_device)
                     inner_self._send_json({"ok": True, "name": os.path.basename(dest), "size": len(fdata)})
 
                 elif path == "/api/delete":
