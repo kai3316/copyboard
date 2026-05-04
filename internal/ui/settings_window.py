@@ -15,6 +15,7 @@ import customtkinter as ctk
 
 from internal.clipboard.filter import ALL_CATEGORIES
 from internal.i18n import T, available_locales, set_locale
+from internal.web.server import WebServer
 
 logger = logging.getLogger(__name__)
 
@@ -554,7 +555,7 @@ class SettingsWindow:
             font=ctk.CTkFont(size=13, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(14, 4))
         self._web_ip_label = ctk.CTkLabel(
-            card2, text=self._get_lan_ip(),
+            card2, text=WebServer._get_lan_ip(),
             font=ctk.CTkFont(size=12, weight="bold"),
         ).pack(anchor="w", padx=16, pady=(0, 8))
 
@@ -605,18 +606,6 @@ class SettingsWindow:
 
         return panel
 
-    def _get_lan_ip(self) -> str:
-        try:
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0)
-            s.connect(("10.254.254.254", 1))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "127.0.0.1"
-
     def _refresh_web_qr(self):
         if not self._web_qr_label:
             return
@@ -627,7 +616,7 @@ class SettingsWindow:
 
             token = self._web_token_var.get() if self._web_token_var else ""
             port = self._web_port_var.get() if self._web_port_var else "19991"
-            ip = self._get_lan_ip()
+            ip = WebServer._get_lan_ip()
             url = f"http://{ip}:{port}?token={token}" if token else f"http://{ip}:{port}"
 
             if self._web_url_label:
