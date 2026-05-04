@@ -1004,14 +1004,27 @@ class Application:
                 font=ctk.CTkFont(size=14), text_color=("gray50", "gray60"),
             ).pack(pady=(0, 12))
 
-        url_frame = ctk.CTkFrame(body, corner_radius=8, fg_color=("gray90", "gray17"))
-        url_frame.pack(fill="x", pady=(0, 10))
+        url_row = ctk.CTkFrame(body, corner_radius=8, fg_color=("gray90", "gray17"))
+        url_row.pack(fill="x", pady=(0, 10))
         url_label = ctk.CTkLabel(
-            url_frame, text=url,
-            font=ctk.CTkFont(size=11), wraplength=260,
+            url_row, text=url,
+            font=ctk.CTkFont(size=11, family="monospace"), wraplength=200,
             text_color=("gray50", "gray70"),
         )
-        url_label.pack(padx=12, pady=10)
+        url_label.pack(side="left", padx=(12, 6), pady=10)
+
+        def _copy_url():
+            dlg.clipboard_clear()
+            dlg.clipboard_append(url)
+            copy_btn.configure(text=T("web.copied"))
+            dlg.after(2000, lambda: copy_btn.configure(text=T("ui.copy")))
+
+        copy_btn = ctk.CTkButton(
+            url_row, text=T("ui.copy"), width=50, height=28,
+            font=ctk.CTkFont(size=11),
+            command=_copy_url,
+        )
+        copy_btn.pack(side="right", padx=(0, 6))
 
         ctk.CTkButton(
             body, text=T("ui.close"), width=90, height=32,
