@@ -210,6 +210,7 @@ class DashboardWindow:
         self._web_url_label: ctk.CTkLabel | None = None
         self._web_copy_btn: ctk.CTkButton | None = None
         self._web_switch: ctk.CTkSwitch | None = None
+        self._activity_card: ctk.CTkFrame | None = None
 
     # ═══════════════════════════════════════════════════════════════
     # Public API
@@ -388,7 +389,7 @@ class DashboardWindow:
     # ── Sidebar ────────────────────────────────────────────────────
 
     def _build_sidebar(self, body):
-        sidebar = ctk.CTkFrame(body, width=160, fg_color="transparent")
+        sidebar = ctk.CTkFrame(body, width=180, fg_color="transparent")
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
@@ -711,9 +712,60 @@ class DashboardWindow:
         )
         self._web_switch.pack(anchor="w", pady=(0, 6))
 
+        # ── Web Companion card (shown when enabled, above Activity) ──
+        web_card = ctk.CTkFrame(panel, corner_radius=14)
+        web_card.pack(fill="x", pady=(8, 10))
+        self._web_card = web_card
+
+        web_inner = ctk.CTkFrame(web_card, fg_color="transparent")
+        web_inner.pack(fill="x", padx=16, pady=(14, 14))
+
+        # Left: QR code
+        qr_frame = ctk.CTkFrame(web_inner, corner_radius=8,
+                                fg_color=("gray95", "gray17"),
+                                width=120, height=120)
+        qr_frame.pack(side="left", padx=(0, 16))
+        qr_frame.pack_propagate(False)
+        self._web_qr_label = ctk.CTkLabel(qr_frame, text="")
+        self._web_qr_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Right: URL + copy
+        right = ctk.CTkFrame(web_inner, fg_color="transparent")
+        right.pack(side="left", fill="x", expand=True)
+
+        ctk.CTkLabel(right, text=T("web.qr_title"),
+                    font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(0, 2))
+
+        ctk.CTkLabel(right, text=T("settings_window.web_qr_hint"),
+                    font=ctk.CTkFont(size=11),
+                    text_color=("gray55", "gray55"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        url_row = ctk.CTkFrame(right, corner_radius=6,
+                               fg_color=("gray90", "gray17"))
+        url_row.pack(fill="x")
+        self._web_url_label = ctk.CTkLabel(
+            url_row, text="", font=ctk.CTkFont(size=11, family="monospace"),
+            text_color=("gray50", "gray70"),
+        )
+        self._web_url_label.pack(side="left", padx=(10, 6), pady=8)
+
+        self._web_copy_btn = ctk.CTkButton(
+            url_row, text=T("ui.copy"), width=54, height=28,
+            font=ctk.CTkFont(size=11),
+            command=self._on_web_copy_url,
+        )
+        self._web_copy_btn.pack(side="right", padx=(0, 6))
+
+        # Initial state: show if web enabled
+        if not cfg.web_enabled:
+            web_card.pack_forget()
+
         # ── Bottom: Activity ───────────────────────────────────────────
         card_a = ctk.CTkFrame(panel, corner_radius=14)
         card_a.pack(fill="both", expand=True)
+        self._activity_card = card_a
         top_bar = ctk.CTkFrame(card_a, fg_color="transparent")
         top_bar.pack(fill="x", padx=14, pady=(12, 4))
         ctk.CTkLabel(top_bar, text=T("overview.activity"),
@@ -792,56 +844,6 @@ class DashboardWindow:
             elif ref_name == "_stat_visibility":
                 self._stat_visibility = val
                 self._sub_visibility = sub
-
-        # ── Web Companion card (shown when enabled) ─────────────────
-        web_card = ctk.CTkFrame(panel, corner_radius=14)
-        web_card.pack(fill="x", pady=(8, 0))
-        self._web_card = web_card
-
-        web_inner = ctk.CTkFrame(web_card, fg_color="transparent")
-        web_inner.pack(fill="x", padx=16, pady=(14, 14))
-
-        # Left: QR code
-        qr_frame = ctk.CTkFrame(web_inner, corner_radius=8,
-                                fg_color=("gray95", "gray17"),
-                                width=120, height=120)
-        qr_frame.pack(side="left", padx=(0, 16))
-        qr_frame.pack_propagate(False)
-        self._web_qr_label = ctk.CTkLabel(qr_frame, text="")
-        self._web_qr_label.place(relx=0.5, rely=0.5, anchor="center")
-
-        # Right: URL + copy
-        right = ctk.CTkFrame(web_inner, fg_color="transparent")
-        right.pack(side="left", fill="x", expand=True)
-
-        ctk.CTkLabel(right, text=T("web.qr_title"),
-                    font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(anchor="w", pady=(0, 2))
-
-        ctk.CTkLabel(right, text=T("settings_window.web_qr_hint"),
-                    font=ctk.CTkFont(size=11),
-                    text_color=("gray55", "gray55"),
-        ).pack(anchor="w", pady=(0, 8))
-
-        url_row = ctk.CTkFrame(right, corner_radius=6,
-                               fg_color=("gray90", "gray17"))
-        url_row.pack(fill="x")
-        self._web_url_label = ctk.CTkLabel(
-            url_row, text="", font=ctk.CTkFont(size=11, family="monospace"),
-            text_color=("gray50", "gray70"),
-        )
-        self._web_url_label.pack(side="left", padx=(10, 6), pady=8)
-
-        self._web_copy_btn = ctk.CTkButton(
-            url_row, text=T("ui.copy"), width=54, height=28,
-            font=ctk.CTkFont(size=11),
-            command=self._on_web_copy_url,
-        )
-        self._web_copy_btn.pack(side="right", padx=(0, 6))
-
-        # Initial state: show if web enabled
-        if not cfg.web_enabled:
-            web_card.pack_forget()
 
         return wrapper
 
@@ -1052,7 +1054,7 @@ class DashboardWindow:
         if not peers:
             ctk.CTkLabel(
                 self._device_scroll,
-                text=T("empty.no_devices"),
+                text="\U0001F4E1  " + T("empty.no_devices"),
                 font=ctk.CTkFont(size=12),
                 text_color=("gray50", "gray60"),
                 justify="center",
@@ -1081,7 +1083,7 @@ class DashboardWindow:
                     self._create_pending_row(peer_id, code, peer_name)
             else:
                 empty = ctk.CTkLabel(
-                    self._pending_frame, text=T("empty.no_pending"),
+                    self._pending_frame, text="\U0001F4E8  " + T("empty.no_pending"),
                     font=ctk.CTkFont(size=11),
                     text_color=("gray40", "gray60"),
                 )
@@ -1395,6 +1397,7 @@ class DashboardWindow:
                 border_color=("#E74C3C", "#C0392B"),
                 hover_color=("#FADBD8", "#5B2C2C"),
                 font=ctk.CTkFont(size=11),
+                state="disabled",
                 command=self._on_clear_history,
             )
             self._clear_history_btn.pack(side="right")
@@ -1459,9 +1462,9 @@ class DashboardWindow:
 
         if not self._history_entries:
             if query:
-                empty_text = T("empty.no_results", query=query)
+                empty_text = "\U0001F50D  " + T("empty.no_results", query=query)
             else:
-                empty_text = T("empty.no_history")
+                empty_text = "\U0001F4CB  " + T("empty.no_history")
             ctk.CTkLabel(
                 self._history_scroll,
                 text=empty_text,
@@ -1830,7 +1833,7 @@ class DashboardWindow:
         )
         self._transfer_history_stats.pack(anchor="w", padx=12, pady=(1, 0))
         self._transfer_history_scroll = ctk.CTkScrollableFrame(
-            history_card, height=60, fg_color="transparent",
+            history_card, height=120, fg_color="transparent",
         )
         self._transfer_history_scroll.pack(fill="x", padx=8, pady=(2, 8))
 
@@ -1848,7 +1851,7 @@ class DashboardWindow:
         if not transfers:
             ctk.CTkLabel(
                 self._transfer_scroll,
-                text=T("empty.no_transfers"),
+                text="\U0001F4E4  " + T("empty.no_transfers"),
                 font=ctk.CTkFont(size=12),
                 text_color=("gray50", "gray60"),
             ).pack(fill="x", pady=8)
@@ -1864,7 +1867,7 @@ class DashboardWindow:
         if not history:
             ctk.CTkLabel(
                 self._transfer_history_scroll,
-                text=T("empty.no_transfer_history"),
+                text="\U0001F4E6  " + T("empty.no_transfer_history"),
                 font=ctk.CTkFont(size=12),
                 text_color=("gray50", "gray60"),
             ).pack(fill="x", pady=8)
@@ -1922,7 +1925,7 @@ class DashboardWindow:
                         q_color = ("#E74C3C", "#C0392B")
                     if self._speed_value:
                         self._speed_value.configure(
-                            text=f"{mbps:.1f} MB/s",
+                            text=f"{mbps:.1f} Mbps",
                             text_color=("#27AE60", "#2ECC71"),
                         )
                     if self._speed_quality:
@@ -2254,7 +2257,8 @@ class DashboardWindow:
         try:
             self._web_card.pack_info()
         except tk.TclError:
-            self._web_card.pack(fill="x", pady=(8, 0))
+            self._web_card.pack(fill="x", pady=(8, 10),
+                                before=self._activity_card)
 
         from internal.web.server import WebServer
         ip = WebServer._get_lan_ip()

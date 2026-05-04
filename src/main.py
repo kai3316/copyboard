@@ -980,8 +980,9 @@ class Application:
         dlg.title(T("web.qr_title"))
         dlg.resizable(False, False)
         w, h = 320, 430
-        sw, sh = dlg.winfo_screenwidth(), dlg.winfo_screenheight()
-        dlg.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+        sw, sh = self.root.winfo_width(), self.root.winfo_height()
+        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+        dlg.geometry(f"{w}x{h}+{rx+(sw-w)//2}+{ry+(sh-h)//2}")
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)

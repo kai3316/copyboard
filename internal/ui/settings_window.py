@@ -161,7 +161,7 @@ class SettingsWindow:
         h_inner.pack(fill="x", padx=20, pady=(14, 14))
 
         ctk.CTkLabel(
-            h_inner, text="\U0001F527  " + T("ui.settings"),
+            h_inner, text=T("ui.settings"),
             font=ctk.CTkFont(size=18, weight="bold"),
             text_color=("#FFFFFF", "#E0E0E0"),
         ).pack(side="left")
@@ -252,7 +252,7 @@ class SettingsWindow:
                 font=ctk.CTkFont(size=13),
                 command=lambda k=key: self._switch_panel(k),
             )
-            btn.pack(fill="x", pady=5)
+            btn.pack(fill="x", pady=2)
             self._sidebar_buttons[key] = btn
 
     # ═══════════════════════════════════════════════════════════════
