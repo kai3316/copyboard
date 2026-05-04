@@ -677,9 +677,85 @@ class Application:
 
     def _on_transfer_request(self, transfer_id: str, file_name: str, file_size: int,
                              mime_type: str, send_fn) -> None:
-        logger.info("File request: %s (%d bytes, %s) -- auto-accepting",
-                    file_name, file_size, mime_type)
-        self.file_transfer_mgr.accept_transfer(transfer_id, send_fn)
+        logger.info("File request: %s (%d bytes, %s)", file_name, file_size, mime_type)
+        self.root.after(0, lambda: self._show_transfer_request_dialog(
+            transfer_id, file_name, file_size, mime_type, send_fn))
+
+    def _show_transfer_request_dialog(self, transfer_id, file_name, file_size,
+                                       mime_type, send_fn):
+        import customtkinter as ctk
+
+        def _fmt_size(n):
+            if n >= 1_000_000_000:
+                return f"{n/1_000_000_000:.1f} GB"
+            if n >= 1_000_000:
+                return f"{n/1_000_000:.1f} MB"
+            if n >= 1_000:
+                return f"{n/1_000:.1f} KB"
+            return f"{n} B"
+
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title(T("transfer.incoming"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+
+        dw, dh = 400, 210
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - dw) // 2
+            y = ry + (rh - dh) // 2
+        else:
+            x = (self.root.winfo_screenwidth() - dw) // 2
+            y = (self.root.winfo_screenheight() - dh) // 2
+        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=24, pady=20)
+
+        ctk.CTkLabel(
+            body, text=T("transfer.incoming_title"),
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w", pady=(0, 12))
+
+        ctk.CTkLabel(
+            body, text=file_name,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
+
+        ctk.CTkLabel(
+            body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray60"),
+        ).pack(anchor="w", pady=(0, 16))
+
+        btn_row = ctk.CTkFrame(body, fg_color="transparent")
+        btn_row.pack(fill="x")
+
+        ctk.CTkButton(
+            btn_row, text=T("transfer.reject"), width=90, height=34,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#5B2C2C"),
+            command=lambda: (
+                self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+                dlg.destroy(),
+            ),
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            btn_row, text=T("transfer.accept"), width=90, height=34,
+            fg_color=("#27AE60", "#2ECC71"),
+            hover_color=("#1E8449", "#27AE60"),
+            command=lambda: (
+                self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+                dlg.destroy(),
+            ),
+        ).pack(side="right")
+
+        dlg.grab_set()
+        dlg.focus_force()
 
     def _on_peer_found(self, peer_id: str, peer_name: str, address: str, port: int) -> None:
         with self._discovered_lock:
@@ -1126,12 +1202,94 @@ class Application:
             return
         self._send_as_zip([folder])
 
+    def _pick_peer(self) -> str | None:
+        """Show a dialog to select which peer to send to.
+
+        Returns peer_id or None if cancelled. If only one peer is connected,
+        returns it without showing a dialog.
+        """
+        peers = self.transport_mgr.get_connected_peers_with_names()
+        if not peers:
+            show_error(self.root, T("transfer.error"), T("transfer.no_peers"))
+            return None
+        if len(peers) == 1:
+            return peers[0][0]
+
+        # Multiple peers — show selection dialog
+        import customtkinter as ctk
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title(T("transfer.select_peer"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+
+        dw, dh = 340, 100 + min(len(peers) * 38, 300)
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - dw) // 2
+            y = ry + (rh - dh) // 2
+        else:
+            x = (self.root.winfo_screenwidth() - dw) // 2
+            y = (self.root.winfo_screenheight() - dh) // 2
+        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=20, pady=16)
+
+        ctk.CTkLabel(
+            body, text=T("transfer.select_peer"),
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", pady=(0, 10))
+
+        selected = tk.StringVar()
+        for pid, name in peers:
+            ctk.CTkRadioButton(
+                body, text=name, variable=selected, value=pid,
+                font=ctk.CTkFont(size=13),
+            ).pack(anchor="w", pady=3)
+
+        if peers:
+            selected.set(peers[0][0])
+
+        result = [None]
+
+        def _confirm():
+            result[0] = selected.get()
+            dlg.destroy()
+
+        btn_row = ctk.CTkFrame(body, fg_color="transparent")
+        btn_row.pack(fill="x", pady=(12, 0))
+
+        ctk.CTkButton(
+            btn_row, text=T("ui.cancel"), width=80, height=32,
+            fg_color="transparent", border_width=1,
+            text_color=("gray40", "gray70"),
+            border_color=("gray60", "gray50"),
+            hover_color=("gray85", "gray25"),
+            command=dlg.destroy,
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            btn_row, text=T("transfer.send"), width=80, height=32,
+            command=_confirm,
+        ).pack(side="right")
+
+        dlg.grab_set()
+        dlg.focus_force()
+        dlg.wait_window()
+        return result[0]
+
     def _send_single_path(self, file_path: str) -> None:
         """Send a single file directly (no zipping)."""
+        peer_id = self._pick_peer()
+        if peer_id is None:
+            return
+
+        def _send_fn(data: bytes):
+            self.transport_mgr.send_to_peer(peer_id, data)
+
         try:
-            transfer_id = self.file_transfer_mgr.send_file(
-                file_path, self.transport_mgr.broadcast,
-            )
+            transfer_id = self.file_transfer_mgr.send_file(file_path, _send_fn)
             logger.info("File transfer initiated: %s", transfer_id[:8])
             notification_mgr.show("File Transfer",
                                   T("transfer.sending_file", name=os.path.basename(file_path)))
@@ -1151,6 +1309,13 @@ class Application:
         cancel if needed.  Zipping runs in a background thread to keep
         the UI responsive.
         """
+        peer_id = self._pick_peer()
+        if peer_id is None:
+            return
+
+        def _send_fn(data: bytes):
+            self.transport_mgr.send_to_peer(peer_id, data)
+
         import tempfile, zipfile
         import customtkinter as _ctk
         from pathlib import Path
@@ -1317,7 +1482,7 @@ class Application:
                     return
 
                 transfer_id = self.file_transfer_mgr.send_file(
-                    str(tmp_path), self.transport_mgr.broadcast,
+                    str(tmp_path), _send_fn,
                 )
                 logger.info("Zip transfer initiated: %s (%d files)", transfer_id[:8], total_files)
                 self.root.after(0, lambda: (

@@ -711,6 +711,19 @@ class TransportManager:
         for conn in peers:
             conn.send(data)
 
+    def send_to_peer(self, peer_id: str, data: bytes):
+        with self._lock:
+            conn = self._peers.get(peer_id)
+        if conn is None:
+            logger.warning("send_to_peer: peer %s not found", peer_id[:12])
+            return
+        conn.send(data)
+
+    def get_connected_peers_with_names(self) -> list[tuple[str, str]]:
+        """Return list of (peer_id, device_name) for all connected peers."""
+        with self._lock:
+            return [(pid, conn.device_name) for pid, conn in self._peers.items()]
+
     def disconnect_peer(self, peer_id: str):
         with self._lock:
             conn = self._peers.pop(peer_id, None)
