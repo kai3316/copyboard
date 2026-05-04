@@ -46,19 +46,19 @@ ClipSync syncs your clipboard across devices **directly over your local network*
 ## How It Works
 
 ```
-┌──────────┐                              ┌──────────┐
-│  Device A │  ── mDNS discover ────────▶  │  Device B │
-│           │  ◀─── TLS 1.3 handshake ──  │           │
-│  clipboard│  ── ClipboardContent ──────▶ │  clipboard│
-│           │  ◀─── AES-256-GCM frame ───  │           │
-└──────────┘                              └──────────┘
-                                              │
-                                         QR code scan
-                                              │
-                                         ┌──────────┐
-                                         │  Phone   │
-                                         │ (PWA)    │
-                                         └──────────┘
+  +------------+                             +------------+
+  |  Device A  |  --- mDNS discover -------> |  Device B  |
+  |            |  <-- TLS 1.3 handshake ---  |            |
+  |  clipboard |  --- clipboard content ---> |  clipboard |
+  |            |  <-- AES-256-GCM frame ---  |            |
+  +------------+                             +------------+
+                                                   |
+                                              QR code scan
+                                                   |
+                                             +------------+
+                                             |   Phone    |
+                                             |   (PWA)    |
+                                             +------------+
 ```
 
 1. **Discovery** — Devices find each other via mDNS/Zeroconf on the LAN. No IP configuration needed.
