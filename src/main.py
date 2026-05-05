@@ -710,7 +710,7 @@ class Application:
 
     def _show_transfer_request_dialog(self, transfer_id, file_name, file_size,
                                        mime_type, send_fn):
-        import customtkinter as ctk
+        import platform as _platform
 
         def _fmt_size(n):
             if n >= 1_000_000_000:
@@ -721,68 +721,146 @@ class Application:
                 return f"{n/1_000:.1f} KB"
             return f"{n} B"
 
-        dlg = ctk.CTkToplevel(self.root)
-        dlg.title(T("transfer.incoming"))
-        dlg.resizable(False, False)
-        dlg.transient(self.root)
+        _is_macos = _platform.system() == "Darwin"
 
-        dw, dh = 400, 210
-        if self.root.winfo_viewable():
-            rw, rh = self.root.winfo_width(), self.root.winfo_height()
-            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-            x = rx + (rw - dw) // 2
-            y = ry + (rh - dh) // 2
+        if _is_macos:
+            # CTkToplevel can deadlock on macOS — use raw tk.Toplevel instead
+            dlg = tk.Toplevel(self.root)
+            dlg.title(T("transfer.incoming"))
+            dlg.resizable(False, False)
+
+            dw, dh = 400, 210
+            dlg.update_idletasks()
+            if self.root.winfo_viewable():
+                rw, rh = self.root.winfo_width(), self.root.winfo_height()
+                rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+                x = rx + (rw - dw) // 2
+                y = ry + (rh - dh) // 2
+            else:
+                x = (self.root.winfo_screenwidth() - dw) // 2
+                y = (self.root.winfo_screenheight() - dh) // 2
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+            header_font = ("Helvetica", 15, "bold")
+            name_font = ("Helvetica", 13, "bold")
+            detail_font = ("Helvetica", 11)
+
+            tk.Label(
+                dlg, text=T("transfer.incoming_title"),
+                font=header_font,
+            ).pack(padx=24, pady=(20, 10), anchor="w")
+
+            tk.Label(
+                dlg, text=file_name,
+                font=name_font,
+            ).pack(padx=24, pady=(0, 4), anchor="w")
+
+            tk.Label(
+                dlg, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
+                font=detail_font,
+                fg="gray",
+            ).pack(padx=24, pady=(0, 18), anchor="w")
+
+            btn_row = tk.Frame(dlg)
+            btn_row.pack(fill="x", padx=24, pady=(0, 20))
+
+            tk.Button(
+                btn_row, text=T("transfer.reject"), width=12, height=1,
+                relief="solid", bd=1,
+                fg="#C0392B",
+                command=lambda: (
+                    self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+                    dlg.destroy(),
+                ),
+            ).pack(side="left")
+
+            tk.Button(
+                btn_row, text=T("transfer.accept"), width=12, height=1,
+                bg="#27AE60", fg="white", relief="flat",
+                command=lambda: (
+                    self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+                    dlg.destroy(),
+                ),
+            ).pack(side="right")
+
+            dlg.update()
+            dlg.transient(self.root)
+            try:
+                dlg.grab_set()
+            except Exception:
+                pass
         else:
-            x = (self.root.winfo_screenwidth() - dw) // 2
-            y = (self.root.winfo_screenheight() - dh) // 2
-        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+            import customtkinter as ctk
 
-        body = ctk.CTkFrame(dlg, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=24, pady=20)
+            dlg = ctk.CTkToplevel(self.root)
+            dlg.title(T("transfer.incoming"))
+            dlg.resizable(False, False)
 
-        ctk.CTkLabel(
-            body, text=T("transfer.incoming_title"),
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).pack(anchor="w", pady=(0, 12))
+            dw, dh = 400, 210
+            dlg.update_idletasks()
+            if self.root.winfo_viewable():
+                rw, rh = self.root.winfo_width(), self.root.winfo_height()
+                rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+                x = rx + (rw - dw) // 2
+                y = ry + (rh - dh) // 2
+            else:
+                x = (self.root.winfo_screenwidth() - dw) // 2
+                y = (self.root.winfo_screenheight() - dh) // 2
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+            dlg.transient(self.root)
 
-        ctk.CTkLabel(
-            body, text=file_name,
-            font=ctk.CTkFont(size=14, weight="bold"),
-        ).pack(anchor="w", pady=(0, 4))
+            body = ctk.CTkFrame(dlg, fg_color="transparent")
+            body.pack(fill="both", expand=True, padx=24, pady=20)
 
-        ctk.CTkLabel(
-            body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
-            font=ctk.CTkFont(size=12),
-            text_color=("gray50", "gray60"),
-        ).pack(anchor="w", pady=(0, 16))
+            ctk.CTkLabel(
+                body, text=T("transfer.incoming_title"),
+                font=ctk.CTkFont(size=16, weight="bold"),
+            ).pack(anchor="w", pady=(0, 12))
 
-        btn_row = ctk.CTkFrame(body, fg_color="transparent")
-        btn_row.pack(fill="x")
+            ctk.CTkLabel(
+                body, text=file_name,
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(anchor="w", pady=(0, 4))
 
-        ctk.CTkButton(
-            btn_row, text=T("transfer.reject"), width=90, height=34,
-            fg_color="transparent", border_width=1,
-            text_color=("#E74C3C", "#C0392B"),
-            border_color=("#E74C3C", "#C0392B"),
-            hover_color=("#FADBD8", "#5B2C2C"),
-            command=lambda: (
-                self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
-                dlg.destroy(),
-            ),
-        ).pack(side="left")
+            ctk.CTkLabel(
+                body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
+                font=ctk.CTkFont(size=12),
+                text_color=("gray50", "gray60"),
+            ).pack(anchor="w", pady=(0, 16))
 
-        ctk.CTkButton(
-            btn_row, text=T("transfer.accept"), width=90, height=34,
-            fg_color=("#27AE60", "#2ECC71"),
-            hover_color=("#1E8449", "#27AE60"),
-            command=lambda: (
-                self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
-                dlg.destroy(),
-            ),
-        ).pack(side="right")
+            btn_row = ctk.CTkFrame(body, fg_color="transparent")
+            btn_row.pack(fill="x")
 
-        dlg.grab_set()
-        dlg.focus_force()
+            ctk.CTkButton(
+                btn_row, text=T("transfer.reject"), width=90, height=34,
+                fg_color="transparent", border_width=1,
+                text_color=("#E74C3C", "#C0392B"),
+                border_color=("#E74C3C", "#C0392B"),
+                hover_color=("#FADBD8", "#5B2C2C"),
+                command=lambda: (
+                    self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+                    dlg.destroy(),
+                ),
+            ).pack(side="left")
+
+            ctk.CTkButton(
+                btn_row, text=T("transfer.accept"), width=90, height=34,
+                fg_color=("#27AE60", "#2ECC71"),
+                hover_color=("#1E8449", "#27AE60"),
+                command=lambda: (
+                    self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+                    dlg.destroy(),
+                ),
+            ).pack(side="right")
+
+            dlg.update()
+            try:
+                dlg.grab_set()
+                dlg.focus_force()
+            except Exception:
+                pass
+
+        self._active_dialog = dlg
 
     def _on_peer_found(self, peer_id: str, peer_name: str, address: str, port: int) -> None:
         with self._discovered_lock:
