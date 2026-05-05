@@ -710,7 +710,7 @@ class Application:
 
     def _show_transfer_request_dialog(self, transfer_id, file_name, file_size,
                                        mime_type, send_fn):
-        import platform as _platform
+        import customtkinter as ctk
 
         def _fmt_size(n):
             if n >= 1_000_000_000:
@@ -721,144 +721,73 @@ class Application:
                 return f"{n/1_000:.1f} KB"
             return f"{n} B"
 
-        _is_macos = _platform.system() == "Darwin"
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title(T("transfer.incoming"))
+        dlg.resizable(False, False)
 
-        if _is_macos:
-            # CTkToplevel can deadlock on macOS — use raw tk.Toplevel instead
-            dlg = tk.Toplevel(self.root)
-            dlg.title(T("transfer.incoming"))
-            dlg.resizable(False, False)
-
-            dw, dh = 400, 210
-            dlg.update_idletasks()
-            if self.root.winfo_viewable():
-                rw, rh = self.root.winfo_width(), self.root.winfo_height()
-                rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-                x = rx + (rw - dw) // 2
-                y = ry + (rh - dh) // 2
-            else:
-                x = (self.root.winfo_screenwidth() - dw) // 2
-                y = (self.root.winfo_screenheight() - dh) // 2
-            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-
-            header_font = ("Helvetica", 15, "bold")
-            name_font = ("Helvetica", 13, "bold")
-            detail_font = ("Helvetica", 11)
-
-            tk.Label(
-                dlg, text=T("transfer.incoming_title"),
-                font=header_font,
-            ).pack(padx=24, pady=(20, 10), anchor="w")
-
-            tk.Label(
-                dlg, text=file_name,
-                font=name_font,
-            ).pack(padx=24, pady=(0, 4), anchor="w")
-
-            tk.Label(
-                dlg, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
-                font=detail_font,
-                fg="gray",
-            ).pack(padx=24, pady=(0, 18), anchor="w")
-
-            btn_row = tk.Frame(dlg)
-            btn_row.pack(fill="x", padx=24, pady=(0, 20))
-
-            tk.Button(
-                btn_row, text=T("transfer.reject"), width=12, height=1,
-                relief="solid", bd=1,
-                fg="#C0392B",
-                command=lambda: (
-                    self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
-                    dlg.destroy(),
-                ),
-            ).pack(side="left")
-
-            tk.Button(
-                btn_row, text=T("transfer.accept"), width=12, height=1,
-                bg="#27AE60", fg="white", relief="flat",
-                command=lambda: (
-                    self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
-                    dlg.destroy(),
-                ),
-            ).pack(side="right")
-
-            dlg.update()
-            dlg.transient(self.root)
-            try:
-                dlg.grab_set()
-            except Exception:
-                pass
+        dw, dh = 400, 210
+        dlg.update_idletasks()
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - dw) // 2
+            y = ry + (rh - dh) // 2
         else:
-            import customtkinter as ctk
+            x = (self.root.winfo_screenwidth() - dw) // 2
+            y = (self.root.winfo_screenheight() - dh) // 2
+        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+        dlg.transient(self.root)
 
-            dlg = ctk.CTkToplevel(self.root)
-            dlg.title(T("transfer.incoming"))
-            dlg.resizable(False, False)
+        body = ctk.CTkFrame(dlg, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=24, pady=20)
 
-            dw, dh = 400, 210
-            dlg.update_idletasks()
-            if self.root.winfo_viewable():
-                rw, rh = self.root.winfo_width(), self.root.winfo_height()
-                rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-                x = rx + (rw - dw) // 2
-                y = ry + (rh - dh) // 2
-            else:
-                x = (self.root.winfo_screenwidth() - dw) // 2
-                y = (self.root.winfo_screenheight() - dh) // 2
-            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-            dlg.transient(self.root)
+        ctk.CTkLabel(
+            body, text=T("transfer.incoming_title"),
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w", pady=(0, 12))
 
-            body = ctk.CTkFrame(dlg, fg_color="transparent")
-            body.pack(fill="both", expand=True, padx=24, pady=20)
+        ctk.CTkLabel(
+            body, text=file_name,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", pady=(0, 4))
 
-            ctk.CTkLabel(
-                body, text=T("transfer.incoming_title"),
-                font=ctk.CTkFont(size=16, weight="bold"),
-            ).pack(anchor="w", pady=(0, 12))
+        ctk.CTkLabel(
+            body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray60"),
+        ).pack(anchor="w", pady=(0, 16))
 
-            ctk.CTkLabel(
-                body, text=file_name,
-                font=ctk.CTkFont(size=14, weight="bold"),
-            ).pack(anchor="w", pady=(0, 4))
+        btn_row = ctk.CTkFrame(body, fg_color="transparent")
+        btn_row.pack(fill="x")
 
-            ctk.CTkLabel(
-                body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
-                font=ctk.CTkFont(size=12),
-                text_color=("gray50", "gray60"),
-            ).pack(anchor="w", pady=(0, 16))
+        ctk.CTkButton(
+            btn_row, text=T("transfer.reject"), width=90, height=34,
+            fg_color="transparent", border_width=1,
+            text_color=("#E74C3C", "#C0392B"),
+            border_color=("#E74C3C", "#C0392B"),
+            hover_color=("#FADBD8", "#5B2C2C"),
+            command=lambda: (
+                self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+                dlg.destroy(),
+            ),
+        ).pack(side="left")
 
-            btn_row = ctk.CTkFrame(body, fg_color="transparent")
-            btn_row.pack(fill="x")
+        ctk.CTkButton(
+            btn_row, text=T("transfer.accept"), width=90, height=34,
+            fg_color=("#27AE60", "#2ECC71"),
+            hover_color=("#1E8449", "#27AE60"),
+            command=lambda: (
+                self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+                dlg.destroy(),
+            ),
+        ).pack(side="right")
 
-            ctk.CTkButton(
-                btn_row, text=T("transfer.reject"), width=90, height=34,
-                fg_color="transparent", border_width=1,
-                text_color=("#E74C3C", "#C0392B"),
-                border_color=("#E74C3C", "#C0392B"),
-                hover_color=("#FADBD8", "#5B2C2C"),
-                command=lambda: (
-                    self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
-                    dlg.destroy(),
-                ),
-            ).pack(side="left")
-
-            ctk.CTkButton(
-                btn_row, text=T("transfer.accept"), width=90, height=34,
-                fg_color=("#27AE60", "#2ECC71"),
-                hover_color=("#1E8449", "#27AE60"),
-                command=lambda: (
-                    self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
-                    dlg.destroy(),
-                ),
-            ).pack(side="right")
-
-            dlg.update()
-            try:
-                dlg.grab_set()
-                dlg.focus_force()
-            except Exception:
-                pass
+        dlg.update()
+        try:
+            dlg.grab_set()
+            dlg.focus_force()
+        except Exception:
+            pass
 
         self._active_dialog = dlg
 
@@ -1168,10 +1097,19 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("web.qr_title"))
         dlg.resizable(False, False)
+
         w, h = 320, 430
-        sw, sh = self.root.winfo_width(), self.root.winfo_height()
-        rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
-        dlg.geometry(f"{w}x{h}+{rx+(sw-w)//2}+{ry+(sh-h)//2}")
+        dlg.update_idletasks()
+        if self.root.winfo_viewable():
+            rw, rh = self.root.winfo_width(), self.root.winfo_height()
+            rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
+            x = rx + (rw - w) // 2
+            y = ry + (rh - h) // 2
+        else:
+            x = (self.root.winfo_screenwidth() - w) // 2
+            y = (self.root.winfo_screenheight() - h) // 2
+        dlg.geometry(f"{w}x{h}+{x}+{y}")
+        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)
@@ -1224,8 +1162,12 @@ class Application:
             command=dlg.destroy,
         ).pack(pady=(4, 0))
 
-        dlg.transient(self.root)
-        dlg.grab_set()
+        dlg.update()
+        try:
+            dlg.grab_set()
+        except Exception:
+            pass
+        self._active_dialog = dlg
 
     def _on_web_action(self, action: dict) -> None:
         """Handle web server control actions from dashboard / settings."""
@@ -1333,9 +1275,9 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("nav_url.title"))
         dlg.resizable(False, False)
-        dlg.transient(self.root)
 
         dw, dh = 440, 170
+        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -1345,6 +1287,7 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=20, pady=16)
@@ -1387,9 +1330,14 @@ class Application:
             command=_send,
         ).pack(side="right")
 
-        dlg.grab_set()
-        dlg.focus_force()
+        dlg.update()
+        try:
+            dlg.grab_set()
+            dlg.focus_force()
+        except Exception:
+            pass
         dlg.bind("<Return>", lambda e: _send())
+        self._active_dialog = dlg
 
     def _send_url_to_peer(self, url: str) -> None:
         """Pick a peer and send the URL (deferred from dialog callback)."""
@@ -1423,9 +1371,9 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("transfer.select_peer"))
         dlg.resizable(False, False)
-        dlg.transient(self.root)
 
         dw, dh = 340, 100 + min(len(peers) * 38, 300)
+        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -1435,6 +1383,7 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=20, pady=16)
@@ -1477,8 +1426,12 @@ class Application:
             command=_confirm,
         ).pack(side="right")
 
-        dlg.grab_set()
-        dlg.focus_force()
+        dlg.update()
+        try:
+            dlg.grab_set()
+            dlg.focus_force()
+        except Exception:
+            pass
         dlg.wait_window()
         return result[0]
 
@@ -1489,9 +1442,9 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("transfer.phone_title"))
         dlg.resizable(False, False)
-        dlg.transient(self.root)
 
         dw, dh = 420, 240
+        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -1501,6 +1454,7 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)
@@ -1539,8 +1493,13 @@ class Application:
             ),
         ).pack(side="right")
 
-        dlg.grab_set()
-        dlg.focus_force()
+        dlg.update()
+        try:
+            dlg.grab_set()
+            dlg.focus_force()
+        except Exception:
+            pass
+        self._active_dialog = dlg
 
     def _send_single_path(self, file_path: str) -> None:
         """Send a single file directly (no zipping)."""
@@ -1651,7 +1610,10 @@ class Application:
 
             dlg.update()
             dlg.transient(self.root)
-            dlg.grab_set()
+            try:
+                dlg.grab_set()
+            except Exception:
+                pass
         else:
             dlg = _ctk.CTkToplevel(self.root)
             dlg.title(T("transfer.creating_archive"))
@@ -1695,7 +1657,10 @@ class Application:
 
             dlg.update()
             dlg.transient(self.root)
-            dlg.grab_set()
+            try:
+                dlg.grab_set()
+            except Exception:
+                pass
 
         # Keep a reference to prevent premature garbage collection on macOS
         self._active_dialog = dlg
