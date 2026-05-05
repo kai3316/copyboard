@@ -724,6 +724,7 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("transfer.incoming"))
         dlg.resizable(False, False)
+        dlg.transient(self.root)
 
         dw, dh = 400, 210
         dlg.update_idletasks()
@@ -736,7 +737,11 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-        dlg.transient(self.root)
+
+        try:
+            dlg.grab_set()
+        except Exception:
+            pass
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)
@@ -782,14 +787,11 @@ class Application:
             ),
         ).pack(side="right")
 
-        dlg.update()
-        try:
-            dlg.grab_set()
-            dlg.focus_force()
-        except Exception:
-            pass
-
-        self._active_dialog = dlg
+        dlg.protocol("WM_DELETE_WINDOW", lambda: (
+            self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+            dlg.destroy(),
+        ))
+        dlg.wait_window()
 
     def _on_peer_found(self, peer_id: str, peer_name: str, address: str, port: int) -> None:
         with self._discovered_lock:
@@ -1359,9 +1361,10 @@ class Application:
         peers = self.transport_mgr.get_connected_peers_with_names()
         if not peers:
             if self.cfg.web_enabled:
-                self._pick_peer_phone_guide()
+                self.root.after(1, self._pick_peer_phone_guide)
             else:
-                show_error(self.root, T("transfer.error"), T("transfer.no_peers"))
+                self.root.after(1, lambda: show_error(
+                    self.root, T("transfer.error"), T("transfer.no_peers")))
             return None
         if len(peers) == 1:
             return peers[0][0]
