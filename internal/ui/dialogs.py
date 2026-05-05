@@ -22,12 +22,11 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
     dlg = ctk.CTkToplevel(parent)
     dlg.title(title)
     dlg.resizable(False, False)
-    dlg.transient(parent)
 
     # Position centered over parent, or screen-center if parent is withdrawn.
-    # IMPORTANT: Do NOT call update_idletasks() here — on macOS, calling it
-    # on a Toplevel whose parent is withdrawn (hidden) causes the content
-    # area to never render (blank body, only title bar visible).
+    # IMPORTANT: Do NOT call update_idletasks() or transient() before the
+    # window is realized (geometry + update). On macOS, doing so with a
+    # withdrawn parent prevents the window from ever becoming visible.
     w, h = 420, 180
     if parent.winfo_viewable():
         pw, ph = parent.winfo_width(), parent.winfo_height()
@@ -97,6 +96,7 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
         dlg.destroy()
 
     dlg.update()
+    dlg.transient(parent)
     try:
         dlg.grab_set()
     except Exception:
@@ -150,9 +150,8 @@ def ask_string(parent, title, prompt, initial_value="", show=""):
     dlg = ctk.CTkToplevel(parent)
     dlg.title(title)
     dlg.resizable(False, False)
-    dlg.transient(parent)
 
-    # See _dialog() for why we don't call update_idletasks() here.
+    # See _dialog() for why we don't call update_idletasks() or transient() here.
     w, h = 400, 160
     if parent.winfo_viewable():
         pw, ph = parent.winfo_width(), parent.winfo_height()
@@ -226,6 +225,7 @@ def ask_string(parent, title, prompt, initial_value="", show=""):
         dlg.destroy()
 
     dlg.update()
+    dlg.transient(parent)
     try:
         dlg.grab_set()
     except Exception:

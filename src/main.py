@@ -724,7 +724,6 @@ class Application:
         dlg = ctk.CTkToplevel(self.root)
         dlg.title(T("transfer.incoming"))
         dlg.resizable(False, False)
-        dlg.transient(self.root)
 
         dw, dh = 400, 210
         if self.root.winfo_viewable():
@@ -782,6 +781,7 @@ class Application:
         ).pack(side="right")
 
         dlg.update()
+        dlg.transient(self.root)
         try:
             dlg.grab_set()
         except Exception:
@@ -1110,7 +1110,6 @@ class Application:
             x = (self.root.winfo_screenwidth() - w) // 2
             y = (self.root.winfo_screenheight() - h) // 2
         dlg.geometry(f"{w}x{h}+{x}+{y}")
-        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)
@@ -1164,6 +1163,7 @@ class Application:
         ).pack(pady=(4, 0))
 
         dlg.update()
+        dlg.transient(self.root)
         try:
             dlg.grab_set()
         except Exception:
@@ -1287,7 +1287,6 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=20, pady=16)
@@ -1331,6 +1330,7 @@ class Application:
         ).pack(side="right")
 
         dlg.update()
+        dlg.transient(self.root)
         try:
             dlg.grab_set()
             dlg.focus_force()
@@ -1359,10 +1359,9 @@ class Application:
         peers = self.transport_mgr.get_connected_peers_with_names()
         if not peers:
             if self.cfg.web_enabled:
-                self.root.after(1, self._pick_peer_phone_guide)
+                self._pick_peer_phone_guide()
             else:
-                self.root.after(1, lambda: show_error(
-                    self.root, T("transfer.error"), T("transfer.no_peers")))
+                show_error(self.root, T("transfer.error"), T("transfer.no_peers"))
             return None
         if len(peers) == 1:
             return peers[0][0]
@@ -1383,7 +1382,6 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=20, pady=16)
@@ -1427,6 +1425,7 @@ class Application:
         ).pack(side="right")
 
         dlg.update()
+        dlg.transient(self.root)
         try:
             dlg.grab_set()
             dlg.focus_force()
@@ -1453,7 +1452,6 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-        dlg.transient(self.root)
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)
@@ -1493,6 +1491,7 @@ class Application:
         ).pack(side="right")
 
         dlg.update()
+        dlg.transient(self.root)
         try:
             dlg.grab_set()
             dlg.focus_force()
