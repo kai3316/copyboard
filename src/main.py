@@ -845,8 +845,18 @@ class Application:
         self.root = tk.Tk()
         _hide_dock()
         self.root.title("ClipSync")
-        self.root.geometry("1x1+0+0")
-        self.root.withdraw()
+        # On macOS, a withdrawn parent prevents ANY child window (CTkToplevel
+        # or tk.Toplevel) from displaying.  Instead, make the root a 1px
+        # fully-transparent window at screen centre so it stays mapped but
+        # invisible.  Other platforms use the original withrawn approach.
+        if sys.platform == "darwin":
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            self.root.geometry(f"1x1+{sw // 2}+{sh // 2}")
+            self.root.attributes("-alpha", 0)
+        else:
+            self.root.geometry("1x1+0+0")
+            self.root.withdraw()
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
 
         # ── Systray ─────────────────────────────────────────────
