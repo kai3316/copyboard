@@ -867,7 +867,7 @@ class Application:
             on_open_settings=self.open_settings,
             on_export_logs=self.export_logs,
             on_show_web_qr=self._show_web_qr,
-            on_send_url=self._do_send_url,
+            on_send_url=lambda: self.root.after(0, self._do_send_url),
             on_quit=self.shutdown,
         )
         self.systray.set_web_enabled(self.cfg.web_enabled)
