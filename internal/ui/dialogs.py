@@ -24,8 +24,10 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
     dlg.resizable(False, False)
     dlg.transient(parent)
 
-    # Position centered over parent, or screen-center if parent is withdrawn
-    dlg.update_idletasks()
+    # Position centered over parent, or screen-center if parent is withdrawn.
+    # IMPORTANT: Do NOT call update_idletasks() here — on macOS, calling it
+    # on a Toplevel whose parent is withdrawn (hidden) causes the content
+    # area to never render (blank body, only title bar visible).
     w, h = 420, 180
     if parent.winfo_viewable():
         pw, ph = parent.winfo_width(), parent.winfo_height()
@@ -38,11 +40,6 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
         x = (sw - w) // 2
         y = (sh - h) // 2
     dlg.geometry(f"{w}x{h}+{x}+{y}")
-
-    try:
-        dlg.grab_set()
-    except Exception:
-        pass
 
     result = [False]
 
@@ -99,6 +96,12 @@ def _dialog(parent, title, message, icon, accent_color, buttons):
         result[0] = (value == 0)
         dlg.destroy()
 
+    dlg.update()
+    try:
+        dlg.grab_set()
+    except Exception:
+        pass
+
     dlg.protocol("WM_DELETE_WINDOW", lambda: _close(1))
     dlg.wait_window()
     return result[0]
@@ -149,18 +152,19 @@ def ask_string(parent, title, prompt, initial_value="", show=""):
     dlg.resizable(False, False)
     dlg.transient(parent)
 
-    dlg.update_idletasks()
-    pw, ph = parent.winfo_width(), parent.winfo_height()
-    px, py = parent.winfo_rootx(), parent.winfo_rooty()
+    # See _dialog() for why we don't call update_idletasks() here.
     w, h = 400, 160
-    x = px + (pw - w) // 2
-    y = py + (ph - h) // 2
+    if parent.winfo_viewable():
+        pw, ph = parent.winfo_width(), parent.winfo_height()
+        px, py = parent.winfo_rootx(), parent.winfo_rooty()
+        x = px + (pw - w) // 2
+        y = py + (ph - h) // 2
+    else:
+        sw = parent.winfo_screenwidth()
+        sh = parent.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
     dlg.geometry(f"{w}x{h}+{x}+{y}")
-
-    try:
-        dlg.grab_set()
-    except Exception:
-        pass
 
     result = [None]
 
@@ -220,6 +224,12 @@ def ask_string(parent, title, prompt, initial_value="", show=""):
     def _on_close(value):
         result[0] = value
         dlg.destroy()
+
+    dlg.update()
+    try:
+        dlg.grab_set()
+    except Exception:
+        pass
 
     dlg.protocol("WM_DELETE_WINDOW", lambda: _on_close(None))
     dlg.wait_window()

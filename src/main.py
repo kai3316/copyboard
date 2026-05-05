@@ -727,7 +727,6 @@ class Application:
         dlg.transient(self.root)
 
         dw, dh = 400, 210
-        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -737,11 +736,6 @@ class Application:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
         dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-
-        try:
-            dlg.grab_set()
-        except Exception:
-            pass
 
         body = ctk.CTkFrame(dlg, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=24, pady=20)
@@ -786,6 +780,12 @@ class Application:
                 dlg.destroy(),
             ),
         ).pack(side="right")
+
+        dlg.update()
+        try:
+            dlg.grab_set()
+        except Exception:
+            pass
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: (
             self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
@@ -1101,7 +1101,6 @@ class Application:
         dlg.resizable(False, False)
 
         w, h = 320, 430
-        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -1279,7 +1278,6 @@ class Application:
         dlg.resizable(False, False)
 
         dw, dh = 440, 170
-        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -1376,7 +1374,6 @@ class Application:
         dlg.resizable(False, False)
 
         dw, dh = 340, 100 + min(len(peers) * 38, 300)
-        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
@@ -1447,7 +1444,6 @@ class Application:
         dlg.resizable(False, False)
 
         dw, dh = 420, 240
-        dlg.update_idletasks()
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
             rx, ry = self.root.winfo_rootx(), self.root.winfo_rooty()
