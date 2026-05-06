@@ -11,6 +11,7 @@ import socket
 import time
 import tkinter as tk
 from internal.ui.dialogs import ask_string, ask_yesno, show_error, show_info
+import sys
 from typing import Callable
 
 import customtkinter as ctk
@@ -266,7 +267,17 @@ class DashboardWindow:
             self._root.after_cancel(self._refresh_job)
             self._refresh_job = None
         if self._window is not None:
-            self._window.withdraw()
+            # CTkToplevel.deiconify() after withdraw() is unreliable on
+            # Linux (same root cause as the dialog deadlocks).  Destroy
+            # the window instead so show() creates a fresh one.
+            if sys.platform == "linux":
+                try:
+                    self._window.destroy()
+                except Exception:
+                    pass
+                self._window = None
+            else:
+                self._window.withdraw()
         if self._on_hidden:
             self._on_hidden()
 
