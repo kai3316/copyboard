@@ -2278,6 +2278,7 @@ class DashboardWindow:
                 self._web_qr_label.configure(image=ctk_img, text="")
                 self._web_qr_label.image = ctk_img
             except Exception:
+                logger.debug("QR code generation failed", exc_info=True)
                 self._web_qr_label.configure(image=None, text="QR err")
         else:
             self._web_qr_label.configure(image=None, text="")
