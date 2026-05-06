@@ -710,7 +710,9 @@ class Application:
 
     def _show_transfer_request_dialog(self, transfer_id, file_name, file_size,
                                        mime_type, send_fn):
-        import customtkinter as ctk
+        import platform as _platform
+        _is_macos = _platform.system() == "Darwin"
+        _is_linux = _platform.system() == "Linux"
 
         def _fmt_size(n):
             if n >= 1_000_000_000:
@@ -721,10 +723,6 @@ class Application:
                 return f"{n/1_000:.1f} KB"
             return f"{n} B"
 
-        dlg = ctk.CTkToplevel(self.root)
-        dlg.title(T("transfer.incoming"))
-        dlg.resizable(False, False)
-
         dw, dh = 400, 210
         if self.root.winfo_viewable():
             rw, rh = self.root.winfo_width(), self.root.winfo_height()
@@ -734,64 +732,116 @@ class Application:
         else:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
-        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
 
-        body = ctk.CTkFrame(dlg, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=24, pady=20)
+        if _is_macos or _is_linux:
+            dlg = tk.Toplevel(self.root)
+            dlg.title(T("transfer.incoming"))
+            dlg.resizable(False, False)
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
 
-        ctk.CTkLabel(
-            body, text=T("transfer.incoming_title"),
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).pack(anchor="w", pady=(0, 12))
+            body = tk.Frame(dlg)
+            body.pack(fill="both", expand=True, padx=24, pady=20)
 
-        ctk.CTkLabel(
-            body, text=file_name,
-            font=ctk.CTkFont(size=14, weight="bold"),
-        ).pack(anchor="w", pady=(0, 4))
+            tk.Label(body, text=T("transfer.incoming_title"),
+                     font=("Helvetica", 16, "bold")).pack(anchor="w", pady=(0, 12))
 
-        ctk.CTkLabel(
-            body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
-            font=ctk.CTkFont(size=12),
-            text_color=("gray50", "gray60"),
-        ).pack(anchor="w", pady=(0, 16))
+            tk.Label(body, text=file_name,
+                     font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 4))
 
-        btn_row = ctk.CTkFrame(body, fg_color="transparent")
-        btn_row.pack(fill="x")
+            tk.Label(body, text=T("transfer.incoming_detail",
+                                  name=file_name, size=_fmt_size(file_size)),
+                     font=("Helvetica", 12), fg="gray").pack(anchor="w", pady=(0, 16))
 
-        ctk.CTkButton(
-            btn_row, text=T("transfer.reject"), width=90, height=34,
-            fg_color="transparent", border_width=1,
-            text_color=("#E74C3C", "#C0392B"),
-            border_color=("#E74C3C", "#C0392B"),
-            hover_color=("#FADBD8", "#5B2C2C"),
-            command=lambda: (
+            btn_row = tk.Frame(body)
+            btn_row.pack(fill="x")
+
+            tk.Button(btn_row, text=T("transfer.reject"), width=12,
+                      relief="solid", bd=1, fg="#E74C3C",
+                      command=lambda: (
+                          self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+                          dlg.destroy(),
+                      )).pack(side="left")
+
+            tk.Button(btn_row, text=T("transfer.accept"), width=12,
+                      bg="#27AE60", fg="white",
+                      command=lambda: (
+                          self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+                          dlg.destroy(),
+                      )).pack(side="right")
+
+            dlg.update()
+            dlg.transient(self.root)
+            try:
+                dlg.grab_set()
+            except Exception:
+                pass
+            dlg.protocol("WM_DELETE_WINDOW", lambda: (
                 self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
                 dlg.destroy(),
-            ),
-        ).pack(side="left")
+            ))
+            dlg.wait_window()
+        else:
+            import customtkinter as ctk
+            dlg = ctk.CTkToplevel(self.root)
+            dlg.title(T("transfer.incoming"))
+            dlg.resizable(False, False)
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
 
-        ctk.CTkButton(
-            btn_row, text=T("transfer.accept"), width=90, height=34,
-            fg_color=("#27AE60", "#2ECC71"),
-            hover_color=("#1E8449", "#27AE60"),
-            command=lambda: (
-                self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+            body = ctk.CTkFrame(dlg, fg_color="transparent")
+            body.pack(fill="both", expand=True, padx=24, pady=20)
+
+            ctk.CTkLabel(
+                body, text=T("transfer.incoming_title"),
+                font=ctk.CTkFont(size=16, weight="bold"),
+            ).pack(anchor="w", pady=(0, 12))
+
+            ctk.CTkLabel(
+                body, text=file_name,
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(anchor="w", pady=(0, 4))
+
+            ctk.CTkLabel(
+                body, text=T("transfer.incoming_detail", name=file_name, size=_fmt_size(file_size)),
+                font=ctk.CTkFont(size=12),
+                text_color=("gray50", "gray60"),
+            ).pack(anchor="w", pady=(0, 16))
+
+            btn_row = ctk.CTkFrame(body, fg_color="transparent")
+            btn_row.pack(fill="x")
+
+            ctk.CTkButton(
+                btn_row, text=T("transfer.reject"), width=90, height=34,
+                fg_color="transparent", border_width=1,
+                text_color=("#E74C3C", "#C0392B"),
+                border_color=("#E74C3C", "#C0392B"),
+                hover_color=("#FADBD8", "#5B2C2C"),
+                command=lambda: (
+                    self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
+                    dlg.destroy(),
+                ),
+            ).pack(side="left")
+
+            ctk.CTkButton(
+                btn_row, text=T("transfer.accept"), width=90, height=34,
+                fg_color=("#27AE60", "#2ECC71"),
+                hover_color=("#1E8449", "#27AE60"),
+                command=lambda: (
+                    self.file_transfer_mgr.accept_transfer(transfer_id, send_fn),
+                    dlg.destroy(),
+                ),
+            ).pack(side="right")
+
+            dlg.update()
+            dlg.transient(self.root)
+            try:
+                dlg.grab_set()
+            except Exception:
+                pass
+            dlg.protocol("WM_DELETE_WINDOW", lambda: (
+                self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
                 dlg.destroy(),
-            ),
-        ).pack(side="right")
-
-        dlg.update()
-        dlg.transient(self.root)
-        try:
-            dlg.grab_set()
-        except Exception:
-            pass
-
-        dlg.protocol("WM_DELETE_WINDOW", lambda: (
-            self.file_transfer_mgr.reject_transfer(transfer_id, send_fn),
-            dlg.destroy(),
-        ))
-        dlg.wait_window()
+            ))
+            dlg.wait_window()
 
     def _on_peer_found(self, peer_id: str, peer_name: str, address: str, port: int) -> None:
         with self._discovered_lock:
@@ -845,11 +895,10 @@ class Application:
         self.root = tk.Tk()
         _hide_dock()
         self.root.title("ClipSync")
-        # On macOS, a withdrawn parent prevents ANY child window (CTkToplevel
-        # or tk.Toplevel) from displaying.  Instead, make the root a 1px
-        # fully-transparent window at screen centre so it stays mapped but
-        # invisible.  Other platforms use the original withrawn approach.
-        if sys.platform == "darwin":
+        # A withdrawn parent prevents child windows (CTkToplevel / tk.Toplevel)
+        # from displaying on macOS and many Linux window managers (GNOME, KDE).
+        # Use a 1px fully-transparent root so it stays mapped but invisible.
+        if sys.platform in ("darwin", "linux"):
             sw = self.root.winfo_screenwidth()
             sh = self.root.winfo_screenheight()
             self.root.geometry(f"1x1+{sw // 2}+{sh // 2}")
@@ -1131,6 +1180,7 @@ class Application:
 
         if token:
             img = qrcode.make(url)
+            img = img.convert("RGB")
             img = img.resize((220, 220), Image.LANCZOS)
             qr_img = ctk.CTkImage(light_image=img, dark_image=img, size=(220, 220))
             qr_label = ctk.CTkLabel(body, image=qr_img, text="")
@@ -1377,10 +1427,9 @@ class Application:
             return peers[0][0]
 
         # Multiple peers — show selection dialog
-        import customtkinter as ctk
-        dlg = ctk.CTkToplevel(self.root)
-        dlg.title(T("transfer.select_peer"))
-        dlg.resizable(False, False)
+        import platform as _platform
+        _is_macos = _platform.system() == "Darwin"
+        _is_linux = _platform.system() == "Linux"
 
         dw, dh = 340, 100 + min(len(peers) * 38, 300)
         if self.root.winfo_viewable():
@@ -1391,23 +1440,8 @@ class Application:
         else:
             x = (self.root.winfo_screenwidth() - dw) // 2
             y = (self.root.winfo_screenheight() - dh) // 2
-        dlg.geometry(f"{dw}x{dh}+{x}+{y}")
-
-        body = ctk.CTkFrame(dlg, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=20, pady=16)
-
-        ctk.CTkLabel(
-            body, text=T("transfer.select_peer"),
-            font=ctk.CTkFont(size=14, weight="bold"),
-        ).pack(anchor="w", pady=(0, 10))
 
         selected = tk.StringVar()
-        for pid, name in peers:
-            ctk.CTkRadioButton(
-                body, text=name, variable=selected, value=pid,
-                font=ctk.CTkFont(size=13),
-            ).pack(anchor="w", pady=3)
-
         if peers:
             selected.set(peers[0][0])
 
@@ -1417,30 +1451,85 @@ class Application:
             result[0] = selected.get()
             dlg.destroy()
 
-        btn_row = ctk.CTkFrame(body, fg_color="transparent")
-        btn_row.pack(fill="x", pady=(12, 0))
+        if _is_macos or _is_linux:
+            dlg = tk.Toplevel(self.root)
+            dlg.title(T("transfer.select_peer"))
+            dlg.resizable(False, False)
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
 
-        ctk.CTkButton(
-            btn_row, text=T("ui.cancel"), width=80, height=32,
-            fg_color="transparent", border_width=1,
-            text_color=("gray40", "gray70"),
-            border_color=("gray60", "gray50"),
-            hover_color=("gray85", "gray25"),
-            command=dlg.destroy,
-        ).pack(side="left")
+            body = tk.Frame(dlg)
+            body.pack(fill="both", expand=True, padx=20, pady=16)
 
-        ctk.CTkButton(
-            btn_row, text=T("transfer.send"), width=80, height=32,
-            command=_confirm,
-        ).pack(side="right")
+            tk.Label(body, text=T("transfer.select_peer"),
+                     font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 10))
 
-        dlg.update()
-        dlg.transient(self.root)
-        try:
-            dlg.grab_set()
-            dlg.focus_force()
-        except Exception:
-            pass
+            for pid, name in peers:
+                tk.Radiobutton(body, text=name, variable=selected, value=pid,
+                               font=("Helvetica", 12)).pack(anchor="w", pady=3)
+
+            btn_row = tk.Frame(body)
+            btn_row.pack(fill="x", pady=(12, 0))
+
+            tk.Button(btn_row, text=T("ui.cancel"), width=10,
+                      relief="solid", bd=1,
+                      command=dlg.destroy).pack(side="left")
+
+            tk.Button(btn_row, text=T("transfer.send"), width=10,
+                      command=_confirm).pack(side="right")
+
+            dlg.update()
+            dlg.transient(self.root)
+            try:
+                dlg.grab_set()
+                dlg.focus_force()
+            except Exception:
+                pass
+        else:
+            import customtkinter as ctk
+            dlg = ctk.CTkToplevel(self.root)
+            dlg.title(T("transfer.select_peer"))
+            dlg.resizable(False, False)
+            dlg.geometry(f"{dw}x{dh}+{x}+{y}")
+
+            body = ctk.CTkFrame(dlg, fg_color="transparent")
+            body.pack(fill="both", expand=True, padx=20, pady=16)
+
+            ctk.CTkLabel(
+                body, text=T("transfer.select_peer"),
+                font=ctk.CTkFont(size=14, weight="bold"),
+            ).pack(anchor="w", pady=(0, 10))
+
+            for pid, name in peers:
+                ctk.CTkRadioButton(
+                    body, text=name, variable=selected, value=pid,
+                    font=ctk.CTkFont(size=13),
+                ).pack(anchor="w", pady=3)
+
+            btn_row = ctk.CTkFrame(body, fg_color="transparent")
+            btn_row.pack(fill="x", pady=(12, 0))
+
+            ctk.CTkButton(
+                btn_row, text=T("ui.cancel"), width=80, height=32,
+                fg_color="transparent", border_width=1,
+                text_color=("gray40", "gray70"),
+                border_color=("gray60", "gray50"),
+                hover_color=("gray85", "gray25"),
+                command=dlg.destroy,
+            ).pack(side="left")
+
+            ctk.CTkButton(
+                btn_row, text=T("transfer.send"), width=80, height=32,
+                command=_confirm,
+            ).pack(side="right")
+
+            dlg.update()
+            dlg.transient(self.root)
+            try:
+                dlg.grab_set()
+                dlg.focus_force()
+            except Exception:
+                pass
+
         dlg.wait_window()
         return result[0]
 
@@ -1588,8 +1677,9 @@ class Application:
 
         import platform as _platform
         _is_macos = _platform.system() == "Darwin"
+        _is_linux = _platform.system() == "Linux"
 
-        if _is_macos:
+        if _is_macos or _is_linux:
             import tkinter as _tk
             from tkinter import ttk as _ttk
 

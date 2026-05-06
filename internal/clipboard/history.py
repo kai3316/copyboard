@@ -33,9 +33,33 @@ _CONTENT_TYPE_LABELS: dict[ContentType, str] = {
 }
 
 
+def _safe_decode(data: bytes) -> str:
+    """Decode bytes to string, trying common encodings."""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    for enc in ("gbk", "gb2312", "gb18030", "big5", "shift-jis", "euc-kr"):
+        try:
+            return data.decode(enc)
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def _strip_html(text: str) -> str:
-    """Remove HTML tags and collapse whitespace."""
+    """Remove HTML tags, style/script blocks, comments, and unescape entities."""
+    import html as _html
+    # Remove <style> and <script> blocks (including their content)
+    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    # Remove HTML comments
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    # Strip remaining tags
     plain = re.sub(r"<[^>]*>", "", text)
+    # Unescape HTML entities
+    plain = _html.unescape(plain)
+    # Collapse whitespace
     plain = re.sub(r"\s+", " ", plain)
     return plain.strip()
 
@@ -73,10 +97,10 @@ def _make_dedup_key(content: ClipboardContent) -> str:
 def _build_preview(types: dict[ContentType, bytes]) -> str:
     """Build a human-readable preview from clipboard content."""
     if ContentType.TEXT in types:
-        text = types[ContentType.TEXT].decode("utf-8", errors="replace")
+        text = _safe_decode(types[ContentType.TEXT])
         return text[:200]
     if ContentType.HTML in types:
-        html = types[ContentType.HTML].decode("utf-8", errors="replace")
+        html = _safe_decode(types[ContentType.HTML])
         plain = _strip_html(html)
         return plain[:200] if plain else "[HTML]"
     if ContentType.IMAGE_EMF in types:

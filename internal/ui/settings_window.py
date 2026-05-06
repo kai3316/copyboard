@@ -624,6 +624,7 @@ class SettingsWindow:
 
             if token:
                 img = _qrcode.make(url)
+                img = img.convert("RGB")
                 img = img.resize((200, 200), Image.LANCZOS)
                 self._web_qr_image = ctk.CTkImage(
                     light_image=img, dark_image=img, size=(200, 200),

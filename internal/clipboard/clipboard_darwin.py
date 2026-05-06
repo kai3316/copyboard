@@ -292,6 +292,14 @@ class _ClipboardReader(ClipboardReader):
     # -- text / html / rtf via pbpaste (no TCC issues) ---------------------
 
     def _get_text(self) -> bytes:
+        # Prefer ctypes NSPasteboard → public.utf8-plain-text (guaranteed UTF-8).
+        # pbpaste -Prefer txt can return bytes in a legacy encoding (e.g. GBK)
+        # for CJK text, producing garbled characters when decoded as UTF-8.
+        data = _pb_data_for_type(b"public.utf8-plain-text")
+        if data:
+            return data
+
+        # Fallback: pbpaste
         try:
             result = subprocess.run(
                 ["pbpaste", "-Prefer", "txt"],

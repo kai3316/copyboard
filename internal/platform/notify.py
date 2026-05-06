@@ -72,8 +72,25 @@ class NotificationManager:
         if self._tray_icon:
             try:
                 self._tray_icon.notify(message, title=title)
+            except NotImplementedError:
+                logger.debug("pystray notify not implemented for this backend")
+                self._fallback_notify(title, message)
             except Exception:
                 logger.debug("Desktop notification failed", exc_info=True)
+
+    @staticmethod
+    def _fallback_notify(title: str, message: str):
+        """Fallback desktop notification via system command (Linux)."""
+        import subprocess
+        import sys
+        if sys.platform == "linux":
+            try:
+                subprocess.run(
+                    ["notify-send", title, message],
+                    capture_output=True, timeout=5,
+                )
+            except Exception:
+                pass
 
 
 notification_mgr = NotificationManager()

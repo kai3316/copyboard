@@ -2272,6 +2272,7 @@ class DashboardWindow:
                 import qrcode
                 from PIL import Image
                 img = qrcode.make(url)
+                img = img.convert("RGB")
                 img = img.resize((100, 100), Image.LANCZOS)
                 ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(100, 100))
                 self._web_qr_label.configure(image=ctk_img, text="")
