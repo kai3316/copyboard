@@ -911,13 +911,13 @@ class Application:
         # ── Systray ─────────────────────────────────────────────
         self.systray = SystrayApp(
             device_name=self.cfg.device_name,
-            on_enable_toggle=self._on_systray_toggle,
+            on_enable_toggle=lambda e: self.root.after(0, self._on_systray_toggle, e),
             on_open_dashboard=self.open_dashboard,
             on_open_settings=self.open_settings,
             on_export_logs=self.export_logs,
             on_show_web_qr=self._show_web_qr,
             on_send_url=lambda: self.root.after(0, self._do_send_url),
-            on_quit=self.shutdown,
+            on_quit=lambda: self.root.after(0, self.shutdown),
         )
         self.systray.set_web_enabled(self.cfg.web_enabled)
 
@@ -1037,7 +1037,7 @@ class Application:
                         peer_display.append(f"{info['name']}  (found)")
             if peer_display != prev_display:
                 prev_display = peer_display
-                self.systray.set_peers(peer_display)
+                self.root.after(0, lambda pd=list(peer_display): self.systray.set_peers(pd))
 
             connected_set = set(connected_ids)
             for pid in connected_set - prev_connected:

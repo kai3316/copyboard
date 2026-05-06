@@ -527,8 +527,8 @@ class DashboardWindow:
                 bars = "▂▄▆█" if signal >= 75 else "▂▄▆ " if signal >= 50 else "▂▄  " if signal >= 25 else "▂   "
                 return {
                     "type": "wifi",
-                    "label": f"Wi-Fi · {ssid}",
-                    "detail": f"Signal {signal}%  {bars}",
+                    "label": T("network.wifi_label", ssid=ssid),
+                    "detail": T("network.signal_detail", percent=str(signal), bars=bars),
                 }
         except Exception:
             pass
@@ -554,13 +554,13 @@ class DashboardWindow:
                     speed_str = f"{speed_bps / 1_000:.0f} Kbps"
                 return {
                     "type": "ethernet",
-                    "label": "Ethernet",
-                    "detail": f"Link speed {speed_str}",
+                    "label": T("network.ethernet"),
+                    "detail": T("network.link_speed", speed=speed_str),
                 }
         except Exception:
             pass
 
-        return {"type": "unknown", "label": "LAN", "detail": ""}
+        return {"type": "unknown", "label": T("network.lan"), "detail": ""}
 
     def _build_overview_panel(self):
         wrapper = ctk.CTkScrollableFrame(self._content_frame, fg_color="transparent")
@@ -1655,7 +1655,7 @@ class DashboardWindow:
         ).pack(side="left", padx=(0, 8))
 
         preview_lbl = ctk.CTkLabel(
-            r1, text=preview or "[No preview]",
+            r1, text=preview or T("empty.no_preview"),
             font=self._card_font_bold,
             text_color=("gray20", "gray85"),
             anchor="w",

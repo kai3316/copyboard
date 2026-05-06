@@ -677,7 +677,7 @@ class SettingsWindow:
             if not 1 <= limit <= 20:
                 raise ValueError
         except ValueError:
-            show_warning(self._window, T("dialog.invalid"), "History limit must be 1–20")
+            show_warning(self._window, T("dialog.invalid"), T("settings_window.val_web_history_limit"))
             return
 
         cfg.web_enabled = self._web_enabled_var.get()
@@ -1105,7 +1105,7 @@ class SettingsWindow:
             if not 10 <= history_max <= 1000:
                 raise ValueError
         except ValueError:
-            errors.append("History Max Entries: must be 10–1000")
+            errors.append(T("settings_window.val_history_entries"))
             history_max = None
 
         try:
@@ -1113,7 +1113,7 @@ class SettingsWindow:
             if not 0.1 <= debounce <= 5.0:
                 raise ValueError
         except ValueError:
-            errors.append("Sync Debounce: must be 0.1–5.0 seconds")
+            errors.append(T("settings_window.val_sync_debounce"))
             debounce = None
 
         try:
@@ -1121,19 +1121,19 @@ class SettingsWindow:
             if not 0.1 <= poll <= 5.0:
                 raise ValueError
         except ValueError:
-            errors.append("Poll Interval: must be 0.1–5.0 seconds")
+            errors.append(T("settings_window.val_poll_interval"))
             poll = None
 
         receive_dir = self._file_receive_dir_var.get().strip()
         if receive_dir and not Path(receive_dir).parent.exists():
-            errors.append("Receive Directory: parent folder does not exist")
+            errors.append(T("settings_window.val_receive_dir"))
 
         try:
             timeout = float(self._transfer_timeout_var.get())
             if not 30 <= timeout <= 3600:
                 raise ValueError
         except ValueError:
-            errors.append("Transfer Timeout: must be 30–3600 seconds")
+            errors.append(T("settings_window.val_transfer_timeout"))
             timeout = None
 
         try:
@@ -1141,7 +1141,7 @@ class SettingsWindow:
             if not 1 <= max_reconnect <= 100:
                 raise ValueError
         except ValueError:
-            errors.append("Max Reconnect Attempts: must be 1–100")
+            errors.append(T("settings_window.val_max_reconnect"))
             max_reconnect = None
 
         if errors:
