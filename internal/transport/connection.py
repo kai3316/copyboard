@@ -724,11 +724,26 @@ class TransportManager:
         with self._lock:
             return [(pid, conn.device_name) for pid, conn in self._peers.items()]
 
-    def disconnect_peer(self, peer_id: str):
+    def disconnect_peer(self, peer_id: str, reject: bool = False):
+        """Disconnect a peer and optionally reject reconnections.
+
+        When *reject* is True, incoming connections from this peer are
+        refused until the next explicit connect_to_peer() call.  Use this
+        for user-initiated disconnects to prevent the remote side from
+        immediately reconnecting.
+        """
         with self._lock:
             conn = self._peers.pop(peer_id, None)
+            # Cancel any pending reconnect timer so we don't race with it
+            timer = self._reconnect_timers.pop(peer_id, None)
+            self._reconnect_attempts.pop(peer_id, None)
+            if reject:
+                self._rejected_peer_ids.add(peer_id)
+        if timer:
+            timer.cancel()
         if conn:
-            logger.info("[%s] manual disconnect", peer_id[:12])
+            logger.info("[%s] manual disconnect%s", peer_id[:12],
+                        " (rejected)" if reject else "")
             conn.set_on_disconnect(None)
             conn.stop()
 

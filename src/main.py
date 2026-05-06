@@ -2024,7 +2024,7 @@ class Application:
 
     def _on_disconnect(self, peer_id: str) -> None:
         logger.info("User initiated disconnect from %s", peer_id)
-        self.transport_mgr.disconnect_peer(peer_id)
+        self.transport_mgr.disconnect_peer(peer_id, reject=True)
 
     def _on_connect(self, peer_id: str) -> None:
         info = None
