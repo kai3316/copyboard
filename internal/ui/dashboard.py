@@ -315,7 +315,7 @@ class DashboardWindow:
                 except Exception:
                     pass
         if self._window is not None:
-            self._refresh_job = self._root.after(2000, self._schedule_refresh)
+            self._refresh_job = self._root.after(5000, self._schedule_refresh)
 
     # ═══════════════════════════════════════════════════════════════
     # UI construction
@@ -882,8 +882,8 @@ class DashboardWindow:
             return
         import math
         self._breath_frame += 1
-        # Slow sine wave: ~4 second period at 100ms interval
-        t = self._breath_frame * 0.04
+        # Slow sine wave: ~4 second period at 200ms interval
+        t = self._breath_frame * 0.08
         brightness = (math.sin(t) + 1) / 2  # 0.0 → 1.0
         # Fixed size, only animate color brightness gently
         # Bright green #2ECC71 (46,204,113) ↔ dim #1a7a3a (26,122,58)
@@ -892,7 +892,7 @@ class DashboardWindow:
         b = int(58 + brightness * 55)
         color = f"#{r:02x}{g:02x}{b:02x}"
         self._status_dot.configure(fg_color=color)
-        self._breath_timer = self._root.after(100, self._animate_breath)
+        self._breath_timer = self._root.after(200, self._animate_breath)
 
         # Uptime
         if self._uptime_label and self._start_time:

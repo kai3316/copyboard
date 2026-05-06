@@ -996,9 +996,9 @@ class Application:
                     self._handle_tray_msg(parent_conn.recv())
             except (EOFError, BrokenPipeError, ConnectionResetError, OSError):
                 return
-            self.root.after(100, _poll_tray)
+            self.root.after(500, _poll_tray)
 
-        self.root.after(100, _poll_tray)
+        self.root.after(500, _poll_tray)
 
     def _handle_tray_msg(self, msg: tuple) -> None:
         cmd = msg[0]
@@ -1023,11 +1023,12 @@ class Application:
         cleanup_counter = 0
         while not self._stop_updater.is_set():
             connected_ids = self.transport_mgr.get_connected_peers()
+            # Cache known peers once — reused for display names below
+            known_peers = self.pairing_mgr.get_known_peers()
             peer_display = []
             seen = set()
             for pid in connected_ids:
-                peers = self.pairing_mgr.get_known_peers()
-                found = next((p for p in peers if p.device_id == pid), None)
+                found = next((p for p in known_peers if p.device_id == pid), None)
                 name = found.device_name if found else pid
                 peer_display.append(f"{name}  (connected)")
                 seen.add(pid)
@@ -1041,14 +1042,12 @@ class Application:
 
             connected_set = set(connected_ids)
             for pid in connected_set - prev_connected:
-                peers = self.pairing_mgr.get_known_peers()
-                found = next((p for p in peers if p.device_id == pid), None)
+                found = next((p for p in known_peers if p.device_id == pid), None)
                 name = found.device_name if found else pid[:12]
                 notification_mgr.show("Device Connected",
                                       T("notify.device_connected", name=name))
             for pid in prev_connected - connected_set:
-                peers = self.pairing_mgr.get_known_peers()
-                found = next((p for p in peers if p.device_id == pid), None)
+                found = next((p for p in known_peers if p.device_id == pid), None)
                 name = found.device_name if found else pid[:12]
                 notification_mgr.show("Device Disconnected",
                                       T("notify.device_disconnected", name=name))
