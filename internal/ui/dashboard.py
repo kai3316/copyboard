@@ -67,6 +67,7 @@ class DashboardWindow:
         on_pair: Callable | None = None,
         on_unpair: Callable | None = None,
         on_connect_peer: Callable | None = None,
+        on_disconnect_peer: Callable | None = None,
         on_remove_peer: Callable | None = None,
         # History
         get_history: Callable | None = None,
@@ -113,6 +114,7 @@ class DashboardWindow:
         self._on_pair = on_pair
         self._on_unpair = on_unpair
         self._on_connect_peer = on_connect_peer
+        self._on_disconnect_peer = on_disconnect_peer
         self._on_remove_peer = on_remove_peer
         self._get_history = get_history
         self._search_history = search_history
@@ -1169,6 +1171,17 @@ class DashboardWindow:
                 command=lambda d=dev_id: self._do_unpair(d),
             ).pack(side="right", padx=(4, 0))
 
+        if connected and self._on_disconnect_peer:
+            ctk.CTkButton(
+                r1, text=T("ui.disconnect"), width=72, height=22,
+                fg_color="transparent", border_width=1,
+                text_color=("#E67E22", "#F0A04B"),
+                border_color=("#E67E22", "#F0A04B"),
+                hover_color=("#FDEBD0", "#5B3A1C"),
+                font=ctk.CTkFont(size=10),
+                command=lambda d=dev_id: self._do_disconnect(d),
+            ).pack(side="right", padx=(4, 0))
+
         if paired and not connected and self._on_connect_peer:
             ctk.CTkButton(
                 r1, text=T("ui.reconnect"), width=68, height=22,
@@ -1241,6 +1254,11 @@ class DashboardWindow:
         logger.info("User initiated reconnect to %s", peer_id)
         if self._on_connect_peer:
             self._on_connect_peer(peer_id)
+
+    def _do_disconnect(self, peer_id):
+        logger.info("User initiated disconnect from %s", peer_id)
+        if self._on_disconnect_peer:
+            self._on_disconnect_peer(peer_id)
 
     def _do_unpair(self, peer_id):
         # Look up device name for the confirmation dialog

@@ -1901,6 +1901,7 @@ class Application:
             on_pair=self._on_pair,
             on_unpair=self._on_unpair,
             on_connect_peer=self._on_connect,
+            on_disconnect_peer=self._on_disconnect,
             on_remove_peer=self._on_remove,
             get_history=self._get_history,
             search_history=self._search_history,
@@ -2020,6 +2021,10 @@ class Application:
         if peer_id in self.cfg.peers:
             self.cfg.peers[peer_id].paired = False
         self._save_cfg_encrypted()
+
+    def _on_disconnect(self, peer_id: str) -> None:
+        logger.info("User initiated disconnect from %s", peer_id)
+        self.transport_mgr.disconnect_peer(peer_id)
 
     def _on_connect(self, peer_id: str) -> None:
         info = None
