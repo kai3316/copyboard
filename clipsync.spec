@@ -22,6 +22,7 @@ hiddenimports += [
     "PIL",
     "pystray",
     "customtkinter",
+    "qrcode",
     "tkinter",
     "tkinter.filedialog",
     "tkinter.messagebox",
